@@ -119,7 +119,7 @@ input {
 .capture-surface[data-state='ready'] .annotation-canvas,
 .capture-surface[data-state='creating'] .annotation-canvas {
   cursor:
-    url('./capture-cursor.svg') 16 16,
+    url('./capture-cursor.svg') 12 12,
     crosshair;
 }
 

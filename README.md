@@ -130,8 +130,8 @@ from eight handles. Rectangle, ellipse, arrow, brush, text, and mosaic annotatio
 annotations can be selected, moved, resized, deleted, undone, and redone. Color, line width, and
 font size are configurable.
 
-- **Copy & Done** or `Enter`: copy the composited PNG to the operating-system clipboard,
-  then return it to the host application.
+- **Copy & Done**, `Enter`, or double-clicking inside an existing selection: copy the composited PNG
+  to the operating-system clipboard, then return it to the host application.
 - **Save**: open Electron's native save dialog, choose a local filename/directory, and write PNG.
 - **Escape**: cancel the screenshot task.
 
@@ -369,6 +369,7 @@ pnpm dev
 pnpm demo
 pnpm demo:selection-smoke
 pnpm demo:copy-smoke
+pnpm demo:double-click-smoke
 pnpm demo:stress-4k
 pnpm verify:consumers
 pnpm verify:bundlers

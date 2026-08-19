@@ -88,6 +88,7 @@
     "demo": "pnpm run build && electron demo/main.cjs",
     "demo:host-smoke": "pnpm run build && electron demo/host-smoke.cjs",
     "demo:selection-smoke": "pnpm run build && electron demo/selection-smoke.cjs",
+    "demo:double-click-smoke": "pnpm run build && electron demo/selection-smoke.cjs --double-click",
     "demo:tools-smoke": "pnpm run build && electron demo/tools-smoke.cjs",
     "demo:stress-4k": "pnpm run build && electron demo/stress-4k.cjs",
     "demo:copy-smoke": "pnpm run build && electron demo/selection-smoke.cjs --copy",

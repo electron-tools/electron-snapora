@@ -11,6 +11,7 @@ const { app, clipboard } = require('electron');
 const { ScreenshotManager } = require('electron-snapora/main');
 
 const copyOutput = process.argv.includes('--copy');
+const doubleClickOutput = process.argv.includes('--double-click');
 
 app.disableHardwareAcceleration();
 
@@ -82,6 +83,28 @@ app.on('browser-window-created', (_event, window) => {
       selectionState.height <= 0
     ) {
       throw new Error(`Selection was not created: ${JSON.stringify(selectionState)}`);
+    }
+
+    if (doubleClickOutput) {
+      const center = {
+        x: Math.round((start.x + end.x) / 2),
+        y: Math.round((start.y + end.y) / 2),
+      };
+      for (const clickCount of [1, 2]) {
+        window.webContents.sendInputEvent({
+          type: 'mouseDown',
+          ...center,
+          button: 'left',
+          clickCount,
+        });
+        window.webContents.sendInputEvent({
+          type: 'mouseUp',
+          ...center,
+          button: 'left',
+          clickCount,
+        });
+      }
+      return;
     }
 
     const rectangleButton = await window.webContents.executeJavaScript(`
@@ -186,14 +209,14 @@ app.whenReady().then(async () => {
     return;
   }
 
-  if (copyOutput && clipboard.readImage().isEmpty()) {
+  if ((copyOutput || doubleClickOutput) && clipboard.readImage().isEmpty()) {
     console.error('Electron Snapora clipboard smoke test did not receive an image.');
     process.exit(1);
     return;
   }
 
   console.log(
-    `Electron Snapora ${copyOutput ? 'clipboard' : 'selection'} smoke test passed (${result.data.byteLength} bytes).`
+    `Electron Snapora ${doubleClickOutput ? 'double-click' : copyOutput ? 'clipboard' : 'selection'} smoke test passed (${result.data.byteLength} bytes).`
   );
   process.exit(0);
 });

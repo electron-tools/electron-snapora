@@ -159,6 +159,7 @@ annotationCanvas.addEventListener('pointerdown', handleCanvasPointerDown);
 annotationCanvas.addEventListener('pointermove', handleCanvasPointerMove);
 annotationCanvas.addEventListener('pointerup', handleCanvasPointerEnd);
 annotationCanvas.addEventListener('pointercancel', handleCanvasPointerEnd);
+annotationCanvas.addEventListener('dblclick', handleCanvasDoubleClick);
 
 selectionElement.addEventListener('pointerdown', (event) => {
   if (event.button !== 0) {
@@ -410,6 +411,25 @@ function handleCanvasPointerEnd(event: PointerEvent): void {
   if (annotationCanvas.hasPointerCapture(event.pointerId)) {
     annotationCanvas.releasePointerCapture(event.pointerId);
   }
+}
+
+function handleCanvasDoubleClick(event: MouseEvent): void {
+  if (event.button !== 0) {
+    return;
+  }
+
+  const state = selectionStore.getState();
+  if (
+    state.phase !== 'selected' ||
+    !state.selection ||
+    !containsPoint(state.selection, toSurfacePoint(event))
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  void confirmCapture('copy');
 }
 
 function beginSelection(pointerId: number, point: Point): void {
@@ -757,7 +777,7 @@ function setRectStyle(element: HTMLElement, rect: Rect): void {
   element.style.height = `${rect.height}px`;
 }
 
-function toSurfacePoint(event: PointerEvent): Point {
+function toSurfacePoint(event: MouseEvent): Point {
   const bounds = surface.getBoundingClientRect();
   return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
 }
