@@ -11,6 +11,7 @@ const ENGLISH_MESSAGES: ScreenshotMessages = {
   preparing: 'Preparing screenshot…',
   instruction: 'Drag to select an area · Esc to cancel',
   exporting: 'Exporting screenshot…',
+  copied: 'Copied to clipboard',
   saveCancelled: 'Save cancelled',
   cancel: 'Cancel',
   save: 'Save',
@@ -43,6 +44,7 @@ const LOCALE_MESSAGES: Record<ScreenshotLocale, Partial<ScreenshotMessages>> = {
     preparing: '正在准备截图…',
     instruction: '拖动选择截图区域 · Esc 取消',
     exporting: '正在生成截图…',
+    copied: '已复制到剪贴板',
     saveCancelled: '已取消保存',
     cancel: '取消',
     save: '保存',
@@ -81,6 +83,8 @@ const THEME_TOKEN_MAP = {
   tooltipBackground: '--snapora-color-tooltip',
   tooltipForeground: '--snapora-color-on-tooltip',
   destructiveColor: '--snapora-color-danger',
+  warningColor: '--snapora-color-warning',
+  warningForegroundColor: '--snapora-color-on-warning',
   selectionHandleColor: '--snapora-color-handle',
 } as const satisfies Record<Exclude<keyof ScreenshotTheme, 'mode'>, string>;
 

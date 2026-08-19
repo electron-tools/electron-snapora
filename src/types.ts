@@ -14,6 +14,7 @@ export interface ScreenshotMessages {
   preparing: string;
   instruction: string;
   exporting: string;
+  copied: string;
   saveCancelled: string;
   cancel: string;
   save: string;
@@ -54,6 +55,8 @@ export interface ScreenshotTheme {
   tooltipBackground?: string;
   tooltipForeground?: string;
   destructiveColor?: string;
+  warningColor?: string;
+  warningForegroundColor?: string;
   selectionHandleColor?: string;
 }
 

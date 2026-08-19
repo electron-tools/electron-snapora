@@ -131,7 +131,10 @@ annotations can be selected, moved, resized, deleted, undone, and redone. Color,
 font size are configurable.
 
 - **Copy & Done**, `Enter`, or double-clicking inside an existing selection: copy the composited PNG
-  to the operating-system clipboard, then return it to the host application.
+  to the operating-system clipboard, then return it to the host application. After the capture mask
+  disappears, a click-through warning-colored toast confirms the copy for three seconds without
+  delaying the returned result. Starting another capture dismisses any remaining toast first, so
+  feedback cannot leak into the next screenshot.
 - **Save**: open Electron's native save dialog, choose a local filename/directory, and write PNG.
 - **Escape**: cancel the screenshot task.
 
@@ -149,6 +152,7 @@ await window.electronSnapora.capture({
   locale: 'zh-CN',
   messages: {
     confirm: '复制到聊天框',
+    copied: '截图已复制',
   },
   theme: {
     mode: 'light',
@@ -157,6 +161,7 @@ await window.electronSnapora.capture({
     toolbarBackground: 'rgb(250 250 250 / 96%)',
     toolbarForeground: '#1d1b20',
     tooltipBackground: '#27272a',
+    warningColor: '#f59e0b',
   },
 });
 ```
@@ -169,7 +174,8 @@ the main-process IPC boundary.
 Theme styling uses three layers: internal base colors, public semantic colors, and private
 component aliases. `ScreenshotTheme` only changes semantic values, so applications do not depend
 on overlay DOM or CSS class names. In addition to the example above it supports mask, toolbar
-border/hover, tooltip foreground, destructive action, and selection-handle colors.
+border/hover, tooltip foreground, destructive/warning actions, warning foreground, and
+selection-handle colors.
 
 ### Host policy injection
 

@@ -63,6 +63,8 @@ const SCREENSHOT_THEME_COLOR_KEYS = [
   'tooltipBackground',
   'tooltipForeground',
   'destructiveColor',
+  'warningColor',
+  'warningForegroundColor',
   'selectionHandleColor',
 ] as const satisfies ReadonlyArray<Exclude<keyof ScreenshotTheme, 'mode'>>;
 
@@ -72,6 +74,7 @@ const SCREENSHOT_MESSAGE_KEYS = [
   'preparing',
   'instruction',
   'exporting',
+  'copied',
   'saveCancelled',
   'cancel',
   'save',

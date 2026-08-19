@@ -81,6 +81,7 @@ describe('ScreenshotManager', () => {
       sendInitialize: vi.fn(),
       prime: vi.fn(),
       reveal: vi.fn(),
+      showCopyFeedback: vi.fn(),
       destroy: vi.fn(),
       onClosed: vi.fn(() => vi.fn()),
       onRendererGone: vi.fn(() => vi.fn()),
@@ -159,6 +160,11 @@ describe('ScreenshotManager', () => {
       ['start', undefined],
       ['complete', undefined],
     ]);
+
+    const nextCapture = manager.capture();
+    expect(overlay.destroy).toHaveBeenCalledOnce();
+    expect(manager.cancel()).toBe(true);
+    await expect(nextCapture).resolves.toEqual({ status: 'cancelled' });
   });
 
   it('allows only one active screenshot task', async () => {

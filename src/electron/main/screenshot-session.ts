@@ -444,7 +444,15 @@ export class ScreenshotSession {
     this.#clearReadyTimeout();
     this.#removeListeners();
     this.#frames = [];
-    this.#overlay?.destroy();
+    if (
+      result.status === 'completed' &&
+      result.output.action === 'copy' &&
+      this.#overlay?.showCopyFeedback
+    ) {
+      this.#overlay.showCopyFeedback(3_000);
+    } else {
+      this.#overlay?.destroy();
+    }
     this.#options.onSettled?.();
     this.#resolve?.(result);
     this.#resolve = undefined;

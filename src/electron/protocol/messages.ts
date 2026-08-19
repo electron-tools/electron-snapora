@@ -47,6 +47,11 @@ export interface ScreenshotInitializePayload {
   frames: CapturedFrame[];
 }
 
+export interface ScreenshotFeedbackPayload {
+  kind: 'copy';
+  durationMs: number;
+}
+
 export interface ScreenshotCompletePayload {
   protocolVersion: typeof SCREENSHOT_PROTOCOL_VERSION;
   jobId: string;

@@ -24,6 +24,7 @@ export type OverlayBrowserWindow = Pick<
   | 'removeListener'
   | 'setAlwaysOnTop'
   | 'setBounds'
+  | 'setIgnoreMouseEvents'
   | 'setOpacity'
   | 'show'
   | 'showInactive'
@@ -49,6 +50,7 @@ export interface ScreenshotOverlayWindow {
   sendInitialize(payload: ScreenshotInitializePayload): void;
   prime(): void;
   reveal(): void;
+  showCopyFeedback?(durationMs: number): void;
   destroy(): void;
   onClosed(listener: () => void): () => void;
   onRendererGone(listener: () => void): () => void;
@@ -62,6 +64,7 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
   readonly #platform: NodeJS.Platform;
   readonly #supportsInvisiblePriming: boolean;
   #primed = false;
+  #feedbackTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(options: OverlayWindowOptions) {
     this.#resources =
@@ -89,11 +92,12 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
       fullscreenable: false,
       skipTaskbar: true,
       alwaysOnTop: true,
+      transparent: true,
       show: false,
       opacity: this.#supportsInvisiblePriming ? 0 : 1,
       paintWhenInitiallyHidden: true,
       autoHideMenuBar: true,
-      backgroundColor: '#000000',
+      backgroundColor: '#00000000',
       webPreferences: {
         preload: this.#resources.preloadPath,
         nodeIntegration: false,
@@ -141,6 +145,20 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
     this.#window.moveTop();
   }
 
+  /** 复制完成后保留一个鼠标穿透的轻量提示，截图 Promise 无需等待提示结束。 */
+  showCopyFeedback(durationMs: number): void {
+    if (this.#window.isDestroyed()) {
+      return;
+    }
+    this.#window.setIgnoreMouseEvents(true);
+    this.#window.webContents.send(OVERLAY_CHANNELS.feedback, {
+      kind: 'copy',
+      durationMs,
+    });
+    this.#feedbackTimer = setTimeout(() => this.destroy(), durationMs);
+    this.#feedbackTimer.unref?.();
+  }
+
   /** 截图层必须高于普通置顶窗口；Windows/macOS 使用系统支持的最高标准层级。 */
   #raiseAboveOtherWindows(): void {
     if (this.#platform === 'win32' || this.#platform === 'darwin') {
@@ -151,6 +169,10 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
   }
 
   destroy(): void {
+    if (this.#feedbackTimer) {
+      clearTimeout(this.#feedbackTimer);
+      this.#feedbackTimer = undefined;
+    }
     if (!this.#window.isDestroyed()) {
       this.#window.destroy();
     }

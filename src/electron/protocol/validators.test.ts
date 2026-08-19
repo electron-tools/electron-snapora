@@ -131,11 +131,12 @@ describe('screenshot protocol validators', () => {
       tools: ['text', 'rectangle', 'text'],
       defaultTool: 'text',
       locale: 'zh-CN',
-      messages: { confirm: '复制到输入框' },
+      messages: { confirm: '复制到输入框', copied: '截图已复制' },
       theme: {
         mode: 'light',
         accentColor: '#1677ff',
         toolbarForeground: '#111111',
+        warningColor: '#f59e0b',
       },
     };
 
@@ -146,11 +147,12 @@ describe('screenshot protocol validators', () => {
         tools: ['text', 'rectangle'],
         defaultTool: 'text',
         locale: 'zh-CN',
-        messages: { confirm: '复制到输入框' },
+        messages: { confirm: '复制到输入框', copied: '截图已复制' },
         theme: {
           mode: 'light',
           accentColor: '#1677ff',
           toolbarForeground: '#111111',
+          warningColor: '#f59e0b',
         },
       },
     });

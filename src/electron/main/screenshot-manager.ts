@@ -87,11 +87,15 @@ function createDefaultRunner(
     managerOptions.captureAdapter ?? new ElectronCaptureAdapter({ resourceLimits });
   const outputAdapter = managerOptions.outputAdapter ?? new ElectronOutputAdapter();
   const outputRouter = getScreenshotOutputRouter(ipcMain);
-  const createOverlay =
+  const createOverlayWindow =
     managerOptions.createOverlay ??
     ((display) => new OverlayWindow({ ...managerOptions.overlayOptions, display }));
+  let previousOverlay: ReturnType<ScreenshotOverlayFactory> | undefined;
 
   return (jobId, captureOptions, context) => {
+    // 连续截图前清理仍在展示的复制提示，避免 Toast 被下一次屏幕采集写入图片。
+    previousOverlay?.destroy();
+    previousOverlay = undefined;
     const reportDiagnostic: ScreenshotDiagnosticListener = (event) => {
       emitScreenshotDiagnostic(managerOptions.onDiagnostic, {
         ...event,
@@ -105,7 +109,11 @@ function createDefaultRunner(
       captureOptions,
       captureAdapter,
       ipcMain,
-      createOverlay,
+      createOverlay: (display) => {
+        const overlay = createOverlayWindow(display);
+        previousOverlay = overlay;
+        return overlay;
+      },
       ...(managerOptions.overlayReadyTimeoutMs === undefined
         ? {}
         : { overlayReadyTimeoutMs: managerOptions.overlayReadyTimeoutMs }),

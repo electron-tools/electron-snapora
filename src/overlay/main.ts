@@ -79,6 +79,8 @@ function requireCanvasContext(canvas: HTMLCanvasElement): CanvasRenderingContext
 
 const surface = requireElement('.capture-surface');
 const status = requireElement('.status');
+const copyFeedback = requireElement('.copy-feedback');
+const copyFeedbackText = requireElement('.copy-feedback-text');
 const screenFrame = requireElement<HTMLImageElement>('.screen-frame');
 const screenMask = requireElement('.screen-mask');
 const annotationCanvas = requireElement<HTMLCanvasElement>('.annotation-canvas');
@@ -152,6 +154,15 @@ function initializeOverlay(payload: ScreenshotInitializePayload): void {
 }
 
 window.snaporaOverlay.onInitialize(initializeOverlay);
+window.snaporaOverlay.onFeedback((payload) => {
+  if (payload.kind !== 'copy') {
+    return;
+  }
+  document.documentElement.dataset.snaporaFeedback = 'copy';
+  surface.dataset.state = 'copied';
+  copyFeedbackText.textContent = localize('copied');
+  copyFeedback.hidden = false;
+});
 selectionStore.subscribe(render);
 annotationStore.subscribe(render);
 
@@ -926,7 +937,7 @@ function setControlLabel(element: HTMLElement, label: string): void {
 }
 
 function localize(
-  key: 'preparing' | 'instruction' | 'exporting' | 'saveCancelled'
+  key: 'preparing' | 'instruction' | 'exporting' | 'copied' | 'saveCancelled'
 ): string {
   return currentMessages[key];
 }

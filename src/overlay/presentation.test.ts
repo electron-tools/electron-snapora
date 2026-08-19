@@ -10,6 +10,7 @@ describe('overlay presentation', () => {
   it('uses a deterministic English default and applies host message overrides last', () => {
     expect(DEFAULT_SCREENSHOT_LOCALE).toBe('en-US');
     expect(resolveScreenshotMessages().confirm).toBe('Copy & Done');
+    expect(resolveScreenshotMessages('zh-CN').copied).toBe('已复制到剪贴板');
     expect(
       resolveScreenshotMessages('zh-CN', {
         confirm: '复制到聊天框',
@@ -28,6 +29,7 @@ describe('overlay presentation', () => {
         accentColor: '#6750a4',
         toolbarForeground: '#1d1b20',
         tooltipBackground: '#ffffff',
+        warningColor: '#f59e0b',
       })
     ).toEqual({
       mode: 'light',
@@ -35,6 +37,7 @@ describe('overlay presentation', () => {
         '--snapora-color-accent': '#6750a4',
         '--snapora-color-on-surface': '#1d1b20',
         '--snapora-color-tooltip': '#ffffff',
+        '--snapora-color-warning': '#f59e0b',
       },
     });
   });

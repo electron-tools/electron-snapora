@@ -12,6 +12,7 @@ const { ScreenshotManager } = require('electron-snapora/main');
 
 const copyOutput = process.argv.includes('--copy');
 const doubleClickOutput = process.argv.includes('--double-click');
+let overlayWindow;
 
 app.disableHardwareAcceleration();
 
@@ -27,6 +28,7 @@ async function waitForReveal(window) {
 }
 
 app.on('browser-window-created', (_event, window) => {
+  overlayWindow = window;
   window.once('show', async () => {
     await waitForReveal(window);
     await window.webContents.executeJavaScript(`
@@ -213,6 +215,48 @@ app.whenReady().then(async () => {
     console.error('Electron Snapora clipboard smoke test did not receive an image.');
     process.exit(1);
     return;
+  }
+
+  if (doubleClickOutput) {
+    if (!overlayWindow || overlayWindow.isDestroyed()) {
+      console.error('Electron Snapora copy feedback window closed too early.');
+      process.exit(1);
+      return;
+    }
+    const feedbackState = await overlayWindow.webContents.executeJavaScript(`
+      new Promise((resolve, reject) => {
+        const deadline = Date.now() + 1000;
+        const inspect = () => {
+          const feedback = document.querySelector('.copy-feedback');
+          if (document.documentElement.dataset.snaporaFeedback === 'copy' && feedback && !feedback.hidden) {
+            const feedbackStyle = getComputedStyle(feedback);
+            resolve({
+              text: feedback.textContent?.trim(),
+              borderColor: feedbackStyle.borderTopColor,
+              bodyBackground: getComputedStyle(document.body).backgroundColor,
+              screenDisplay: getComputedStyle(document.querySelector('.screen-frame')).display,
+            });
+            return;
+          }
+          if (Date.now() >= deadline) {
+            reject(new Error('Copy feedback did not become visible.'));
+            return;
+          }
+          requestAnimationFrame(inspect);
+        };
+        inspect();
+      })
+    `);
+    if (
+      !feedbackState.text.includes('clipboard') ||
+      feedbackState.borderColor !== 'rgb(246, 189, 70)' ||
+      feedbackState.bodyBackground !== 'rgba(0, 0, 0, 0)' ||
+      feedbackState.screenDisplay !== 'none'
+    ) {
+      console.error('Electron Snapora copy feedback was not isolated:', feedbackState);
+      process.exit(1);
+      return;
+    }
   }
 
   console.log(

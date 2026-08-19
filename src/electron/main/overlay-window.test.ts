@@ -11,6 +11,7 @@ describe('OverlayWindow', () => {
     const showInactive = vi.fn();
     const setOpacity = vi.fn();
     const setBounds = vi.fn();
+    const setIgnoreMouseEvents = vi.fn();
     const setAlwaysOnTop = vi.fn();
     const moveTop = vi.fn();
     const focus = vi.fn();
@@ -27,6 +28,7 @@ describe('OverlayWindow', () => {
       on: vi.fn(),
       removeListener: vi.fn(),
       setBounds,
+      setIgnoreMouseEvents,
       setAlwaysOnTop,
       setOpacity,
       moveTop,
@@ -66,6 +68,7 @@ describe('OverlayWindow', () => {
       frame: false,
       hasShadow: false,
       alwaysOnTop: true,
+      transparent: true,
       show: false,
       opacity: 0,
       paintWhenInitiallyHidden: true,
@@ -90,6 +93,20 @@ describe('OverlayWindow', () => {
     expect(moveTop).toHaveBeenCalledTimes(2);
     expect(focus).toHaveBeenCalledOnce();
     expect(overlay.webContentsId).toBe(99);
+
+    vi.useFakeTimers();
+    overlay.showCopyFeedback(3_000);
+    expect(setIgnoreMouseEvents).toHaveBeenCalledWith(true);
+    expect(fakeWindow.webContents.send).toHaveBeenCalledWith(
+      'electron-snapora:overlay:feedback',
+      { kind: 'copy', durationMs: 3_000 }
+    );
+    expect(fakeWindow.destroy).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(2_999);
+    expect(fakeWindow.destroy).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(fakeWindow.destroy).toHaveBeenCalledOnce();
+    vi.useRealTimers();
   });
 
   it('does not access webContents while cleaning up a destroyed window', () => {
@@ -108,6 +125,7 @@ describe('OverlayWindow', () => {
       on: vi.fn(),
       removeListener: vi.fn(),
       setBounds: vi.fn(),
+      setIgnoreMouseEvents: vi.fn(),
       setAlwaysOnTop: vi.fn(),
       setOpacity: vi.fn(),
       moveTop: vi.fn(),
