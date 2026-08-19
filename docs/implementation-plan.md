@@ -321,13 +321,16 @@ const overlayWindow = new BrowserWindow({
   skipTaskbar: true,
   show: false,
   alwaysOnTop: true,
+  transparent: false,
   opacity: supportsInvisiblePriming ? 0 : 1,
   paintWhenInitiallyHidden: true,
+  backgroundColor: '#000000',
   webPreferences: {
     preload: overlayPreloadPath,
     nodeIntegration: false,
     contextIsolation: true,
     sandbox: true,
+    zoomFactor: 1,
   },
 });
 ```
@@ -335,14 +338,14 @@ const overlayWindow = new BrowserWindow({
 窗口行为要求：
 
 - 页面和图片准备完成后再显示，避免白屏闪烁。
-- Windows/macOS 先透明预热；Windows 在预热后重新设置完整显示器 `bounds`，不能用 `workArea` 作为截图窗口内容尺寸。
+- Windows/macOS 先以窗口透明度 0 预热；Windows 在预热后重新设置完整显示器 `bounds`，不能用 `workArea` 作为截图窗口内容尺寸。
 - `Escape` 取消，`Enter` 确认。
 - 同时只允许一个活动截图任务。
 - 截图结束后恢复之前聚焦的宿主窗口。
 - 窗口异常关闭必须将任务结算为 `cancelled` 或 `failed`。
 - 第一阶段只在鼠标所在显示器创建一个截图窗口。
 
-截图窗口直接显示已捕获的静态画面，不依赖透明窗口持续透出实时桌面。窗口使用显示器 DIP 边界和精确内容尺寸，捕获帧则按真实像素尺寸映射；这样可以避免桌面内容变化、工具栏被捕获、窗口阴影边界和不同平台透明合成差异。
+截图窗口直接显示已捕获的静态画面，不依赖透明窗口持续透出实时桌面。全屏窗口保持不透明、黑色底色和固定 `zoomFactor: 1`，只在预热阶段使用窗口级 opacity；窗口使用显示器 DIP 边界和精确内容尺寸，捕获帧则按真实像素尺寸映射。这样可以避免桌面内容变化、工具栏被捕获、窗口阴影边界，以及 Windows 透明全屏窗口参与桌面合成时产生的视觉缩放或位置漂移。
 
 ## 9. UI 与 Canvas 绘制架构
 
@@ -429,10 +432,10 @@ Overlay 合成 PNG
   ├─ save → showSaveDialog → writeFile
   └─ copy → nativeImage.createFromBuffer → clipboard.writeImage
   → 成功后 confirm 并立即结算截图会话
-  └─ copy → 隐藏截图层 → 鼠标穿透 Toast 3s → 销毁 OverlayWindow
+  └─ copy → 销毁全屏截图层 → 独立鼠标穿透 Toast 窗口 3s → 销毁 Toast
 ```
 
-保存对话框取消时返回 Overlay，不丢失选区和标注；输出失败显示错误并允许重试。蓝色确认按钮、`Enter`、`Ctrl/Command + C` 和有效选区内双击统一执行复制后完成：主进程成功写入系统剪贴板后，立即向宿主返回 PNG；Overlay 隐藏截图、标注和遮罩，只保留鼠标穿透的 warning 色 Toast，3 秒后自动销毁窗口。下一次截图开始前强制清理尚未结束的 Toast，避免反馈进入下一张捕获帧。选区外双击不触发输出，避免重新框选时误提交。自定义 Overlay 没有实现反馈能力时直接关闭，保持现有接入兼容。文件系统、系统对话框和剪贴板对象始终只存在于主进程。
+保存对话框取消时返回 Overlay，不丢失选区和标注；输出失败显示错误并允许重试。蓝色确认按钮、`Enter`、`Ctrl/Command + C` 和有效选区内双击统一执行复制后完成：主进程成功写入系统剪贴板后，立即向宿主返回 PNG，并销毁全屏截图窗口；随后在目标显示器顶部创建独立、透明、不可聚焦且鼠标穿透的小窗口。Toast Renderer 应用主题和文案并回传 `feedback-ready` 后窗口才显示，避免准备状态或导出状态闪现，3 秒后自动销毁。快速导出在 180ms 内不显示进度，超过阈值才显示 loading。成功图标使用 warning 色实心对钩，不绘制外层色块。下一次截图开始前强制清理尚未结束的 Toast，避免反馈进入下一张捕获帧。选区外双击不触发输出，避免重新框选时误提交。自定义 Overlay 没有实现反馈能力时直接关闭，保持现有接入兼容。文件系统、系统对话框和剪贴板对象始终只存在于主进程。
 
 ### 9.3 Overlay 视觉与工具提示
 

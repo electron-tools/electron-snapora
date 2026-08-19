@@ -6,6 +6,7 @@ export const OVERLAY_CHANNELS = {
   prepared: 'electron-snapora:overlay:prepared',
   initialize: 'electron-snapora:overlay:initialize',
   feedback: 'electron-snapora:overlay:feedback',
+  feedbackReady: 'electron-snapora:overlay:feedback-ready',
   confirm: 'electron-snapora:overlay:confirm',
   cancel: 'electron-snapora:overlay:cancel',
   error: 'electron-snapora:overlay:error',

@@ -132,9 +132,12 @@ font size are configurable.
 
 - **Copy & Done**, `Enter`, or double-clicking inside an existing selection: copy the composited PNG
   to the operating-system clipboard, then return it to the host application. After the capture mask
-  disappears, a click-through warning-colored toast confirms the copy for three seconds without
-  delaying the returned result. Starting another capture dismisses any remaining toast first, so
-  feedback cannot leak into the next screenshot.
+  disappears, a separate click-through warning-colored toast window confirms the copy for three
+  seconds without delaying the returned result. It is shown only after its renderer is ready, so a
+  fast copy does not flash an intermediate loading state. Starting another capture dismisses any
+  remaining toast first, so feedback cannot leak into the next screenshot. The full-screen capture
+  window remains opaque with a fixed page zoom; transparency is limited to the small feedback
+  window to keep Screen DIP and captured pixels visually aligned.
 - **Save**: open Electron's native save dialog, choose a local filename/directory, and write PNG.
 - **Escape**: cancel the screenshot task.
 

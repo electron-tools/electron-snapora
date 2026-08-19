@@ -449,7 +449,7 @@ export class ScreenshotSession {
       result.output.action === 'copy' &&
       this.#overlay?.showCopyFeedback
     ) {
-      this.#overlay.showCopyFeedback(3_000);
+      this.#overlay.showCopyFeedback(3_000, this.#options.captureOptions);
     } else {
       this.#overlay?.destroy();
     }

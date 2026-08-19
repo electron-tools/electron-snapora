@@ -50,6 +50,7 @@ export interface ScreenshotInitializePayload {
 export interface ScreenshotFeedbackPayload {
   kind: 'copy';
   durationMs: number;
+  options: ScreenshotOptions;
 }
 
 export interface ScreenshotCompletePayload {

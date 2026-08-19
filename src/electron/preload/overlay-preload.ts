@@ -20,6 +20,7 @@ export interface ScreenshotOverlayApi {
   output(
     payload: Omit<ScreenshotOutputPayload, 'protocolVersion'>
   ): Promise<ScreenshotOutputResponse>;
+  feedbackReady(): void;
   ready(): void;
   prepared(jobId: string): void;
 }
@@ -74,6 +75,9 @@ const overlayApi: ScreenshotOverlayApi = {
       protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
       ...payload,
     }) as Promise<ScreenshotOutputResponse>;
+  },
+  feedbackReady() {
+    ipcRenderer.send(OVERLAY_CHANNELS.feedbackReady);
   },
   ready() {
     ipcRenderer.send(OVERLAY_CHANNELS.ready, {

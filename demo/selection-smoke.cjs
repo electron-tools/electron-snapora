@@ -7,12 +7,12 @@ process.on('unhandledRejection', (error) => {
   process.exit(4);
 });
 
-const { app, clipboard } = require('electron');
+const { app, BrowserWindow, clipboard, screen } = require('electron');
 const { ScreenshotManager } = require('electron-snapora/main');
 
 const copyOutput = process.argv.includes('--copy');
 const doubleClickOutput = process.argv.includes('--double-click');
-let overlayWindow;
+let captureWindow;
 
 app.disableHardwareAcceleration();
 
@@ -28,7 +28,10 @@ async function waitForReveal(window) {
 }
 
 app.on('browser-window-created', (_event, window) => {
-  overlayWindow = window;
+  if (captureWindow) {
+    return;
+  }
+  captureWindow = window;
   window.once('show', async () => {
     await waitForReveal(window);
     await window.webContents.executeJavaScript(`
@@ -44,6 +47,31 @@ app.on('browser-window-created', (_event, window) => {
       })
     `);
     const { width, height } = window.getContentBounds();
+    const displayBounds = screen.getDisplayMatching(window.getBounds()).bounds;
+    const rendererGeometry = await window.webContents.executeJavaScript(`
+      (() => {
+        const frame = document.querySelector('.screen-frame')?.getBoundingClientRect();
+        return {
+          innerWidth,
+          innerHeight,
+          frameWidth: frame?.width,
+          frameHeight: frame?.height,
+          devicePixelRatio,
+        };
+      })()
+    `);
+    if (
+      width !== displayBounds.width ||
+      height !== displayBounds.height ||
+      rendererGeometry.innerWidth !== width ||
+      rendererGeometry.innerHeight !== height ||
+      rendererGeometry.frameWidth !== width ||
+      rendererGeometry.frameHeight !== height
+    ) {
+      throw new Error(
+        `Capture geometry does not match the display: ${JSON.stringify({ width, height, displayBounds, rendererGeometry })}`
+      );
+    }
     const start = {
       x: Math.max(20, Math.round(width * 0.15)),
       y: Math.max(20, Math.round(height * 0.15)),
@@ -218,40 +246,42 @@ app.whenReady().then(async () => {
   }
 
   if (doubleClickOutput) {
-    if (!overlayWindow || overlayWindow.isDestroyed()) {
+    const feedbackWindow = await waitForCopyFeedbackWindow();
+    if (!feedbackWindow || feedbackWindow.isDestroyed()) {
       console.error('Electron Snapora copy feedback window closed too early.');
       process.exit(1);
       return;
     }
-    const feedbackState = await overlayWindow.webContents.executeJavaScript(`
-      new Promise((resolve, reject) => {
-        const deadline = Date.now() + 1000;
-        const inspect = () => {
-          const feedback = document.querySelector('.copy-feedback');
-          if (document.documentElement.dataset.snaporaFeedback === 'copy' && feedback && !feedback.hidden) {
-            const feedbackStyle = getComputedStyle(feedback);
-            resolve({
-              text: feedback.textContent?.trim(),
-              borderColor: feedbackStyle.borderTopColor,
-              bodyBackground: getComputedStyle(document.body).backgroundColor,
-              screenDisplay: getComputedStyle(document.querySelector('.screen-frame')).display,
-            });
-            return;
-          }
-          if (Date.now() >= deadline) {
-            reject(new Error('Copy feedback did not become visible.'));
-            return;
-          }
-          requestAnimationFrame(inspect);
+    const feedbackState = await feedbackWindow.webContents.executeJavaScript(`
+      (() => {
+        const feedback = document.querySelector('.copy-feedback');
+        const feedbackStyle = getComputedStyle(feedback);
+        const iconStyle = getComputedStyle(document.querySelector('.copy-feedback-icon'));
+        const checkStyle = getComputedStyle(document.querySelector('.copy-feedback-check'));
+        return {
+          text: feedback.textContent?.trim(),
+          borderColor: feedbackStyle.borderTopColor,
+          bodyBackground: getComputedStyle(document.body).backgroundColor,
+          screenDisplay: getComputedStyle(document.querySelector('.screen-frame')).display,
+          statusDisplay: getComputedStyle(document.querySelector('.status')).display,
+          iconBackground: iconStyle.backgroundColor,
+          checkFill: checkStyle.fill,
+          checkStroke: checkStyle.stroke,
         };
-        inspect();
-      })
+      })()
     `);
+    const feedbackBounds = feedbackWindow.getContentBounds();
     if (
       !feedbackState.text.includes('clipboard') ||
       feedbackState.borderColor !== 'rgb(246, 189, 70)' ||
       feedbackState.bodyBackground !== 'rgba(0, 0, 0, 0)' ||
-      feedbackState.screenDisplay !== 'none'
+      feedbackState.screenDisplay !== 'none' ||
+      feedbackState.statusDisplay !== 'none' ||
+      feedbackState.iconBackground !== 'rgba(0, 0, 0, 0)' ||
+      feedbackState.checkFill !== 'rgb(246, 189, 70)' ||
+      feedbackState.checkStroke !== 'none' ||
+      feedbackBounds.width > 360 ||
+      feedbackBounds.height > 72
     ) {
       console.error('Electron Snapora copy feedback was not isolated:', feedbackState);
       process.exit(1);
@@ -264,3 +294,22 @@ app.whenReady().then(async () => {
   );
   process.exit(0);
 });
+
+async function waitForCopyFeedbackWindow() {
+  const deadline = Date.now() + 1_000;
+  while (Date.now() < deadline) {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (window.isDestroyed() || window === captureWindow) {
+        continue;
+      }
+      const isFeedback = await window.webContents.executeJavaScript(
+        `document.documentElement.dataset.snaporaFeedback === 'copy'`
+      );
+      if (isFeedback) {
+        return window;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  return undefined;
+}

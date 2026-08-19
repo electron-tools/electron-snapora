@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron';
 import type { BrowserWindowConstructorOptions, WebContents } from 'electron';
+import type { ScreenshotOptions } from '../../types.js';
 
 import type {
   CaptureDisplay,
@@ -50,7 +51,7 @@ export interface ScreenshotOverlayWindow {
   sendInitialize(payload: ScreenshotInitializePayload): void;
   prime(): void;
   reveal(): void;
-  showCopyFeedback?(durationMs: number): void;
+  showCopyFeedback?(durationMs: number, options: ScreenshotOptions): void;
   destroy(): void;
   onClosed(listener: () => void): () => void;
   onRendererGone(listener: () => void): () => void;
@@ -60,24 +61,26 @@ export interface ScreenshotOverlayWindow {
 export class OverlayWindow implements ScreenshotOverlayWindow {
   readonly #resources: OverlayResources;
   readonly #window: OverlayBrowserWindow;
+  readonly #createWindow: OverlayBrowserWindowFactory;
   readonly #bounds: CaptureDisplay['bounds'];
   readonly #platform: NodeJS.Platform;
   readonly #supportsInvisiblePriming: boolean;
   #primed = false;
+  #feedbackWindow: OverlayBrowserWindow | undefined;
   #feedbackTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(options: OverlayWindowOptions) {
     this.#resources =
       options.resources ?? resolveOverlayResources(undefined, options.resourceExists);
     assertOverlayResources(this.#resources, options.resourceExists);
-    const createWindow =
+    this.#createWindow =
       options.createWindow ?? ((windowOptions) => new BrowserWindow(windowOptions));
     const { bounds } = options.display;
     this.#bounds = bounds;
     this.#platform = options.platform ?? process.platform;
     this.#supportsInvisiblePriming = ['win32', 'darwin'].includes(this.#platform);
 
-    this.#window = createWindow({
+    this.#window = this.#createWindow({
       x: bounds.x,
       y: bounds.y,
       width: bounds.width,
@@ -92,17 +95,18 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
       fullscreenable: false,
       skipTaskbar: true,
       alwaysOnTop: true,
-      transparent: true,
+      transparent: false,
       show: false,
       opacity: this.#supportsInvisiblePriming ? 0 : 1,
       paintWhenInitiallyHidden: true,
       autoHideMenuBar: true,
-      backgroundColor: '#00000000',
+      backgroundColor: '#000000',
       webPreferences: {
         preload: this.#resources.preloadPath,
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: true,
+        zoomFactor: 1,
       },
     });
   }
@@ -145,36 +149,117 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
     this.#window.moveTop();
   }
 
-  /** 复制完成后保留一个鼠标穿透的轻量提示，截图 Promise 无需等待提示结束。 */
-  showCopyFeedback(durationMs: number): void {
-    if (this.#window.isDestroyed()) {
-      return;
+  /** 复制完成后销毁全屏截图层，改用独立的小窗口显示鼠标穿透提示。 */
+  showCopyFeedback(durationMs: number, options: ScreenshotOptions): void {
+    if (!this.#window.isDestroyed()) {
+      this.#window.destroy();
     }
-    this.#window.setIgnoreMouseEvents(true);
-    this.#window.webContents.send(OVERLAY_CHANNELS.feedback, {
-      kind: 'copy',
-      durationMs,
+    this.#destroyFeedbackWindow();
+
+    const width = Math.min(360, this.#bounds.width);
+    const height = Math.min(72, this.#bounds.height);
+    const feedbackWindow = this.#createWindow({
+      x: this.#bounds.x + Math.round((this.#bounds.width - width) / 2),
+      y: this.#bounds.y + Math.min(24, Math.max(0, this.#bounds.height - height)),
+      width,
+      height,
+      useContentSize: true,
+      frame: false,
+      hasShadow: false,
+      resizable: false,
+      movable: false,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      focusable: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      transparent: true,
+      show: false,
+      paintWhenInitiallyHidden: true,
+      autoHideMenuBar: true,
+      backgroundColor: '#00000000',
+      webPreferences: {
+        preload: this.#resources.preloadPath,
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+        zoomFactor: 1,
+      },
     });
-    this.#feedbackTimer = setTimeout(() => this.destroy(), durationMs);
+    this.#feedbackWindow = feedbackWindow;
+    feedbackWindow.setIgnoreMouseEvents(true);
+
+    const handleIpcMessage = (_event: unknown, channel: string): void => {
+      if (channel !== OVERLAY_CHANNELS.feedbackReady) {
+        return;
+      }
+      feedbackWindow.webContents.removeListener('ipc-message', handleIpcMessage);
+      if (feedbackWindow.isDestroyed() || this.#feedbackWindow !== feedbackWindow) {
+        return;
+      }
+      this.#clearFeedbackTimer();
+      this.#raiseAboveOtherWindows(feedbackWindow);
+      feedbackWindow.showInactive();
+      feedbackWindow.moveTop();
+      this.#feedbackTimer = setTimeout(
+        () => this.#destroyFeedbackWindow(feedbackWindow),
+        durationMs
+      );
+      this.#feedbackTimer.unref?.();
+    };
+    feedbackWindow.webContents.on('ipc-message', handleIpcMessage);
+
+    // 如果反馈渲染进程异常，隐藏窗口最多保留两秒，避免后台泄漏。
+    this.#feedbackTimer = setTimeout(
+      () => this.#destroyFeedbackWindow(feedbackWindow),
+      2_000
+    );
     this.#feedbackTimer.unref?.();
+    void feedbackWindow
+      .loadFile(this.#resources.htmlPath)
+      .then(() => {
+        if (!feedbackWindow.isDestroyed() && this.#feedbackWindow === feedbackWindow) {
+          feedbackWindow.webContents.send(OVERLAY_CHANNELS.feedback, {
+            kind: 'copy',
+            durationMs,
+            options,
+          });
+        }
+      })
+      .catch(() => this.#destroyFeedbackWindow(feedbackWindow));
   }
 
   /** 截图层必须高于普通置顶窗口；Windows/macOS 使用系统支持的最高标准层级。 */
-  #raiseAboveOtherWindows(): void {
+  #raiseAboveOtherWindows(window = this.#window): void {
     if (this.#platform === 'win32' || this.#platform === 'darwin') {
-      this.#window.setAlwaysOnTop(true, 'screen-saver');
+      window.setAlwaysOnTop(true, 'screen-saver');
       return;
     }
-    this.#window.setAlwaysOnTop(true);
+    window.setAlwaysOnTop(true);
   }
 
   destroy(): void {
+    this.#destroyFeedbackWindow();
+    if (!this.#window.isDestroyed()) {
+      this.#window.destroy();
+    }
+  }
+
+  #clearFeedbackTimer(): void {
     if (this.#feedbackTimer) {
       clearTimeout(this.#feedbackTimer);
       this.#feedbackTimer = undefined;
     }
-    if (!this.#window.isDestroyed()) {
-      this.#window.destroy();
+  }
+
+  #destroyFeedbackWindow(window = this.#feedbackWindow): void {
+    this.#clearFeedbackTimer();
+    if (window && !window.isDestroyed()) {
+      window.destroy();
+    }
+    if (this.#feedbackWindow === window) {
+      this.#feedbackWindow = undefined;
     }
   }
 

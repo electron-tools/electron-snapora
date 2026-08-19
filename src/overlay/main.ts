@@ -8,7 +8,11 @@ import {
 } from '../core/geometry/rect.js';
 import type { AnnotationElement, TextElement } from '../core/model/document.js';
 import type { ScreenshotInitializePayload } from '../electron/protocol/messages.js';
-import type { ScreenshotMessages, ScreenshotTool } from '../types.js';
+import type {
+  ScreenshotMessages,
+  ScreenshotOptions,
+  ScreenshotTool,
+} from '../types.js';
 import {
   calculateTextBaselinePosition,
   createDrawableElement,
@@ -115,7 +119,11 @@ let resetAnnotationsAfterSelection = true;
 let configuredDefaultTool: AnnotationTool = 'select';
 let pendingTextPoint: Point | null = null;
 let outputFeedback: string | null = null;
+let exportProgressVisible = false;
+let exportProgressTimer: number | undefined;
 let currentMessages: ScreenshotMessages = resolveScreenshotMessages();
+
+const EXPORT_PROGRESS_DELAY_MS = 180;
 
 /** 捕获帧加载完成后才开放选区和标注，确保三套坐标使用同一实际图片尺寸。 */
 function initializeOverlay(payload: ScreenshotInitializePayload): void {
@@ -131,8 +139,8 @@ function initializeOverlay(payload: ScreenshotInitializePayload): void {
 
   configuredDefaultTool = payload.options.defaultTool ?? 'select';
   selectionStore.dispatch({ type: 'initialize', payload });
-  applyTheme(payload);
-  applyLocale(payload);
+  applyTheme(payload.options);
+  applyLocale(payload.options);
   applyToolAvailability(payload.options.tools);
   screenFrame.onload = async () => {
     annotationCanvas.width = frame.pixelSize.width;
@@ -158,10 +166,15 @@ window.snaporaOverlay.onFeedback((payload) => {
   if (payload.kind !== 'copy') {
     return;
   }
+  clearExportProgress();
+  applyTheme(payload.options);
+  applyLocale(payload.options);
   document.documentElement.dataset.snaporaFeedback = 'copy';
   surface.dataset.state = 'copied';
   copyFeedbackText.textContent = localize('copied');
   copyFeedback.hidden = false;
+  // 隐藏窗口先完成 Toast 合成再通知主进程显示，避免露出加载前的状态帧。
+  void waitForCompositeFrames().then(() => window.snaporaOverlay.feedbackReady());
 });
 selectionStore.subscribe(render);
 annotationStore.subscribe(render);
@@ -643,7 +656,9 @@ async function confirmCapture(outputAction: 'save' | 'copy' = 'copy'): Promise<v
   }
 
   outputFeedback = null;
+  clearExportProgress();
   selectionStore.dispatch({ type: 'begin-export' });
+  scheduleExportProgress();
   try {
     const viewportSize = getSurfaceSize();
     const imageRect = viewportRectToImageRect(
@@ -677,6 +692,7 @@ async function confirmCapture(outputAction: 'save' | 'copy' = 'copy'): Promise<v
       result,
     });
     if (response.status !== 'completed') {
+      clearExportProgress();
       selectionStore.dispatch({ type: 'export-failed' });
       outputFeedback =
         response.status === 'cancelled' ? localize('saveCancelled') : response.message;
@@ -688,11 +704,13 @@ async function confirmCapture(outputAction: 'save' | 'copy' = 'copy'): Promise<v
       response.action === 'save'
         ? { action: 'save' as const, filePath: response.filePath }
         : { action: 'copy' as const };
+    clearExportProgress();
     window.snaporaOverlay.confirm({
       jobId: state.payload.jobId,
       result: { ...result, output },
     });
   } catch (error) {
+    clearExportProgress();
     selectionStore.dispatch({ type: 'export-failed' });
     window.snaporaOverlay.reportError({
       jobId: state.payload.jobId,
@@ -700,6 +718,25 @@ async function confirmCapture(outputAction: 'save' | 'copy' = 'copy'): Promise<v
       message: error instanceof Error ? error.message : 'Screenshot export failed.',
     });
   }
+}
+
+/** 快速复制不显示瞬时 loading，只有导出确实耗时时才呈现进度。 */
+function scheduleExportProgress(): void {
+  exportProgressTimer = window.setTimeout(() => {
+    exportProgressTimer = undefined;
+    if (selectionStore.getState().phase === 'exporting') {
+      exportProgressVisible = true;
+      render();
+    }
+  }, EXPORT_PROGRESS_DELAY_MS);
+}
+
+function clearExportProgress(): void {
+  if (exportProgressTimer !== undefined) {
+    window.clearTimeout(exportProgressTimer);
+    exportProgressTimer = undefined;
+  }
+  exportProgressVisible = false;
 }
 
 function render(): void {
@@ -720,9 +757,11 @@ function render(): void {
   selectionElement.hidden = selection === null;
   toolbar.hidden = selectionState.phase !== 'selected';
 
-  status.hidden =
-    !['waiting', 'ready', 'exporting'].includes(selectionState.phase) &&
-    !outputFeedback;
+  const showPhaseStatus =
+    selectionState.phase === 'waiting' ||
+    selectionState.phase === 'ready' ||
+    (selectionState.phase === 'exporting' && exportProgressVisible);
+  status.hidden = !showPhaseStatus && !outputFeedback;
   if (selectionState.phase === 'waiting') {
     status.textContent = localize('preparing');
   } else if (selectionState.phase === 'ready') {
@@ -879,8 +918,8 @@ function applyToolAvailability(tools: ScreenshotTool[] | undefined): void {
   }
 }
 
-function applyTheme(payload: ScreenshotInitializePayload): void {
-  const theme = resolveScreenshotTheme(payload.options.theme);
+function applyTheme(options: ScreenshotOptions): void {
+  const theme = resolveScreenshotTheme(options.theme);
   document.documentElement.dataset.snaporaTheme = theme.mode;
   for (const [token, value] of Object.entries(theme.tokens)) {
     setColorToken(token, value);
@@ -893,9 +932,9 @@ function setColorToken(token: string, value: string | undefined): void {
   }
 }
 
-function applyLocale(payload: ScreenshotInitializePayload): void {
-  const locale = payload.options.locale ?? 'en-US';
-  currentMessages = resolveScreenshotMessages(locale, payload.options.messages);
+function applyLocale(options: ScreenshotOptions): void {
+  const locale = options.locale ?? 'en-US';
+  currentMessages = resolveScreenshotMessages(locale, options.messages);
   const localized = currentMessages;
   const toolLabels: Record<AnnotationTool, string> = {
     select: localized.select,

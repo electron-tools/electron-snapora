@@ -224,7 +224,9 @@ describe('ScreenshotSession', () => {
 
     await expect(resultPromise).resolves.toEqual(completedResult);
     expect(session.state).toBe('completed');
-    expect(overlay.showCopyFeedback).toHaveBeenCalledWith(3_000);
+    expect(overlay.showCopyFeedback).toHaveBeenCalledWith(3_000, {
+      display: 'cursor',
+    });
     expect(overlay.destroy).not.toHaveBeenCalled();
     expect(ipc.listenerCount(OVERLAY_CHANNELS.confirm)).toBe(0);
     expect(ipc.listenerCount(OVERLAY_CHANNELS.prepared)).toBe(0);
