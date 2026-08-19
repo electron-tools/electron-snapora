@@ -21,22 +21,58 @@ export type AnnotationElementStyle = Partial<AnnotationStyle>;
 
 export const TEXT_LINE_HEIGHT = 1.3;
 
+type TextBaselineMetrics = Pick<TextLayoutMetrics, 'ascent' | 'descent'> &
+  Partial<Pick<TextLayoutMetrics, 'width'>>;
+
 /**
  * 将 textarea 外框左上角换算为 Canvas fillText 使用的首行基线。
  * DOM 会在内容区内平均分配行高留白，因此需要同时补偿边框、内边距和半行留白。
  */
 export function calculateTextBaselinePosition(
   editorOrigin: Point,
-  metrics: TextLayoutMetrics,
+  metrics: TextBaselineMetrics,
   contentOffset: Point,
   lineHeight: number
 ): Point {
-  const glyphHeight = metrics.ascent + metrics.descent;
-  const leadingBeforeGlyph = Math.max(0, lineHeight - glyphHeight) / 2;
+  const fontBoxHeight = metrics.ascent + metrics.descent;
+  const leadingBeforeBaseline = Math.max(0, lineHeight - fontBoxHeight) / 2;
   return {
     x: editorOrigin.x + contentOffset.x,
-    y: editorOrigin.y + contentOffset.y + leadingBeforeGlyph + metrics.ascent,
+    y: editorOrigin.y + contentOffset.y + leadingBeforeBaseline + metrics.ascent,
   };
+}
+
+/**
+ * textarea 按字体框排版，而元素边界使用实际字形边界；提交时单独读取字体框指标，
+ * 避免 Windows 等平台的字体上升部差异让 Canvas 文字相对输入位置上移。
+ */
+export function measureTextBaselineMetrics(
+  context: Pick<CanvasRenderingContext2D, 'font' | 'measureText'>,
+  fontSize: number
+): TextBaselineMetrics {
+  const previousFont = context.font;
+  context.font = getTextCanvasFont(fontSize);
+  try {
+    const metrics = context.measureText('Mg国');
+    return {
+      ascent: positiveMetric(
+        metrics.fontBoundingBoxAscent,
+        metrics.actualBoundingBoxAscent,
+        fontSize * 0.8
+      ),
+      descent: positiveMetric(
+        metrics.fontBoundingBoxDescent,
+        metrics.actualBoundingBoxDescent,
+        fontSize * 0.2
+      ),
+    };
+  } finally {
+    context.font = previousFont;
+  }
+}
+
+function positiveMetric(...values: number[]): number {
+  return values.find((value) => Number.isFinite(value) && value > 0) ?? 0;
 }
 
 export function splitTextLines(value: string): string[] {

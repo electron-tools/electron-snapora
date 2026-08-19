@@ -32,6 +32,8 @@
   --snapora-danger: var(--snapora-color-danger);
   --snapora-handle: var(--snapora-color-handle);
   --snapora-text: var(--snapora-toolbar-foreground);
+  --snapora-toolbar-item-gap: 4px;
+  --snapora-toolbar-group-padding: 3px;
 
   color-scheme: dark;
   font-family:
@@ -267,19 +269,15 @@ input {
   gap: 0;
 }
 
-.tool-group > .icon-button + .icon-button,
 .history-group > .icon-button + .icon-button {
   border-left: 1px solid rgb(255 255 255 / 7%);
 }
 
-.tool-group > .color-control {
-  border-right: 1px solid rgb(255 255 255 / 7%);
-}
-
+.tool-group,
 .action-group {
-  gap: 4px;
-  padding-right: 3px;
-  padding-left: 3px;
+  gap: var(--snapora-toolbar-item-gap);
+  padding-right: var(--snapora-toolbar-group-padding);
+  padding-left: var(--snapora-toolbar-group-padding);
 }
 
 .toolbar-divider {
@@ -375,6 +373,10 @@ input {
   height: 38px;
   cursor: pointer;
   place-items: center;
+}
+
+.tool-group .color-control {
+  width: 38px;
 }
 
 .font-control {
@@ -629,6 +631,11 @@ input {
 
   .style-group label {
     width: 33px;
+    height: 36px;
+  }
+
+  .tool-group .color-control {
+    width: 35px;
     height: 36px;
   }
 }

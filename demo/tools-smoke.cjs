@@ -220,12 +220,45 @@ app.on('browser-window-created', (_event, window) => {
         return {
           panelIndex: panels.indexOf(color?.parentElement),
           isFirst: toolPanel?.firstElementChild === color,
+          brushIcon: document
+            .querySelector('[data-tool="brush"] use')
+            ?.getAttribute('href'),
+          hasBrushSymbol: Boolean(document.querySelector('#icon-brush')),
         };
       })()
     `);
-    if (colorPlacement.panelIndex !== 1 || !colorPlacement.isFirst) {
+    if (
+      colorPlacement.panelIndex !== 1 ||
+      !colorPlacement.isFirst ||
+      colorPlacement.brushIcon !== '#icon-brush' ||
+      !colorPlacement.hasBrushSymbol
+    ) {
       throw new Error(
-        `Color control was not first in the second panel: ${JSON.stringify(colorPlacement)}`
+        `Tool panel placement or brush icon was invalid: ${JSON.stringify(colorPlacement)}`
+      );
+    }
+
+    const toolbarSpacing = await window.webContents.executeJavaScript(`
+      (() => {
+        const tools = getComputedStyle(document.querySelector('.tool-group'));
+        const actions = getComputedStyle(document.querySelector('.action-group'));
+        return {
+          toolGap: tools.gap,
+          actionGap: actions.gap,
+          toolPaddingLeft: tools.paddingLeft,
+          actionPaddingLeft: actions.paddingLeft,
+          toolPaddingRight: tools.paddingRight,
+          actionPaddingRight: actions.paddingRight,
+        };
+      })()
+    `);
+    if (
+      toolbarSpacing.toolGap !== toolbarSpacing.actionGap ||
+      toolbarSpacing.toolPaddingLeft !== toolbarSpacing.actionPaddingLeft ||
+      toolbarSpacing.toolPaddingRight !== toolbarSpacing.actionPaddingRight
+    ) {
+      throw new Error(
+        `Tool and action spacing differ: ${JSON.stringify(toolbarSpacing)}`
       );
     }
 
@@ -259,6 +292,12 @@ app.on('browser-window-created', (_event, window) => {
       { x: left + 130, y: top + rowGap + 75 },
       12
     );
+    const brushSelection = await window.webContents.executeJavaScript(
+      `document.querySelector('.capture-surface')?.dataset.selectedType ?? null`
+    );
+    if (brushSelection !== null) {
+      throw new Error(`Brush remained selected after drawing: ${brushSelection}`);
+    }
     await assertToolDraws(
       window,
       'mosaic',

@@ -4,6 +4,7 @@ import {
   createDrawableElement,
   getElementBounds,
   hitTestElement,
+  measureTextBaselineMetrics,
   measureTextLayout,
   scaleElementToBounds,
   translateElement,
@@ -172,6 +173,27 @@ describe('annotation element geometry', () => {
 
     expect(position.x).toBe(111);
     expect(position.y).toBeCloseTo(91.6);
+  });
+
+  it('uses the font box baseline used by textarea layout when available', () => {
+    const context = {
+      font: '12px serif',
+      measureText: vi.fn(
+        () =>
+          ({
+            actualBoundingBoxAscent: 20,
+            actualBoundingBoxDescent: 6,
+            fontBoundingBoxAscent: 23,
+            fontBoundingBoxDescent: 7,
+          }) as TextMetrics
+      ),
+    };
+
+    expect(measureTextBaselineMetrics(context, 24)).toEqual({
+      ascent: 23,
+      descent: 7,
+    });
+    expect(context.font).toBe('12px serif');
   });
 
   it('keeps measured text bounds aligned after proportional resize', () => {

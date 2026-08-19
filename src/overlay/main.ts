@@ -16,6 +16,7 @@ import {
   getResizeHandleAtPoint,
   hitTestElement,
   isDrawableElementValid,
+  measureTextBaselineMetrics,
   measureTextLayout,
   scaleElementToBounds,
   translateElement,
@@ -396,7 +397,7 @@ function handleCanvasPointerEnd(event: PointerEvent): void {
   } else if (interaction.kind === 'draw') {
     const draft = annotationStore.getState().draft;
     if (draft && isDrawableElementValid(draft)) {
-      annotationStore.commitDraft(draft.type !== 'mosaic');
+      annotationStore.commitDraft(draft.type !== 'mosaic' && draft.type !== 'brush');
     } else {
       annotationStore.setDraft(null);
     }
@@ -553,6 +554,7 @@ function closeTextEditor(commit: boolean): void {
     const imageScale = getImageScale();
     const fontSize = state.style.fontSize * imageScale;
     const metrics = measureTextLayout(annotationContext, value, fontSize);
+    const baselineMetrics = measureTextBaselineMetrics(annotationContext, fontSize);
     const editorStyle = window.getComputedStyle(textEditor);
     // textarea 的点击坐标指向外框左上角；提交时转换到内容区的真实文字基线。
     const contentOffset = {
@@ -568,7 +570,7 @@ function closeTextEditor(commit: boolean): void {
     const measuredLineHeight = parseCssPixels(editorStyle.lineHeight) * imageScale;
     const position = calculateTextBaselinePosition(
       pendingTextPoint,
-      metrics,
+      baselineMetrics,
       contentOffset,
       measuredLineHeight || fontSize * TEXT_LINE_HEIGHT
     );
