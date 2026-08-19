@@ -116,11 +116,12 @@ export class ScreenshotSession {
   async #start(): Promise<void> {
     this.#state = 'capturing';
     this.#startDiagnosticStage('capture');
+    let targetDisplay: CaptureDisplay | undefined;
 
     // Electron 默认适配器可以同步确定目标屏幕，因此隐藏 Overlay 的加载无需等待截图完成。
     // 窗口直到捕获帧解码、合成完成后才会 prime/reveal，不会进入屏幕截图。
     try {
-      const targetDisplay = this.#options.captureAdapter.resolveTargetDisplay?.(
+      targetDisplay = this.#options.captureAdapter.resolveTargetDisplay?.(
         this.#options.captureOptions
       );
       if (targetDisplay) {
@@ -132,7 +133,12 @@ export class ScreenshotSession {
 
     let frames: CapturedFrame[];
     try {
-      frames = await this.#options.captureAdapter.capture(this.#options.captureOptions);
+      frames = targetDisplay
+        ? await this.#options.captureAdapter.capture(
+            this.#options.captureOptions,
+            targetDisplay
+          )
+        : await this.#options.captureAdapter.capture(this.#options.captureOptions);
       if (this.#settled) {
         return;
       }
@@ -140,6 +146,12 @@ export class ScreenshotSession {
         throw new ScreenshotError(
           'CAPTURE_FAILED',
           'Screen capture returned no frames.'
+        );
+      }
+      if (targetDisplay && !isSameDisplayGeometry(targetDisplay, frames[0].display)) {
+        throw new ScreenshotError(
+          'DISPLAY_NOT_FOUND',
+          'The target display changed while the screenshot was starting. Please retry.'
         );
       }
       for (const frame of frames) {
@@ -526,4 +538,19 @@ function diagnosticError(
     );
   }
   return context;
+}
+
+/** 预加载窗口的屏幕几何必须与采集帧一致，否则显示会发生缩放或位置错位。 */
+function isSameDisplayGeometry(
+  expected: CaptureDisplay,
+  actual: CaptureDisplay
+): boolean {
+  return (
+    expected.id === actual.id &&
+    expected.scaleFactor === actual.scaleFactor &&
+    expected.bounds.x === actual.bounds.x &&
+    expected.bounds.y === actual.bounds.y &&
+    expected.bounds.width === actual.bounds.width &&
+    expected.bounds.height === actual.bounds.height
+  );
 }

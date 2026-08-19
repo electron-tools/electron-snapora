@@ -86,10 +86,16 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
     return this.#toCaptureDisplay(this.#resolveDisplay(options.display ?? 'cursor'));
   }
 
-  async capture(options: ScreenshotOptions = {}): Promise<CapturedFrame[]> {
+  async capture(
+    options: ScreenshotOptions = {},
+    targetDisplay?: CaptureDisplay
+  ): Promise<CapturedFrame[]> {
     this.#assertPermission();
 
-    const display = this.#resolveDisplay(options.display ?? 'cursor');
+    // Session 预加载 Overlay 后必须继续使用同一个显示器，不能再次按鼠标位置解析。
+    const display = targetDisplay
+      ? this.#resolveDisplay(targetDisplay.id)
+      : this.#resolveDisplay(options.display ?? 'cursor');
     const pixelSize = {
       width: Math.max(1, Math.round(display.bounds.width * display.scaleFactor)),
       height: Math.max(1, Math.round(display.bounds.height * display.scaleFactor)),
@@ -104,6 +110,8 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
         fetchWindowIcons: false,
       });
     } catch (error) {
+      // macOS 首次请求可能先显示系统授权弹窗，失败后状态才变为 denied。
+      this.#assertPermission();
       throw new ScreenshotError(
         'CAPTURE_FAILED',
         'Electron failed to capture the screen.',
@@ -117,6 +125,7 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
       (candidate) => candidate.display_id === String(display.id)
     );
     if (!source) {
+      this.#assertPermission();
       throw new ScreenshotError(
         'DISPLAY_NOT_FOUND',
         `No desktop capture source matched display ${display.id}.`
@@ -124,6 +133,7 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
     }
 
     if (source.thumbnail.isEmpty()) {
+      this.#assertPermission();
       throw new ScreenshotError(
         'CAPTURE_FAILED',
         'Electron returned an empty screen image.'

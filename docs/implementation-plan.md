@@ -827,6 +827,9 @@ declare global {
 - Node 构建目标与 `engines` 均以 Node.js 20 为下限。
 - npm peer 仅声明经过验证的 Electron `>=42 <44`，不继续保留 `>=28` 的无上界承诺。
 - Windows 11 x64 使用独立 tgz 消费项目分别在 Electron 42.8.0、43.3.0 完成真实捕获、Overlay 加载和取消回归。
+- `display: 'cursor'` 在任务开始时只解析一次鼠标所在显示器，并把锁定的 display ID 传给采集适配器；若采集期间显示器 ID、边界或缩放发生变化，任务返回 `DISPLAY_NOT_FOUND` 并要求重试，不显示错位窗口。
+- Windows 截图层禁用圆角和厚边框，避免无边框窗口阴影、动画及边缘缩放；macOS 截图层使用简易全屏、允许超屏幕尺寸并显示在全部 Space/全屏窗口上方。
+- macOS 在首次采集请求失败后重新读取屏幕录制权限；系统状态从 `not-determined` 变为 `denied`/`restricted` 时返回 `PERMISSION_DENIED`。
 - Windows ARM64、macOS Retina/权限/签名和 Linux 各显示协议仍是发布前待验收项；未完成前 README 必须明确标记，不推断支持。
 
 ### 14.2 数据规模保护
@@ -853,14 +856,16 @@ declare global {
 ### Windows
 
 - 使用 Electron 屏幕源捕获。
+- 鼠标所在显示器在任务开始时锁定，支持主屏两侧的负坐标显示器，不在采集完成时按鼠标位置二次选屏。
 - 重点验证混合 DPI、多显示器负坐标和缩放切换。
 - 验证 ARM64 与 x64 安装包。
 
 ### macOS
 
 - 检查屏幕录制权限并返回结构化错误。
+- 使用 `simpleFullscreen` 覆盖菜单栏区域，使用 `setVisibleOnAllWorkspaces(..., { visibleOnFullScreen: true })` 覆盖全屏 Space；不使用会导致文字输入失焦的非激活 `panel` 窗口。
 - 权限缺失时由宿主决定是否打开系统设置。
-- 打包应用需要配置屏幕录制用途说明。
+- 打包应用需要在 `Info.plist` 配置 `NSScreenCaptureUsageDescription`，并以签名后的稳定 Bundle ID 验证权限和公证成品。
 - 验证 Retina、多个 Space 和全屏应用行为。
 
 ### Linux

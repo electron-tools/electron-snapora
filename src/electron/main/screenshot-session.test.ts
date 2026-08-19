@@ -89,17 +89,18 @@ describe('ScreenshotSession', () => {
     const ipc = new EventEmitter();
     const { overlay } = createOverlay();
     let finishCapture: ((frames: CapturedFrame[]) => void) | undefined;
+    const capture = vi.fn(
+      () =>
+        new Promise<CapturedFrame[]>((resolve) => {
+          finishCapture = resolve;
+        })
+    );
     const session = new ScreenshotSession({
       jobId: 'parallel-overlay',
       captureOptions: { display: 'cursor' },
       captureAdapter: {
         resolveTargetDisplay: vi.fn(() => frame.display),
-        capture: vi.fn(
-          () =>
-            new Promise<CapturedFrame[]>((resolve) => {
-              finishCapture = resolve;
-            })
-        ),
+        capture,
       },
       ipcMain: ipc as unknown as Pick<IpcMain, 'on' | 'removeListener'>,
       createOverlay: () => overlay,
@@ -109,6 +110,7 @@ describe('ScreenshotSession', () => {
     const resultPromise = session.run();
     await vi.waitFor(() => expect(overlay.load).toHaveBeenCalledOnce());
     expect(session.state).toBe('capturing');
+    expect(capture).toHaveBeenCalledWith({ display: 'cursor' }, frame.display);
 
     emitOverlayMessage(ipc, OVERLAY_CHANNELS.ready, {
       protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
@@ -147,6 +149,35 @@ describe('ScreenshotSession', () => {
       code: 'RESOURCE_LIMIT_EXCEEDED',
     });
     expect(overlay.load).not.toHaveBeenCalled();
+  });
+
+  it('fails safely when a preloaded target display changes before capture completes', async () => {
+    const ipc = new EventEmitter();
+    const { overlay } = createOverlay();
+    const movedFrame = {
+      ...frame,
+      display: {
+        ...frame.display,
+        bounds: { ...frame.display.bounds, x: 1920 },
+      },
+    };
+    const session = new ScreenshotSession({
+      jobId: 'display-changed',
+      captureOptions: { display: 'cursor' },
+      captureAdapter: {
+        resolveTargetDisplay: () => frame.display,
+        capture: vi.fn(async () => [movedFrame]),
+      },
+      ipcMain: ipc as unknown as Pick<IpcMain, 'on' | 'removeListener'>,
+      createOverlay: () => overlay,
+    });
+
+    await expect(session.run()).resolves.toMatchObject({
+      status: 'failed',
+      code: 'DISPLAY_NOT_FOUND',
+    });
+    expect(overlay.destroy).toHaveBeenCalledOnce();
+    expect(overlay.prime).not.toHaveBeenCalled();
   });
 
   it('supports programmatic cancellation while screen capture is pending', async () => {

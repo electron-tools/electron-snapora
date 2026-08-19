@@ -27,6 +27,7 @@ export type OverlayBrowserWindow = Pick<
   | 'setBounds'
   | 'setIgnoreMouseEvents'
   | 'setOpacity'
+  | 'setVisibleOnAllWorkspaces'
   | 'show'
   | 'showInactive'
 > & {
@@ -92,7 +93,8 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
       movable: false,
       minimizable: false,
       maximizable: false,
-      fullscreenable: false,
+      // macOS 简易全屏要求窗口具备全屏能力；无边框窗口没有可供用户切换的系统按钮。
+      fullscreenable: this.#platform === 'darwin',
       skipTaskbar: true,
       alwaysOnTop: true,
       transparent: false,
@@ -101,6 +103,16 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
       paintWhenInitiallyHidden: true,
       autoHideMenuBar: true,
       backgroundColor: '#000000',
+      ...(this.#platform === 'win32'
+        ? { roundedCorners: false, thickFrame: false }
+        : {}),
+      ...(this.#platform === 'darwin'
+        ? {
+            enableLargerThanScreen: true,
+            hiddenInMissionControl: true,
+            simpleFullscreen: true,
+          }
+        : {}),
       webPreferences: {
         preload: this.#resources.preloadPath,
         nodeIntegration: false,
@@ -109,6 +121,7 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
         zoomFactor: 1,
       },
     });
+    this.#configureMacWorkspaceVisibility(this.#window);
   }
 
   get webContentsId(): number {
@@ -128,8 +141,10 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
     if (!this.#window.isDestroyed() && this.#supportsInvisiblePriming) {
       this.#raiseAboveOtherWindows();
       this.#window.showInactive();
-      // Windows 会在首次显示时把无边框窗口压到 workArea；显示后重设 bounds 才能覆盖任务栏。
-      this.#window.setBounds(this.#bounds, false);
+      if (this.#platform !== 'darwin') {
+        // Windows 会在首次显示时把无边框窗口压到 workArea；显示后重设 bounds 才能覆盖任务栏。
+        this.#window.setBounds(this.#bounds, false);
+      }
       this.#window.moveTop();
       this.#primed = true;
     }
@@ -188,6 +203,7 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
       },
     });
     this.#feedbackWindow = feedbackWindow;
+    this.#configureMacWorkspaceVisibility(feedbackWindow);
     feedbackWindow.setIgnoreMouseEvents(true);
 
     const handleIpcMessage = (_event: unknown, channel: string): void => {
@@ -237,6 +253,13 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
       return;
     }
     window.setAlwaysOnTop(true);
+  }
+
+  /** 让截图层和复制提示在 macOS 全屏 Space 中也保持可见。 */
+  #configureMacWorkspaceVisibility(window: OverlayBrowserWindow): void {
+    if (this.#platform === 'darwin') {
+      window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    }
   }
 
   destroy(): void {

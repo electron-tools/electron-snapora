@@ -79,6 +79,31 @@ describe('ElectronCaptureAdapter', () => {
     ]);
   });
 
+  it('keeps the pre-resolved cursor display locked while capture is pending', async () => {
+    const secondaryDisplay = {
+      id: 20,
+      bounds: { x: 800, y: 0, width: 1024, height: 768 },
+      scaleFactor: 1,
+    };
+    const screen = createScreen();
+    screen.getAllDisplays.mockReturnValue([primaryDisplay, secondaryDisplay]);
+    screen.getDisplayNearestPoint
+      .mockReturnValueOnce(primaryDisplay)
+      .mockReturnValueOnce(secondaryDisplay);
+    const desktopCapturer = createDesktopCapturer('10');
+    const adapter = new ElectronCaptureAdapter({
+      screen,
+      desktopCapturer,
+      platform: 'win32',
+    });
+
+    const targetDisplay = adapter.resolveTargetDisplay({ display: 'cursor' });
+    const frames = await adapter.capture({ display: 'cursor' }, targetDisplay);
+
+    expect(screen.getDisplayNearestPoint).toHaveBeenCalledOnce();
+    expect(frames[0]?.display.id).toBe('10');
+  });
+
   it('rejects an explicit display that does not exist', async () => {
     const adapter = new ElectronCaptureAdapter({
       screen: createScreen(),
@@ -104,6 +129,27 @@ describe('ElectronCaptureAdapter', () => {
       code: 'PERMISSION_DENIED',
     });
     expect(desktopCapturer.getSources).not.toHaveBeenCalled();
+  });
+
+  it('maps a macOS first-run capture rejection to permission denied', async () => {
+    const getScreenPermissionStatus = vi
+      .fn<() => 'not-determined' | 'denied'>()
+      .mockReturnValueOnce('not-determined')
+      .mockReturnValueOnce('denied');
+    const adapter = new ElectronCaptureAdapter({
+      screen: createScreen(),
+      desktopCapturer: {
+        getSources: vi.fn(async () => {
+          throw new Error('screen recording rejected');
+        }),
+      },
+      platform: 'darwin',
+      getScreenPermissionStatus,
+    });
+
+    await expect(adapter.capture()).rejects.toMatchObject({
+      code: 'PERMISSION_DENIED',
+    });
   });
 
   it('does not guess when Electron cannot map a source to the display', async () => {

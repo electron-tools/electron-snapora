@@ -43,12 +43,15 @@ describe('OverlayWindow', () => {
       useContentSize: true,
       frame: false,
       hasShadow: false,
+      fullscreenable: false,
       alwaysOnTop: true,
       transparent: false,
       show: false,
       opacity: 0,
       paintWhenInitiallyHidden: true,
       backgroundColor: '#000000',
+      roundedCorners: false,
+      thickFrame: false,
       webPreferences: {
         preload: 'dist/overlay/preload.cjs',
         nodeIntegration: false,
@@ -113,6 +116,44 @@ describe('OverlayWindow', () => {
     vi.useRealTimers();
   });
 
+  it('uses a fullscreen Space-safe window strategy on macOS', () => {
+    const receivedOptions: BrowserWindowConstructorOptions[] = [];
+    const fake = createFakeWindow(41);
+    const overlay = new OverlayWindow({
+      display: {
+        id: '20',
+        bounds: { x: 1440, y: 0, width: 1920, height: 1080 },
+        scaleFactor: 2,
+      },
+      resources: { htmlPath: 'overlay.html', preloadPath: 'preload.cjs' },
+      resourceExists: () => true,
+      createWindow: (options) => {
+        receivedOptions.push(options);
+        return fake.window;
+      },
+      platform: 'darwin',
+    });
+
+    overlay.prime();
+    overlay.reveal();
+
+    expect(receivedOptions[0]).toMatchObject({
+      x: 1440,
+      y: 0,
+      width: 1920,
+      height: 1080,
+      fullscreenable: true,
+      enableLargerThanScreen: true,
+      hiddenInMissionControl: true,
+      simpleFullscreen: true,
+    });
+    expect(fake.setVisibleOnAllWorkspaces).toHaveBeenCalledWith(true, {
+      visibleOnFullScreen: true,
+    });
+    expect(fake.setBounds).not.toHaveBeenCalled();
+    expect(fake.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver');
+  });
+
   it('does not access webContents while cleaning up a destroyed window', () => {
     let destroyed = false;
     const removeWebContentsListener = vi.fn();
@@ -132,6 +173,7 @@ describe('OverlayWindow', () => {
       setIgnoreMouseEvents: vi.fn(),
       setAlwaysOnTop: vi.fn(),
       setOpacity: vi.fn(),
+      setVisibleOnAllWorkspaces: vi.fn(),
       moveTop: vi.fn(),
       show: vi.fn(),
       showInactive: vi.fn(),
@@ -169,6 +211,7 @@ function createFakeWindow(id: number) {
   const setBounds = vi.fn();
   const setIgnoreMouseEvents = vi.fn();
   const setAlwaysOnTop = vi.fn();
+  const setVisibleOnAllWorkspaces = vi.fn();
   const moveTop = vi.fn();
   const focus = vi.fn();
   const window = {
@@ -187,6 +230,7 @@ function createFakeWindow(id: number) {
     setIgnoreMouseEvents,
     setAlwaysOnTop,
     setOpacity,
+    setVisibleOnAllWorkspaces,
     moveTop,
     show,
     showInactive,
@@ -205,6 +249,7 @@ function createFakeWindow(id: number) {
     setBounds,
     setIgnoreMouseEvents,
     setAlwaysOnTop,
+    setVisibleOnAllWorkspaces,
     moveTop,
     focus,
   };

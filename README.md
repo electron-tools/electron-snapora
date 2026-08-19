@@ -282,12 +282,12 @@ The npm peer range is intentionally limited to Electron `>=42 <44`. The package 
 Node.js 20 baseline and has passed the real capture/Overlay lifecycle on Windows 11 x64 with
 Electron 42.8.0 and 43.3.0.
 
-| Environment                                      | Status                                             |
-| ------------------------------------------------ | -------------------------------------------------- |
-| Windows 11 x64, Electron 42.8/43.3               | Automated and manually exercised                   |
-| Windows ARM64                                    | Pending hardware validation                        |
-| macOS, Retina and signed app                     | Implementation present; release validation pending |
-| Linux X11 / XWayland / native Wayland / PipeWire | Not yet declared supported                         |
+| Environment                                      | Status                                                  |
+| ------------------------------------------------ | ------------------------------------------------------- |
+| Windows 11 x64, Electron 42.8/43.3               | Automated and manually exercised                        |
+| Windows ARM64                                    | Pending hardware validation                             |
+| macOS, Retina and signed app                     | Code/tests complete; signed hardware validation pending |
+| Linux X11 / XWayland / native Wayland / PipeWire | Not yet declared supported                              |
 
 Electron officially supports only its latest three stable major lines. This package does not claim
 compatibility with an Electron version merely because installation succeeds; the peer range is
@@ -304,6 +304,26 @@ macOS 10.15 and later requires Screen Recording consent. When the operating syst
 `denied` or `restricted`, capture returns `PERMISSION_DENIED`; the user must enable the signed host
 application under System Settings → Privacy & Security → Screen Recording and restart it. Test the
 permission using the signed application identity, not only Electron launched from a terminal.
+
+Add a screen-capture purpose string to the packaged host. For electron-builder:
+
+```json
+{
+  "build": {
+    "mac": {
+      "hardenedRuntime": true,
+      "extendInfo": {
+        "NSScreenCaptureUsageDescription": "Capture a selected screen region for sharing."
+      }
+    }
+  }
+}
+```
+
+With `display: 'cursor'`, Snapora resolves the display under the pointer once at task start and keeps
+that display ID through capture and Overlay creation. If the monitor is disconnected or its geometry
+or scale changes during startup, the task fails with `DISPLAY_NOT_FOUND` and should be retried instead
+of displaying a screenshot on the wrong monitor.
 
 ### Lifecycle and concurrency
 
