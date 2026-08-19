@@ -208,13 +208,17 @@ sequenceDiagram
     R->>P: capture(options)
     P->>M: invoke host:capture
     M->>M: 创建 jobId 并锁定任务
-    M->>C: 获取鼠标所在显示器及屏幕图像
-    C-->>M: CapturedFrame
-    M->>W: 创建截图窗口
-    W-->>M: overlay DOM ready
+    M->>C: 同步解析目标显示器
+    par 屏幕采集
+        M->>C: 获取目标显示器图像
+        C-->>M: CapturedFrame
+    and 隐藏 Overlay 加载
+        M->>W: 创建隐藏截图窗口并加载页面
+        W-->>M: overlay DOM ready
+    end
     M->>W: opacity 0 预热并重设 display bounds
     M->>U: initialize(frame, display, options)
-    U->>U: 解码捕获帧并完成两次合成帧
+    U->>U: 解码捕获帧并完成共享截止时间内的两次合成帧
     U-->>M: prepared(jobId)
     M->>W: opacity 1 并聚焦
     U->>U: 选区与标注
@@ -232,7 +236,7 @@ sequenceDiagram
     end
 ```
 
-必须先捕获屏幕，再创建隐藏的遮罩窗口。Windows 和 macOS 在 Overlay DOM 就绪后先以 0 透明度调用 `showInactive()`，让窗口不可见地进入桌面合成器；Windows 随即再次应用完整显示器 `bounds`，避免系统首次显示时将无边框窗口压缩到不含任务栏的 `workArea`。预热和正式显现阶段都调用 `setAlwaysOnTop(true, 'screen-saver')`，显现后再调用 `moveTop()` 刷新原生 Z 序，确保截图层高于普通窗口及其他默认置顶窗口；Linux 保留标准 `alwaysOnTop` 并允许窗口管理器自然降级。Renderer 收到静态捕获帧后完成图片解码、Canvas 尺寸同步和连续两次合成帧，再发送 `prepared(jobId)`。每次合成帧同时设置 60ms 超时兜底，防止透明、未聚焦窗口中的 `requestAnimationFrame` 被系统节流后长期不显示。主进程校验消息来源和任务 ID 后将透明度切为 1 并聚焦，既避免截图控件进入最终图片，也避免纹理分块、重复任务栏和画面向上压缩。
+Electron 默认适配器会同步解析目标显示器，让屏幕采集与完全隐藏的 Overlay 创建、页面加载并行执行；隐藏窗口在捕获完成前不会调用 `prime()`、`showInactive()` 或 `reveal()`，因此不会进入截图。没有实现目标预解析的自定义适配器继续使用兼容的“先捕获、后加载”流程。Windows 和 macOS 在捕获完成且 Overlay DOM 就绪后，才以 0 透明度调用 `showInactive()` 进入桌面合成器；Windows 随即再次应用完整显示器 `bounds`，避免系统首次显示时将无边框窗口压缩到不含任务栏的 `workArea`。预热和正式显现阶段都调用 `setAlwaysOnTop(true, 'screen-saver')`，显现后再调用 `moveTop()` 刷新原生 Z 序，确保截图层高于普通窗口及其他默认置顶窗口；Linux 保留标准 `alwaysOnTop` 并允许窗口管理器自然降级。Renderer 收到静态捕获帧后完成图片解码、Canvas 尺寸同步和连续两次合成帧，再发送 `prepared(jobId)`；两次合成帧共用 48ms 截止时间，防止透明、未聚焦窗口中的 `requestAnimationFrame` 被系统节流后串行等待 120ms。主进程校验消息来源和任务 ID 后将透明度切为 1 并聚焦，既缩短点击到可交互的关键路径，也避免截图控件进入最终图片以及纹理分块、重复任务栏和画面上移。
 
 ## 6. 屏幕捕获抽象
 
@@ -240,11 +244,8 @@ sequenceDiagram
 
 ```ts
 export interface ScreenCaptureAdapter {
-  getDisplays(): Promise<CaptureDisplay[]>;
-
-  getCursorDisplay(): Promise<CaptureDisplay>;
-
-  captureDisplay(displayId: string): Promise<CapturedFrame>;
+  resolveTargetDisplay?(options: ScreenshotOptions): CaptureDisplay;
+  capture(options: ScreenshotOptions): Promise<CapturedFrame[]>;
 }
 
 export interface CaptureDisplay {
@@ -256,13 +257,11 @@ export interface CaptureDisplay {
     height: number;
   };
   scaleFactor: number;
-  isPrimary: boolean;
 }
 
 export interface CapturedFrame {
   display: CaptureDisplay;
-  data: Uint8Array;
-  mimeType: 'image/png';
+  dataUrl: string;
   pixelSize: {
     width: number;
     height: number;
@@ -454,6 +453,7 @@ Overlay 使用接近原生截图工具的紧凑悬浮布局，视觉层不依赖
 - 中文和英文的工具名、状态、样式名、输出操作及无障碍标签由 Overlay 自身本地化，不依赖宿主翻译系统；宿主可按字段覆盖文案。
 - `V/R/O/A/P/T/M` 切换工具，`Ctrl/Command + C` 或 `Enter` 复制并完成，`Ctrl/Command + S` 保存，`Escape` 取消；按钮保留键盘焦点态和 `aria-label`。
 - 主题使用“基础色阶、公开语义 Token、内部组件 Token”三层结构，支持暗色/亮色模式，并允许宿主覆盖强调色、遮罩、工具栏、气泡、危险操作和选区控制点颜色；动效遵守 `prefers-reduced-motion`。
+- 框选开始前使用包内 32px 矢量准星：白色细线负责精度、深色外描边保证明暗背景对比，蓝色中心点表达截图准备状态；选区完成后恢复各标注工具自身的光标语义。
 - 文案按英文完整基线、内置语言、宿主字段覆盖的顺序合并；缺少局部翻译时始终回退到完整英文文案。
 - 核心交互仅依赖普通 HTML、CSS 和 SVG 能力，较新的视觉增强不可用时允许自然降级，不按 Electron 版本号分支。
 

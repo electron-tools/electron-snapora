@@ -33,6 +33,22 @@ function createDesktopCapturer(displayId = '10') {
 }
 
 describe('ElectronCaptureAdapter', () => {
+  it('resolves the target display synchronously for parallel overlay loading', () => {
+    const screen = createScreen();
+    const adapter = new ElectronCaptureAdapter({
+      screen,
+      desktopCapturer: createDesktopCapturer(),
+      platform: 'win32',
+    });
+
+    expect(adapter.resolveTargetDisplay({ display: 'cursor' })).toEqual({
+      id: '10',
+      bounds: primaryDisplay.bounds,
+      scaleFactor: 2,
+    });
+    expect(screen.getDisplayNearestPoint).toHaveBeenCalledWith({ x: 20, y: 30 });
+  });
+
   it('captures the display nearest to the cursor at physical pixel size', async () => {
     const screen = createScreen();
     const desktopCapturer = createDesktopCapturer();

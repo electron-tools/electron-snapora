@@ -84,6 +84,51 @@ function createSession(
 }
 
 describe('ScreenshotSession', () => {
+  it('loads a hidden overlay while the screen capture is still pending', async () => {
+    const ipc = new EventEmitter();
+    const { overlay } = createOverlay();
+    let finishCapture: ((frames: CapturedFrame[]) => void) | undefined;
+    const session = new ScreenshotSession({
+      jobId: 'parallel-overlay',
+      captureOptions: { display: 'cursor' },
+      captureAdapter: {
+        resolveTargetDisplay: vi.fn(() => frame.display),
+        capture: vi.fn(
+          () =>
+            new Promise<CapturedFrame[]>((resolve) => {
+              finishCapture = resolve;
+            })
+        ),
+      },
+      ipcMain: ipc as unknown as Pick<IpcMain, 'on' | 'removeListener'>,
+      createOverlay: () => overlay,
+      overlayReadyTimeoutMs: 1_000,
+    });
+
+    const resultPromise = session.run();
+    await vi.waitFor(() => expect(overlay.load).toHaveBeenCalledOnce());
+    expect(session.state).toBe('capturing');
+
+    emitOverlayMessage(ipc, OVERLAY_CHANNELS.ready, {
+      protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
+    });
+    expect(overlay.prime).not.toHaveBeenCalled();
+
+    finishCapture?.([frame]);
+    await vi.waitFor(() => expect(overlay.sendInitialize).toHaveBeenCalledOnce());
+    expect(overlay.prime).toHaveBeenCalledOnce();
+
+    emitOverlayMessage(ipc, OVERLAY_CHANNELS.prepared, {
+      protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
+      jobId: 'parallel-overlay',
+    });
+    emitOverlayMessage(ipc, OVERLAY_CHANNELS.cancel, {
+      protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
+      jobId: 'parallel-overlay',
+    });
+    await expect(resultPromise).resolves.toEqual({ status: 'cancelled' });
+  });
+
   it('rejects oversized frames returned by a custom capture adapter', async () => {
     const ipc = new EventEmitter();
     const { overlay } = createOverlay();

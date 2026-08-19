@@ -182,6 +182,21 @@ app.on('browser-window-created', (_event, window) => {
       })
     `);
 
+    const captureCursor = await window.webContents.executeJavaScript(`
+      (() => {
+        const surface = document.querySelector('.capture-surface');
+        const canvas = document.querySelector('.annotation-canvas');
+        const originalTool = surface.dataset.tool;
+        surface.dataset.tool = 'text';
+        const cursor = getComputedStyle(canvas).cursor;
+        surface.dataset.tool = originalTool;
+        return cursor;
+      })()
+    `);
+    if (!captureCursor.includes('url(') || !captureCursor.includes('crosshair')) {
+      throw new Error(`Capture-ready cursor was not applied: ${captureCursor}`);
+    }
+
     const { width, height } = window.getContentBounds();
     const selectionStart = {
       x: Math.round(width * 0.1),
@@ -512,7 +527,10 @@ app.on('browser-window-created', (_event, window) => {
 });
 
 app.whenReady().then(async () => {
-  const manager = new ScreenshotManager();
+  const diagnostics = [];
+  const manager = new ScreenshotManager({
+    onDiagnostic: (event) => diagnostics.push(event),
+  });
   const result = await manager.capture({ display: 'cursor' });
   clearTimeout(smokeTimeout);
 
@@ -535,8 +553,40 @@ app.whenReady().then(async () => {
     return;
   }
 
+  const overlayCreateStarted = diagnostics.find(
+    (event) => event.stage === 'overlay-create' && event.phase === 'start'
+  );
+  const captureCompleted = diagnostics.find(
+    (event) => event.stage === 'capture' && event.phase === 'complete'
+  );
+  if (
+    !overlayCreateStarted ||
+    !captureCompleted ||
+    overlayCreateStarted.timestamp > captureCompleted.timestamp
+  ) {
+    console.error(
+      'Electron Snapora did not overlap hidden Overlay loading with capture.',
+      { overlayCreateStarted, captureCompleted }
+    );
+    process.exit(1);
+    return;
+  }
+
+  const sessionStarted = diagnostics.find(
+    (event) => event.stage === 'session' && event.phase === 'start'
+  );
+  const overlayPrepared = diagnostics.find(
+    (event) => event.stage === 'overlay-prepare' && event.phase === 'complete'
+  );
+  const startupDurationMs =
+    sessionStarted && overlayPrepared
+      ? overlayPrepared.timestamp - sessionStarted.timestamp
+      : undefined;
+  const overlappedCaptureMs =
+    captureCompleted.timestamp - overlayCreateStarted.timestamp;
+
   console.log(
-    `Electron Snapora tools smoke test passed (${result.data.byteLength} bytes).`
+    `Electron Snapora tools smoke test passed (${result.data.byteLength} bytes, ready in ${startupDurationMs ?? 'unknown'}ms, hidden Overlay overlapped capture by ${overlappedCaptureMs}ms).`
   );
   process.exit(0);
 });

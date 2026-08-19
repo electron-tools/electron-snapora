@@ -189,6 +189,12 @@ const screenshotManager = new ScreenshotManager({
 injection points. `runner` remains available only for applications that need to replace the entire
 session lifecycle; when it is supplied, the other default-runner options are ignored.
 
+Custom capture adapters may implement the optional synchronous
+`resolveTargetDisplay(options)` method. When present, Snapora loads the still-hidden Overlay in
+parallel with `capture()` and only primes or reveals it after the captured frame is ready. The
+resolved display must match the first frame returned by the following `capture()` call. Adapters
+that omit this method keep the compatible capture-then-load sequence.
+
 Resource limits can be lowered per host application:
 
 ```ts

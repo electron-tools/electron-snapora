@@ -81,6 +81,11 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
     this.#resourceLimits = resolveScreenshotResourceLimits(options.resourceLimits);
   }
 
+  resolveTargetDisplay(options: ScreenshotOptions = {}): CaptureDisplay {
+    this.#assertPermission();
+    return this.#toCaptureDisplay(this.#resolveDisplay(options.display ?? 'cursor'));
+  }
+
   async capture(options: ScreenshotOptions = {}): Promise<CapturedFrame[]> {
     this.#assertPermission();
 

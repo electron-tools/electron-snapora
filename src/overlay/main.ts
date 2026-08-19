@@ -136,10 +136,9 @@ function initializeOverlay(payload: ScreenshotInitializePayload): void {
     annotationCanvas.width = frame.pixelSize.width;
     annotationCanvas.height = frame.pixelSize.height;
     selectionStore.dispatch({ type: 'image-ready' });
-    // 图片解码后再等待两次合成帧，确保大图纹理和 Canvas 已完整栅格化。
+    // 图片解码后保留两次合成机会，但共享一个截止时间，避免透明窗口被节流时串行等待。
     screenFrame.getBoundingClientRect();
-    await nextAnimationFrame();
-    await nextAnimationFrame();
+    await waitForCompositeFrames();
     window.snaporaOverlay.prepared(payload.jobId);
   };
   screenFrame.onerror = () => {
@@ -783,9 +782,10 @@ function getSurfaceSize(): Size {
   return { width: surface.clientWidth, height: surface.clientHeight };
 }
 
-function nextAnimationFrame(maximumWaitMs = 60): Promise<void> {
+function waitForCompositeFrames(frameCount = 2, maximumWaitMs = 48): Promise<void> {
   return new Promise((resolve) => {
     let settled = false;
+    let remainingFrames = frameCount;
     const finish = (): void => {
       if (settled) {
         return;
@@ -794,8 +794,16 @@ function nextAnimationFrame(maximumWaitMs = 60): Promise<void> {
       window.clearTimeout(timeoutId);
       resolve();
     };
+    const handleFrame = (): void => {
+      remainingFrames -= 1;
+      if (remainingFrames <= 0) {
+        finish();
+        return;
+      }
+      requestAnimationFrame(handleFrame);
+    };
     const timeoutId = window.setTimeout(finish, maximumWaitMs);
-    requestAnimationFrame(finish);
+    requestAnimationFrame(handleFrame);
   });
 }
 

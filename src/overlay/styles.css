@@ -116,6 +116,13 @@ input {
   cursor: text;
 }
 
+.capture-surface[data-state='ready'] .annotation-canvas,
+.capture-surface[data-state='creating'] .annotation-canvas {
+  cursor:
+    url('./capture-cursor.svg') 16 16,
+    crosshair;
+}
+
 .screen-mask {
   position: absolute;
   inset: 0;

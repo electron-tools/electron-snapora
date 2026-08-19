@@ -32,6 +32,11 @@ export interface CapturedFrame {
 }
 
 export interface ScreenCaptureAdapter {
+  /**
+   * 可选的同步目标解析，用于让主进程在屏幕采集期间并行加载隐藏 Overlay。
+   * 返回的显示器必须与紧随其后的 capture() 首帧一致。
+   */
+  resolveTargetDisplay?(options: ScreenshotOptions): CaptureDisplay;
   capture(options: ScreenshotOptions): Promise<CapturedFrame[]>;
 }
 

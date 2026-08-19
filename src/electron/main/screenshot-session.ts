@@ -72,6 +72,8 @@ export class ScreenshotSession {
   #state: ScreenshotSessionState = 'idle';
   #overlay: ScreenshotOverlayWindow | undefined;
   #frames: CapturedFrame[] = [];
+  #overlayLoaded = false;
+  #rendererReady = false;
   #resolve: SessionResolver | undefined;
   #settled = false;
   #readyTimer: ReturnType<typeof setTimeout> | undefined;
@@ -115,6 +117,19 @@ export class ScreenshotSession {
     this.#state = 'capturing';
     this.#startDiagnosticStage('capture');
 
+    // Electron 默认适配器可以同步确定目标屏幕，因此隐藏 Overlay 的加载无需等待截图完成。
+    // 窗口直到捕获帧解码、合成完成后才会 prime/reveal，不会进入屏幕截图。
+    try {
+      const targetDisplay = this.#options.captureAdapter.resolveTargetDisplay?.(
+        this.#options.captureOptions
+      );
+      if (targetDisplay) {
+        this.#openOverlay(targetDisplay);
+      }
+    } catch {
+      // capture() 会给出规范化的权限或显示器错误；预解析只用于性能优化。
+    }
+
     let frames: CapturedFrame[];
     try {
       frames = await this.#options.captureAdapter.capture(this.#options.captureOptions);
@@ -147,13 +162,24 @@ export class ScreenshotSession {
       return;
     }
 
-    this.#state = 'opening-overlay';
     this.#frames = frames;
+    this.#state = 'opening-overlay';
+    if (!this.#overlay) {
+      this.#openOverlay(frames[0].display);
+    }
+    this.#prepareOverlayWhenReady();
+  }
+
+  #openOverlay(display: CaptureDisplay): void {
+    if (this.#settled || this.#overlay) {
+      return;
+    }
+
     this.#startDiagnosticStage('overlay-create');
     try {
-      this.#overlay = this.#options.createOverlay(frames[0].display);
+      this.#overlay = this.#options.createOverlay(display);
       this.#finishDiagnosticStage('overlay-create', 'complete', {
-        displayId: frames[0].display.id,
+        displayId: display.id,
         overlayWebContentsId: this.#overlay.webContentsId,
       });
     } catch (error) {
@@ -168,16 +194,22 @@ export class ScreenshotSession {
       return;
     }
 
+    this.#registerListeners();
+    this.#startReadyTimeout();
+    this.#startDiagnosticStage('overlay-load');
+    this.#startDiagnosticStage('overlay-ready');
+    void this.#loadOverlay();
+  }
+
+  async #loadOverlay(): Promise<void> {
     try {
-      this.#registerListeners();
-      this.#startReadyTimeout();
-      this.#startDiagnosticStage('overlay-load');
-      this.#startDiagnosticStage('overlay-ready');
-      await this.#overlay.load();
-      this.#finishDiagnosticStage('overlay-load', 'complete');
+      await this.#overlay?.load();
       if (this.#settled) {
         return;
       }
+      this.#overlayLoaded = true;
+      this.#finishDiagnosticStage('overlay-load', 'complete');
+      this.#prepareOverlayWhenReady();
     } catch (error) {
       const failure = toScreenshotFailure(error, 'OVERLAY_LOAD_FAILED');
       this.#finishDiagnosticStage(
@@ -187,12 +219,6 @@ export class ScreenshotSession {
         failure
       );
       this.#settle(failure);
-      return;
-    }
-
-    // ready 消息可能在 load() resolve 前到达；只有尚未 ready 时才继续等待超时。
-    if (this.#state !== 'opening-overlay') {
-      return;
     }
   }
 
@@ -240,12 +266,32 @@ export class ScreenshotSession {
       return;
     }
 
-    if (this.#state !== 'opening-overlay' || !this.#overlay) {
+    if (
+      (this.#state !== 'capturing' && this.#state !== 'opening-overlay') ||
+      !this.#overlay ||
+      this.#rendererReady
+    ) {
       return;
     }
 
     this.#clearReadyTimeout();
     this.#finishDiagnosticStage('overlay-ready', 'complete');
+    this.#rendererReady = true;
+    this.#prepareOverlayWhenReady();
+  };
+
+  #prepareOverlayWhenReady(): void {
+    if (
+      this.#settled ||
+      this.#state !== 'opening-overlay' ||
+      !this.#overlay ||
+      !this.#overlayLoaded ||
+      !this.#rendererReady ||
+      !this.#frames[0]
+    ) {
+      return;
+    }
+
     this.#state = 'preparing-overlay';
     this.#startDiagnosticStage('overlay-prepare');
     this.#overlay.prime();
@@ -259,7 +305,7 @@ export class ScreenshotSession {
     this.#startReadyTimeout(
       'The screenshot overlay did not prepare its captured frame in time.'
     );
-  };
+  }
 
   #handlePrepared = (event: IpcMainEvent, payload: unknown): void => {
     if (!this.#isExpectedSender(event)) {
