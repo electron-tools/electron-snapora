@@ -21,8 +21,16 @@ import {
   isPreparedPayload,
   isReadyPayload,
 } from '../protocol/validators.js';
+import {
+  emitScreenshotDiagnostic,
+  type ScreenshotDiagnosticContextValue,
+  type ScreenshotDiagnosticListener,
+  type ScreenshotDiagnosticPhase,
+  type ScreenshotDiagnosticStage,
+} from './diagnostics.js';
 import { ScreenshotError, toScreenshotFailure } from './errors.js';
 import type { ScreenshotOverlayWindow } from './overlay-window.js';
+import { PackagedResourceError } from './resource-paths.js';
 
 export type ScreenshotSessionState =
   | 'idle'
@@ -49,6 +57,7 @@ export interface ScreenshotSessionOptions {
   onSettled?: () => void;
   registerOutputHandler?: (senderWebContentsId: number, jobId: string) => () => void;
   resourceLimits?: ScreenshotResourceLimitOptions;
+  onDiagnostic?: ScreenshotDiagnosticListener;
 }
 
 type SessionResolver = (result: ScreenshotResult) => void;
@@ -67,6 +76,7 @@ export class ScreenshotSession {
   #settled = false;
   #readyTimer: ReturnType<typeof setTimeout> | undefined;
   #windowCleanups: Array<() => void> = [];
+  readonly #diagnosticStageStarts = new Map<ScreenshotDiagnosticStage, number>();
 
   constructor(options: ScreenshotSessionOptions) {
     this.#options = options;
@@ -103,6 +113,7 @@ export class ScreenshotSession {
 
   async #start(): Promise<void> {
     this.#state = 'capturing';
+    this.#startDiagnosticStage('capture');
 
     let frames: CapturedFrame[];
     try {
@@ -122,23 +133,60 @@ export class ScreenshotSession {
           throw new ScreenshotError('RESOURCE_LIMIT_EXCEEDED', violation);
         }
       }
+      this.#finishDiagnosticStage('capture', 'complete', {
+        frameCount: frames.length,
+        capturePixels: frames.reduce(
+          (total, frame) => total + frame.pixelSize.width * frame.pixelSize.height,
+          0
+        ),
+      });
     } catch (error) {
-      this.#settle(toScreenshotFailure(error));
+      const failure = toScreenshotFailure(error);
+      this.#finishDiagnosticStage('capture', 'error', diagnosticError(error), failure);
+      this.#settle(failure);
+      return;
+    }
+
+    this.#state = 'opening-overlay';
+    this.#frames = frames;
+    this.#startDiagnosticStage('overlay-create');
+    try {
+      this.#overlay = this.#options.createOverlay(frames[0].display);
+      this.#finishDiagnosticStage('overlay-create', 'complete', {
+        displayId: frames[0].display.id,
+        overlayWebContentsId: this.#overlay.webContentsId,
+      });
+    } catch (error) {
+      const failure = toScreenshotFailure(error, 'OVERLAY_LOAD_FAILED');
+      this.#finishDiagnosticStage(
+        'overlay-create',
+        'error',
+        diagnosticError(error),
+        failure
+      );
+      this.#settle(failure);
       return;
     }
 
     try {
-      this.#state = 'opening-overlay';
-      this.#frames = frames;
-      this.#overlay = this.#options.createOverlay(frames[0].display);
       this.#registerListeners();
       this.#startReadyTimeout();
+      this.#startDiagnosticStage('overlay-load');
+      this.#startDiagnosticStage('overlay-ready');
       await this.#overlay.load();
+      this.#finishDiagnosticStage('overlay-load', 'complete');
       if (this.#settled) {
         return;
       }
     } catch (error) {
-      this.#settle(toScreenshotFailure(error, 'OVERLAY_LOAD_FAILED'));
+      const failure = toScreenshotFailure(error, 'OVERLAY_LOAD_FAILED');
+      this.#finishDiagnosticStage(
+        'overlay-load',
+        'error',
+        diagnosticError(error),
+        failure
+      );
+      this.#settle(failure);
       return;
     }
 
@@ -197,7 +245,9 @@ export class ScreenshotSession {
     }
 
     this.#clearReadyTimeout();
+    this.#finishDiagnosticStage('overlay-ready', 'complete');
     this.#state = 'preparing-overlay';
+    this.#startDiagnosticStage('overlay-prepare');
     this.#overlay.prime();
     this.#overlay.sendInitialize({
       protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
@@ -226,6 +276,7 @@ export class ScreenshotSession {
     }
 
     this.#clearReadyTimeout();
+    this.#finishDiagnosticStage('overlay-prepare', 'complete');
     this.#state = 'editing';
     this.#overlay.reveal();
   };
@@ -328,6 +379,15 @@ export class ScreenshotSession {
     }
 
     this.#settled = true;
+    const phase: ScreenshotDiagnosticPhase =
+      result.status === 'cancelled'
+        ? 'cancel'
+        : result.status === 'failed'
+          ? 'error'
+          : 'complete';
+    for (const stage of [...this.#diagnosticStageStarts.keys()]) {
+      this.#finishDiagnosticStage(stage, phase, undefined, result);
+    }
     this.#state =
       result.status === 'completed'
         ? 'completed'
@@ -344,6 +404,46 @@ export class ScreenshotSession {
     this.#resolve = undefined;
   }
 
+  #startDiagnosticStage(
+    stage: ScreenshotDiagnosticStage,
+    context?: Readonly<Record<string, ScreenshotDiagnosticContextValue>>
+  ): void {
+    const timestamp = Date.now();
+    this.#diagnosticStageStarts.set(stage, timestamp);
+    emitScreenshotDiagnostic(this.#options.onDiagnostic, {
+      jobId: this.#options.jobId,
+      stage,
+      phase: 'start',
+      timestamp,
+      ...(context ? { context } : {}),
+    });
+  }
+
+  #finishDiagnosticStage(
+    stage: ScreenshotDiagnosticStage,
+    phase: Exclude<ScreenshotDiagnosticPhase, 'start'>,
+    context?: Readonly<Record<string, ScreenshotDiagnosticContextValue>>,
+    result?: ScreenshotResult
+  ): void {
+    const startedAt = this.#diagnosticStageStarts.get(stage);
+    if (startedAt === undefined) {
+      return;
+    }
+    this.#diagnosticStageStarts.delete(stage);
+    const timestamp = Date.now();
+    emitScreenshotDiagnostic(this.#options.onDiagnostic, {
+      jobId: this.#options.jobId,
+      stage,
+      phase,
+      timestamp,
+      durationMs: Math.max(0, timestamp - startedAt),
+      ...(result?.status === 'failed'
+        ? { code: result.code, message: result.message }
+        : {}),
+      ...(context ? { context } : {}),
+    });
+  }
+
   #removeListeners(): void {
     this.#options.ipcMain.removeListener(OVERLAY_CHANNELS.ready, this.#handleReady);
     this.#options.ipcMain.removeListener(
@@ -358,4 +458,18 @@ export class ScreenshotSession {
       cleanup();
     }
   }
+}
+
+function diagnosticError(
+  error: unknown
+): Readonly<Record<string, ScreenshotDiagnosticContextValue>> {
+  const context: Record<string, ScreenshotDiagnosticContextValue> = {
+    errorName: error instanceof Error ? error.name : typeof error,
+  };
+  if (error instanceof PackagedResourceError) {
+    context.missingResources = error.missingResources.map(
+      (resource) => `${resource.label}: ${resource.path}`
+    );
+  }
+  return context;
 }

@@ -48,13 +48,35 @@ app.on('browser-window-created', (_event, window) => {
     ) {
       throw new Error(`Overlay presentation mismatch: ${JSON.stringify(presentation)}`);
     }
+    await new Promise((resolve, reject) => {
+      const deadline = Date.now() + 2_000;
+      const waitUntilVisible = () => {
+        if (window.isDestroyed()) {
+          reject(new Error('Overlay closed before becoming visible.'));
+          return;
+        }
+        if (window.getOpacity() === 1) {
+          resolve();
+          return;
+        }
+        if (Date.now() >= deadline) {
+          reject(new Error('Overlay did not become visible in time.'));
+          return;
+        }
+        setTimeout(waitUntilVisible, 10);
+      };
+      waitUntilVisible();
+    });
     window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
     window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
   });
 });
 
 app.whenReady().then(async () => {
-  const manager = new ScreenshotManager();
+  const diagnostics = [];
+  const manager = new ScreenshotManager({
+    onDiagnostic: (event) => diagnostics.push(event),
+  });
   const result = await manager.capture({
     display: 'cursor',
     locale: 'zh-CN',
@@ -71,6 +93,25 @@ app.whenReady().then(async () => {
     console.error('Electron Snapora smoke test failed:', result);
     process.exit(1);
     return;
+  }
+
+  const diagnosticStages = new Set(
+    diagnostics.map((event) => `${event.stage}:${event.phase}`)
+  );
+  for (const expected of [
+    'session:start',
+    'capture:complete',
+    'overlay-create:complete',
+    'overlay-load:complete',
+    'overlay-ready:complete',
+    'overlay-prepare:complete',
+    'session:cancel',
+  ]) {
+    if (!diagnosticStages.has(expected)) {
+      console.error('Electron Snapora diagnostic smoke test failed:', diagnostics);
+      process.exit(1);
+      return;
+    }
   }
 
   console.log('Electron Snapora smoke test passed.');

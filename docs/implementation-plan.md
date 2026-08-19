@@ -678,6 +678,12 @@ export type ScreenshotErrorCode =
 - 宿主 WebContents 销毁时由 IPC 注册层调用取消，因此无主任务不会在稍后被启动。
 - 活动任务无论完成、取消或失败都会统一释放资源，然后启动下一项。
 
+### 12.4 主进程诊断
+
+`ScreenshotManager({ onDiagnostic })` 提供可选的结构化旁路事件，覆盖队列等待、完整会话、捕获、Overlay 创建/加载/就绪/画面准备和输出阶段。开始事件带时间戳，完成、取消和失败事件同时带 `durationMs`；失败事件带公开错误码与消息，资源缺失错误额外提供缺失资源标签和解析后的路径。
+
+诊断上下文只允许字符串、数字、布尔值及其数组，不包含 `BrowserWindow`、`WebContents`、`NativeImage`、IPC Event 或 PNG 数据。回调始终在主进程运行，并隔离宿主日志实现抛出的异常，不能改变截图结果或清理流程。
+
 ## 13. npm 包使用方式
 
 ### 13.1 安装

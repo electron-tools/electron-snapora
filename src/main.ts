@@ -13,6 +13,13 @@ export {
 } from './electron/main/electron-capture-adapter.js';
 export { ScreenshotError } from './electron/main/errors.js';
 export {
+  type ScreenshotDiagnosticContextValue,
+  type ScreenshotDiagnosticEvent,
+  type ScreenshotDiagnosticListener,
+  type ScreenshotDiagnosticPhase,
+  type ScreenshotDiagnosticStage,
+} from './electron/main/diagnostics.js';
+export {
   ElectronOutputAdapter,
   type ElectronOutputAdapterOptions,
   type ScreenshotOutputExecutor,
@@ -26,6 +33,8 @@ export {
   resolveHostPreloadPath,
   resolveOverlayResources,
   assertOverlayResources,
+  PackagedResourceError,
+  type MissingPackagedResource,
   type OverlayResources,
   type PackagedResourceExists,
 } from './electron/main/resource-paths.js';

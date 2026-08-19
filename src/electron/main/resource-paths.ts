@@ -8,6 +8,27 @@ export interface OverlayResources {
 
 export type PackagedResourceExists = (path: string) => boolean;
 
+export interface MissingPackagedResource {
+  label: string;
+  path: string;
+}
+
+export class PackagedResourceError extends Error {
+  readonly missingResources: ReadonlyArray<MissingPackagedResource>;
+
+  constructor(missingResources: ReadonlyArray<MissingPackagedResource>) {
+    const details = missingResources
+      .map((resource) => `${resource.label}: ${resource.path}`)
+      .join('; ');
+    super(
+      `[electron-snapora] Packaged resource missing (${details}). ` +
+        'Keep electron-snapora external in the Electron main-process bundle and include its complete dist directory in the application package.'
+    );
+    this.name = 'PackagedResourceError';
+    this.missingResources = missingResources.map((resource) => ({ ...resource }));
+  }
+}
+
 /**
  * main 入口发布在 dist/main，Overlay 页面与内部 Preload 发布在 dist/overlay。
  * 资源定位集中在这里，避免宿主构建工具或 Electron 版本参与路径拼接。
@@ -61,11 +82,5 @@ function assertPackagedResources(
     return;
   }
 
-  const details = missing
-    .map((resource) => `${resource.label}: ${resource.path}`)
-    .join('; ');
-  throw new Error(
-    `[electron-snapora] Packaged resource missing (${details}). ` +
-      'Keep electron-snapora external in the Electron main-process bundle and include its complete dist directory in the application package.'
-  );
+  throw new PackagedResourceError(missing);
 }

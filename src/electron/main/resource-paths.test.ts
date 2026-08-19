@@ -1,7 +1,11 @@
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { resolveHostPreloadPath, resolveOverlayResources } from './resource-paths.js';
+import {
+  PackagedResourceError,
+  resolveHostPreloadPath,
+  resolveOverlayResources,
+} from './resource-paths.js';
 
 describe('resolveOverlayResources', () => {
   it('resolves sibling overlay assets from the built main entry', () => {
@@ -30,5 +34,21 @@ describe('resolveOverlayResources', () => {
     expect(() => resolveHostPreloadPath(mainDirectory, () => false)).toThrow(
       /host preload/
     );
+
+    try {
+      resolveOverlayResources(mainDirectory, () => false);
+    } catch (error) {
+      expect(error).toBeInstanceOf(PackagedResourceError);
+      expect((error as PackagedResourceError).missingResources).toEqual([
+        {
+          label: 'overlay HTML',
+          path: resolve('bundled-app', 'dist', 'overlay', 'index.html'),
+        },
+        {
+          label: 'overlay preload',
+          path: resolve('bundled-app', 'dist', 'overlay', 'preload.cjs'),
+        },
+      ]);
+    }
   });
 });

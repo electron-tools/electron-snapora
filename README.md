@@ -313,6 +313,27 @@ application intentionally supports independent capture lanes. Call the cleanup r
 `registerScreenshotIpc()` during app shutdown or main-process hot reload. Active-task completion,
 cancellation, and failure all advance the queue and release Overlay listeners and windows.
 
+### Main-process diagnostics
+
+Use the optional structured hook to feed application logs or performance telemetry:
+
+```ts
+const screenshotManager = new ScreenshotManager({
+  onDiagnostic(event) {
+    logger.debug('electron-snapora', event);
+  },
+});
+```
+
+Events cover queue wait, complete session, capture, Overlay creation/loading/readiness, frame
+preparation, and output. Start events carry a timestamp; completion, cancellation, and error events
+also carry `durationMs`. Failures include the public error code and message. A missing packaged
+Overlay resource additionally reports its label and resolved path in `context.missingResources`.
+
+The hook runs only in the main process and accepts serializable scalar/array context values; no
+`BrowserWindow`, `WebContents`, `NativeImage`, IPC event, or captured PNG is exposed. Exceptions
+thrown by the application's logger are isolated and never change the screenshot result.
+
 ### Error results
 
 | Code                      | Meaning                                                          |

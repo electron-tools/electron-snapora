@@ -10,6 +10,7 @@ import {
   type ScreenshotOutputPayload,
 } from '../protocol/messages.js';
 import type { ScreenshotOverlayWindow } from './overlay-window.js';
+import type { ScreenshotDiagnosticEvent } from './diagnostics.js';
 import { ScreenshotManager } from './screenshot-manager.js';
 
 const frame: CapturedFrame = {
@@ -85,6 +86,7 @@ describe('ScreenshotManager', () => {
       onRendererGone: vi.fn(() => vi.fn()),
     };
     const createOverlay = vi.fn(() => overlay);
+    const diagnostics: ScreenshotDiagnosticEvent[] = [];
     const manager = new ScreenshotManager({
       ipcMain,
       captureAdapter,
@@ -92,6 +94,7 @@ describe('ScreenshotManager', () => {
       createOverlay,
       overlayReadyTimeoutMs: 1_000,
       resourceLimits: { maxOutputBytes: 3 },
+      onDiagnostic: (event) => diagnostics.push(event),
     });
 
     const resultPromise = manager.capture({ locale: 'zh-CN' });
@@ -146,6 +149,16 @@ describe('ScreenshotManager', () => {
     expect(outputAdapter.execute).toHaveBeenCalledWith(outputPayload, {
       senderWebContentsId: 7,
     });
+    expect(
+      diagnostics
+        .filter((event) => event.stage === 'output')
+        .map((event) => [event.phase, event.code])
+    ).toEqual([
+      ['start', undefined],
+      ['error', 'RESOURCE_LIMIT_EXCEEDED'],
+      ['start', undefined],
+      ['complete', undefined],
+    ]);
   });
 
   it('allows only one active screenshot task', async () => {
@@ -177,7 +190,12 @@ describe('ScreenshotManager', () => {
       startedSenders.push(context.senderWebContentsId);
       return jobs[started++]?.promise ?? Promise.reject();
     });
-    const manager = new ScreenshotManager({ runner, busyPolicy: 'queue' });
+    const diagnostics: ScreenshotDiagnosticEvent[] = [];
+    const manager = new ScreenshotManager({
+      runner,
+      busyPolicy: 'queue',
+      onDiagnostic: (event) => diagnostics.push(event),
+    });
 
     const first = manager.capture({}, { senderWebContentsId: 1 });
     const second = manager.capture({}, { senderWebContentsId: 2 });
@@ -198,6 +216,9 @@ describe('ScreenshotManager', () => {
     await expect(third).resolves.toEqual({ status: 'cancelled' });
     expect(manager.queuedCaptureCount).toBe(0);
     expect(startedSenders).toEqual([1, 2, 3]);
+    expect(
+      diagnostics.filter((event) => event.stage === 'queue').map((event) => event.phase)
+    ).toEqual(['start', 'start', 'error', 'complete', 'complete']);
   });
 
   it('removes queued captures owned by a destroyed or cancelling renderer', async () => {
@@ -243,6 +264,42 @@ describe('ScreenshotManager', () => {
     await expect(second).resolves.toEqual({ status: 'cancelled' });
     active.resolve({ status: 'cancelled' });
     await first;
+  });
+
+  it('reports serializable session timing and isolates diagnostic hook errors', async () => {
+    const diagnostics: ScreenshotDiagnosticEvent[] = [];
+    const manager = new ScreenshotManager({
+      runner: async () => ({ status: 'cancelled' }),
+      onDiagnostic: (event) => diagnostics.push(event),
+    });
+
+    await expect(manager.capture({}, { senderWebContentsId: 7 })).resolves.toEqual({
+      status: 'cancelled',
+    });
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        stage: 'session',
+        phase: 'start',
+        senderWebContentsId: 7,
+      }),
+      expect.objectContaining({
+        stage: 'session',
+        phase: 'cancel',
+        senderWebContentsId: 7,
+        durationMs: expect.any(Number),
+        context: { status: 'cancelled' },
+      }),
+    ]);
+
+    const throwingLogger = new ScreenshotManager({
+      runner: async () => ({ status: 'cancelled' }),
+      onDiagnostic: () => {
+        throw new Error('logger failed');
+      },
+    });
+    await expect(throwingLogger.capture()).resolves.toEqual({
+      status: 'cancelled',
+    });
   });
 
   it('normalizes an unexpected runner rejection', async () => {

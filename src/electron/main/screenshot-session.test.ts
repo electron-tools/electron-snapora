@@ -8,6 +8,11 @@ import {
   type CapturedFrame,
 } from '../protocol/messages.js';
 import type { ScreenshotOverlayWindow } from './overlay-window.js';
+import type {
+  ScreenshotDiagnosticEvent,
+  ScreenshotDiagnosticListener,
+} from './diagnostics.js';
+import { PackagedResourceError } from './resource-paths.js';
 import { ScreenshotSession } from './screenshot-session.js';
 
 const frame: CapturedFrame = {
@@ -60,7 +65,11 @@ function emitOverlayMessage(
   ipc.emit(channel, { sender: { id: senderId } }, payload);
 }
 
-function createSession(ipc: EventEmitter, overlay: ScreenshotOverlayWindow) {
+function createSession(
+  ipc: EventEmitter,
+  overlay: ScreenshotOverlayWindow,
+  onDiagnostic?: ScreenshotDiagnosticListener
+) {
   return new ScreenshotSession({
     jobId: 'job-1',
     captureOptions: { display: 'cursor' },
@@ -70,6 +79,7 @@ function createSession(ipc: EventEmitter, overlay: ScreenshotOverlayWindow) {
     ipcMain: ipc as unknown as Pick<IpcMain, 'on' | 'removeListener'>,
     createOverlay: () => overlay,
     overlayReadyTimeoutMs: 1_000,
+    ...(onDiagnostic ? { onDiagnostic } : {}),
   });
 }
 
@@ -126,7 +136,8 @@ describe('ScreenshotSession', () => {
   it('captures before opening the overlay and resolves a validated result once', async () => {
     const ipc = new EventEmitter();
     const { overlay } = createOverlay();
-    const session = createSession(ipc, overlay);
+    const diagnostics: ScreenshotDiagnosticEvent[] = [];
+    const session = createSession(ipc, overlay, (event) => diagnostics.push(event));
     const resultPromise = session.run();
 
     await vi.waitFor(() => expect(overlay.load).toHaveBeenCalledOnce());
@@ -170,6 +181,56 @@ describe('ScreenshotSession', () => {
     expect(overlay.destroy).toHaveBeenCalledOnce();
     expect(ipc.listenerCount(OVERLAY_CHANNELS.confirm)).toBe(0);
     expect(ipc.listenerCount(OVERLAY_CHANNELS.prepared)).toBe(0);
+    expect(diagnostics.map(({ stage, phase }) => `${stage}:${phase}`)).toEqual(
+      expect.arrayContaining([
+        'capture:start',
+        'capture:complete',
+        'overlay-create:start',
+        'overlay-create:complete',
+        'overlay-load:start',
+        'overlay-load:complete',
+        'overlay-ready:start',
+        'overlay-ready:complete',
+        'overlay-prepare:start',
+        'overlay-prepare:complete',
+      ])
+    );
+    for (const event of diagnostics.filter((event) => event.phase === 'complete')) {
+      expect(typeof event.durationMs).toBe('number');
+    }
+  });
+
+  it('reports structured missing-resource context without leaking Electron objects', async () => {
+    const ipc = new EventEmitter();
+    const diagnostics: ScreenshotDiagnosticEvent[] = [];
+    const session = new ScreenshotSession({
+      jobId: 'missing-resource',
+      captureOptions: {},
+      captureAdapter: { capture: vi.fn(async () => [frame]) },
+      ipcMain: ipc as unknown as Pick<IpcMain, 'on' | 'removeListener'>,
+      createOverlay: () => {
+        throw new PackagedResourceError([
+          { label: 'overlay HTML', path: 'C:\\app\\overlay\\index.html' },
+        ]);
+      },
+      onDiagnostic: (event) => diagnostics.push(event),
+    });
+
+    await expect(session.run()).resolves.toMatchObject({
+      status: 'failed',
+      code: 'OVERLAY_LOAD_FAILED',
+    });
+    expect(diagnostics).toContainEqual(
+      expect.objectContaining({
+        stage: 'overlay-create',
+        phase: 'error',
+        code: 'OVERLAY_LOAD_FAILED',
+        context: {
+          errorName: 'PackagedResourceError',
+          missingResources: ['overlay HTML: C:\\app\\overlay\\index.html'],
+        },
+      })
+    );
   });
 
   it('ignores messages from unrelated renderers and cancels on window close', async () => {
