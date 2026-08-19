@@ -8,17 +8,61 @@ export interface ScreenshotBounds {
   height: number;
 }
 
+export type ScreenshotLocale = 'zh-CN' | 'en-US';
+
+export interface ScreenshotMessages {
+  preparing: string;
+  instruction: string;
+  exporting: string;
+  saveCancelled: string;
+  cancel: string;
+  save: string;
+  confirm: string;
+  select: string;
+  rectangle: string;
+  ellipse: string;
+  arrow: string;
+  brush: string;
+  text: string;
+  mosaic: string;
+  undo: string;
+  redo: string;
+  color: string;
+  lineWidth: string;
+  fontSize: string;
+  annotationCanvas: string;
+  selection: string;
+  actions: string;
+  annotationTools: string;
+  history: string;
+  annotationStyle: string;
+  outputActions: string;
+  annotationText: string;
+}
+
+export type ScreenshotMessageOverrides = Partial<ScreenshotMessages>;
+
 export interface ScreenshotTheme {
+  mode?: 'dark' | 'light';
   accentColor?: string;
+  accentForegroundColor?: string;
   maskColor?: string;
   toolbarBackground?: string;
+  toolbarForeground?: string;
+  toolbarBorderColor?: string;
+  toolbarHoverBackground?: string;
+  tooltipBackground?: string;
+  tooltipForeground?: string;
+  destructiveColor?: string;
+  selectionHandleColor?: string;
 }
 
 export interface ScreenshotOptions {
   display?: 'cursor' | 'primary' | string;
   tools?: ScreenshotTool[];
   defaultTool?: 'select' | ScreenshotTool;
-  locale?: 'zh-CN' | 'en-US';
+  locale?: ScreenshotLocale;
+  messages?: ScreenshotMessageOverrides;
   theme?: ScreenshotTheme;
 }
 

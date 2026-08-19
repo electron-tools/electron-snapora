@@ -2,6 +2,8 @@ import type {
   ScreenshotBounds,
   ScreenshotErrorCode,
   ScreenshotImageResult,
+  ScreenshotMessageOverrides,
+  ScreenshotMessages,
   ScreenshotOptions,
   ScreenshotOutputMetadata,
   ScreenshotResult,
@@ -46,14 +48,57 @@ const SCREENSHOT_OPTION_KEYS = new Set([
   'tools',
   'defaultTool',
   'locale',
+  'messages',
   'theme',
 ]);
 
-const SCREENSHOT_THEME_KEYS = new Set([
+const SCREENSHOT_THEME_COLOR_KEYS = [
   'accentColor',
+  'accentForegroundColor',
   'maskColor',
   'toolbarBackground',
-]);
+  'toolbarForeground',
+  'toolbarBorderColor',
+  'toolbarHoverBackground',
+  'tooltipBackground',
+  'tooltipForeground',
+  'destructiveColor',
+  'selectionHandleColor',
+] as const satisfies ReadonlyArray<Exclude<keyof ScreenshotTheme, 'mode'>>;
+
+const SCREENSHOT_THEME_KEYS = new Set<string>(['mode', ...SCREENSHOT_THEME_COLOR_KEYS]);
+
+const SCREENSHOT_MESSAGE_KEYS = [
+  'preparing',
+  'instruction',
+  'exporting',
+  'saveCancelled',
+  'cancel',
+  'save',
+  'confirm',
+  'select',
+  'rectangle',
+  'ellipse',
+  'arrow',
+  'brush',
+  'text',
+  'mosaic',
+  'undo',
+  'redo',
+  'color',
+  'lineWidth',
+  'fontSize',
+  'annotationCanvas',
+  'selection',
+  'actions',
+  'annotationTools',
+  'history',
+  'annotationStyle',
+  'outputActions',
+  'annotationText',
+] as const satisfies ReadonlyArray<keyof ScreenshotMessages>;
+
+const SCREENSHOT_MESSAGE_KEY_SET = new Set<string>(SCREENSHOT_MESSAGE_KEYS);
 
 export type ScreenshotOptionsParseResult =
   { success: true; value: ScreenshotOptions } | { success: false; message: string };
@@ -144,6 +189,14 @@ export function parseScreenshotOptions(value: unknown): ScreenshotOptionsParseRe
     parsed.locale = value.locale;
   }
 
+  if (value.messages !== undefined) {
+    const messages = parseScreenshotMessages(value.messages);
+    if (!messages) {
+      return { success: false, message: 'Screenshot messages are invalid.' };
+    }
+    parsed.messages = messages;
+  }
+
   if (value.theme !== undefined) {
     const theme = parseScreenshotTheme(value.theme);
     if (!theme) {
@@ -161,7 +214,13 @@ function parseScreenshotTheme(value: unknown): ScreenshotTheme | undefined {
   }
 
   const theme: ScreenshotTheme = {};
-  for (const key of SCREENSHOT_THEME_KEYS) {
+  if (value.mode !== undefined) {
+    if (value.mode !== 'dark' && value.mode !== 'light') {
+      return undefined;
+    }
+    theme.mode = value.mode;
+  }
+  for (const key of SCREENSHOT_THEME_COLOR_KEYS) {
     const color = value[key];
     if (color === undefined) {
       continue;
@@ -169,9 +228,30 @@ function parseScreenshotTheme(value: unknown): ScreenshotTheme | undefined {
     if (!isBoundedString(color, 128)) {
       return undefined;
     }
-    theme[key as keyof ScreenshotTheme] = color;
+    theme[key] = color;
   }
   return theme;
+}
+
+function parseScreenshotMessages(
+  value: unknown
+): ScreenshotMessageOverrides | undefined {
+  if (!isRecord(value) || !hasOnlyKeys(value, SCREENSHOT_MESSAGE_KEY_SET)) {
+    return undefined;
+  }
+
+  const messages: ScreenshotMessageOverrides = {};
+  for (const key of SCREENSHOT_MESSAGE_KEYS) {
+    const message = value[key];
+    if (message === undefined) {
+      continue;
+    }
+    if (!isBoundedString(message, 256)) {
+      return undefined;
+    }
+    messages[key] = message;
+  }
+  return messages;
 }
 
 function hasProtocolVersion(value: Record<string, unknown>): boolean {

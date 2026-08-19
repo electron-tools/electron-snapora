@@ -165,6 +165,86 @@ describe('ScreenshotManager', () => {
     expect(manager.activeJobId).toBeUndefined();
   });
 
+  it('queues different host windows in FIFO order and keeps each window mutexed', async () => {
+    const jobs = [
+      createDeferred<ScreenshotResult>(),
+      createDeferred<ScreenshotResult>(),
+      createDeferred<ScreenshotResult>(),
+    ];
+    let started = 0;
+    const startedSenders: Array<number | undefined> = [];
+    const runner = vi.fn((_jobId, _options, context) => {
+      startedSenders.push(context.senderWebContentsId);
+      return jobs[started++]?.promise ?? Promise.reject();
+    });
+    const manager = new ScreenshotManager({ runner, busyPolicy: 'queue' });
+
+    const first = manager.capture({}, { senderWebContentsId: 1 });
+    const second = manager.capture({}, { senderWebContentsId: 2 });
+    const third = manager.capture({}, { senderWebContentsId: 3 });
+    await expect(
+      manager.capture({}, { senderWebContentsId: 2 })
+    ).resolves.toMatchObject({ status: 'failed', code: 'CAPTURE_BUSY' });
+    expect(runner).toHaveBeenCalledTimes(1);
+    expect(manager.queuedCaptureCount).toBe(2);
+
+    jobs[0]?.resolve({ status: 'cancelled' });
+    await expect(first).resolves.toEqual({ status: 'cancelled' });
+    await vi.waitFor(() => expect(runner).toHaveBeenCalledTimes(2));
+    jobs[1]?.resolve({ status: 'cancelled' });
+    await expect(second).resolves.toEqual({ status: 'cancelled' });
+    await vi.waitFor(() => expect(runner).toHaveBeenCalledTimes(3));
+    jobs[2]?.resolve({ status: 'cancelled' });
+    await expect(third).resolves.toEqual({ status: 'cancelled' });
+    expect(manager.queuedCaptureCount).toBe(0);
+    expect(startedSenders).toEqual([1, 2, 3]);
+  });
+
+  it('removes queued captures owned by a destroyed or cancelling renderer', async () => {
+    const active = createDeferred<ScreenshotResult>();
+    const runner = vi.fn(() => active.promise);
+    const manager = new ScreenshotManager({ runner, busyPolicy: 'queue' });
+
+    const first = manager.capture({}, { senderWebContentsId: 1 });
+    const queued = manager.capture({}, { senderWebContentsId: 2 });
+    expect(manager.cancel(2)).toBe(true);
+    await expect(queued).resolves.toEqual({ status: 'cancelled' });
+    expect(manager.queuedCaptureCount).toBe(0);
+
+    active.resolve({ status: 'cancelled' });
+    await expect(first).resolves.toEqual({ status: 'cancelled' });
+    expect(runner).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a full queue and invalid queue limits', async () => {
+    expect(() => new ScreenshotManager({ maxQueuedCaptures: 0 })).toThrowError(
+      'maxQueuedCaptures must be an integer between 1 and 100.'
+    );
+    expect(
+      () =>
+        new ScreenshotManager({
+          busyPolicy: 'later' as unknown as 'queue',
+        })
+    ).toThrowError('busyPolicy must be either reject or queue.');
+
+    const active = createDeferred<ScreenshotResult>();
+    const manager = new ScreenshotManager({
+      runner: () => active.promise,
+      busyPolicy: 'queue',
+      maxQueuedCaptures: 1,
+    });
+    const first = manager.capture({}, { senderWebContentsId: 1 });
+    const second = manager.capture({}, { senderWebContentsId: 2 });
+    await expect(
+      manager.capture({}, { senderWebContentsId: 3 })
+    ).resolves.toMatchObject({ status: 'failed', code: 'CAPTURE_BUSY' });
+
+    expect(manager.cancel(2)).toBe(true);
+    await expect(second).resolves.toEqual({ status: 'cancelled' });
+    active.resolve({ status: 'cancelled' });
+    await first;
+  });
+
   it('normalizes an unexpected runner rejection', async () => {
     const manager = new ScreenshotManager({
       runner: async () => {

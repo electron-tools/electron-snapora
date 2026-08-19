@@ -139,6 +139,38 @@ CSS interaction coordinates are mapped against the captured frame's actual pixel
 the PNG remains aligned on mixed-DPI and high-resolution displays. Dialog, clipboard, and file
 system capabilities remain in the main process and are not exposed to the host renderer.
 
+### Theme and localization
+
+The overlay defaults to English (`en-US`) and a dark toolbar. A capture can select the built-in
+Chinese locale, override individual messages, and provide semantic theme colors:
+
+```ts
+await window.electronSnapora.capture({
+  locale: 'zh-CN',
+  messages: {
+    confirm: '复制到聊天框',
+  },
+  theme: {
+    mode: 'light',
+    accentColor: '#6750a4',
+    accentForegroundColor: '#ffffff',
+    toolbarBackground: 'rgb(250 250 250 / 96%)',
+    toolbarForeground: '#1d1b20',
+    tooltipBackground: '#27272a',
+  },
+});
+```
+
+Message resolution is deterministic: English baseline, selected built-in locale, then host
+overrides. This means a partial `messages` object always falls back to a complete accessible
+label set. Unknown message or theme keys, empty messages, and unsupported modes are rejected at
+the main-process IPC boundary.
+
+Theme styling uses three layers: internal base colors, public semantic colors, and private
+component aliases. `ScreenshotTheme` only changes semantic values, so applications do not depend
+on overlay DOM or CSS class names. In addition to the example above it supports mask, toolbar
+border/hover, tooltip foreground, destructive action, and selection-handle colors.
+
 ### Host policy injection
 
 Most applications can use `new ScreenshotManager()` without configuration. Applications with a
@@ -260,17 +292,32 @@ permission using the signed application identity, not only Electron launched fro
 
 ### Lifecycle and concurrency
 
-A `ScreenshotManager` runs one global task at a time. A second call resolves with `CAPTURE_BUSY`;
-it is not queued. Use one manager for one global screenshot lane, or separate managers only when the
-application intentionally supports independent lanes. Call the cleanup returned by
-`registerScreenshotIpc()` during app shutdown or main-process hot reload. `cancel()` and host
-`WebContents` destruction settle the active task and release Overlay listeners and windows.
+A `ScreenshotManager` always runs one global Overlay task at a time. Its default `reject` policy
+keeps existing behavior: a second call immediately resolves with `CAPTURE_BUSY`. Applications with
+multiple host windows can opt into a bounded FIFO queue:
+
+```ts
+const screenshotManager = new ScreenshotManager({
+  busyPolicy: 'queue',
+  maxQueuedCaptures: 4,
+});
+```
+
+Only different host renderers are queued. A renderer cannot create a second active or queued task,
+so repeated button clicks still return `CAPTURE_BUSY`; a full queue does the same. Cancelling a
+renderer task or destroying that `WebContents` removes its queued request before an Overlay can be
+opened. `queuedCaptureCount` exposes the current queue length for diagnostics.
+
+Use one manager for one application-wide screenshot lane, or separate managers only when the
+application intentionally supports independent capture lanes. Call the cleanup returned by
+`registerScreenshotIpc()` during app shutdown or main-process hot reload. Active-task completion,
+cancellation, and failure all advance the queue and release Overlay listeners and windows.
 
 ### Error results
 
 | Code                      | Meaning                                                          |
 | ------------------------- | ---------------------------------------------------------------- |
-| `CAPTURE_BUSY`            | Another task is active on the manager.                           |
+| `CAPTURE_BUSY`            | The lane, sender mutex, or configured queue capacity is busy.    |
 | `INVALID_REQUEST`         | Host/Overlay IPC origin, options, or payload failed validation.  |
 | `RESOURCE_LIMIT_EXCEEDED` | Capture or PNG data exceeded a configured limit.                 |
 | `PERMISSION_DENIED`       | The OS denied screen capture permission.                         |

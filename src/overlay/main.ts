@@ -8,7 +8,7 @@ import {
 } from '../core/geometry/rect.js';
 import type { AnnotationElement, TextElement } from '../core/model/document.js';
 import type { ScreenshotInitializePayload } from '../electron/protocol/messages.js';
-import type { ScreenshotTool } from '../types.js';
+import type { ScreenshotMessages, ScreenshotTool } from '../types.js';
 import {
   calculateTextBaselinePosition,
   createDrawableElement,
@@ -31,6 +31,7 @@ import {
   type AnnotationTool,
 } from './annotation-store.js';
 import { exportSelectionPng } from './export-selection.js';
+import { resolveScreenshotMessages, resolveScreenshotTheme } from './presentation.js';
 import {
   calculateToolbarPosition,
   clampPoint,
@@ -96,6 +97,10 @@ const fontSizeSelect = requireElement<HTMLSelectElement>('.font-size-select');
 const colorControl = requireElement<HTMLElement>('.color-control');
 const lineControl = requireElement<HTMLElement>('.line-control');
 const fontControl = requireElement<HTMLElement>('.font-control');
+const toolGroup = requireElement<HTMLElement>('.tool-group');
+const historyGroup = requireElement<HTMLElement>('.history-group');
+const styleGroup = requireElement<HTMLElement>('.style-group');
+const actionGroup = requireElement<HTMLElement>('.action-group');
 const toolButtons = Array.from(
   document.querySelectorAll<HTMLButtonElement>('[data-tool]')
 );
@@ -107,6 +112,7 @@ let resetAnnotationsAfterSelection = true;
 let configuredDefaultTool: AnnotationTool = 'select';
 let pendingTextPoint: Point | null = null;
 let outputFeedback: string | null = null;
+let currentMessages: ScreenshotMessages = resolveScreenshotMessages();
 
 /** 捕获帧加载完成后才开放选区和标注，确保三套坐标使用同一实际图片尺寸。 */
 function initializeOverlay(payload: ScreenshotInitializePayload): void {
@@ -686,7 +692,7 @@ function render(): void {
     !['waiting', 'ready', 'exporting'].includes(selectionState.phase) &&
     !outputFeedback;
   if (selectionState.phase === 'waiting') {
-    status.textContent = 'Preparing screenshot…';
+    status.textContent = localize('preparing');
   } else if (selectionState.phase === 'ready') {
     status.textContent = localize('instruction');
   } else if (selectionState.phase === 'exporting') {
@@ -833,10 +839,11 @@ function applyToolAvailability(tools: ScreenshotTool[] | undefined): void {
 }
 
 function applyTheme(payload: ScreenshotInitializePayload): void {
-  const theme = payload.options.theme;
-  setColorToken('--snapora-accent', theme?.accentColor);
-  setColorToken('--snapora-mask', theme?.maskColor);
-  setColorToken('--snapora-toolbar', theme?.toolbarBackground);
+  const theme = resolveScreenshotTheme(payload.options.theme);
+  document.documentElement.dataset.snaporaTheme = theme.mode;
+  for (const [token, value] of Object.entries(theme.tokens)) {
+    setColorToken(token, value);
+  }
 }
 
 function setColorToken(token: string, value: string | undefined): void {
@@ -845,52 +852,10 @@ function setColorToken(token: string, value: string | undefined): void {
   }
 }
 
-const messages = {
-  'zh-CN': {
-    instruction: '拖动选择截图区域 · Esc 取消',
-    exporting: '正在生成截图…',
-    cancel: '取消',
-    save: '保存',
-    confirm: '复制并完成',
-    saveCancelled: '已取消保存',
-    select: '选择',
-    rectangle: '矩形',
-    ellipse: '椭圆',
-    arrow: '箭头',
-    brush: '画笔',
-    text: '文字',
-    mosaic: '马赛克',
-    undo: '撤销',
-    redo: '重做',
-    color: '颜色',
-    lineWidth: '线宽',
-    fontSize: '字号',
-  },
-  'en-US': {
-    instruction: 'Drag to select an area · Esc to cancel',
-    exporting: 'Exporting screenshot…',
-    cancel: 'Cancel',
-    save: 'Save',
-    confirm: 'Copy & Done',
-    saveCancelled: 'Save cancelled',
-    select: 'Select',
-    rectangle: 'Rectangle',
-    ellipse: 'Ellipse',
-    arrow: 'Arrow',
-    brush: 'Brush',
-    text: 'Text',
-    mosaic: 'Mosaic',
-    undo: 'Undo',
-    redo: 'Redo',
-    color: 'Color',
-    lineWidth: 'Line width',
-    fontSize: 'Font size',
-  },
-} as const;
-
 function applyLocale(payload: ScreenshotInitializePayload): void {
   const locale = payload.options.locale ?? 'en-US';
-  const localized = messages[locale];
+  currentMessages = resolveScreenshotMessages(locale, payload.options.messages);
+  const localized = currentMessages;
   const toolLabels: Record<AnnotationTool, string> = {
     select: localized.select,
     rectangle: localized.rectangle,
@@ -912,6 +877,14 @@ function applyLocale(payload: ScreenshotInitializePayload): void {
   setControlLabel(colorControl, localized.color);
   setControlLabel(lineControl, localized.lineWidth);
   setControlLabel(fontControl, localized.fontSize);
+  annotationCanvas.setAttribute('aria-label', localized.annotationCanvas);
+  selectionElement.setAttribute('aria-label', localized.selection);
+  toolbar.setAttribute('aria-label', localized.actions);
+  toolGroup.setAttribute('aria-label', localized.annotationTools);
+  historyGroup.setAttribute('aria-label', localized.history);
+  styleGroup.setAttribute('aria-label', localized.annotationStyle);
+  actionGroup.setAttribute('aria-label', localized.outputActions);
+  textEditor.setAttribute('aria-label', localized.annotationText);
   colorInput.setAttribute('aria-label', localized.color);
   lineWidthSelect.setAttribute('aria-label', localized.lineWidth);
   fontSizeSelect.setAttribute('aria-label', localized.fontSize);
@@ -922,7 +895,8 @@ function setControlLabel(element: HTMLElement, label: string): void {
   element.setAttribute('aria-label', label);
 }
 
-function localize(key: 'instruction' | 'exporting' | 'saveCancelled'): string {
-  const locale = selectionStore.getState().payload?.options.locale ?? 'en-US';
-  return messages[locale][key];
+function localize(
+  key: 'preparing' | 'instruction' | 'exporting' | 'saveCancelled'
+): string {
+  return currentMessages[key];
 }

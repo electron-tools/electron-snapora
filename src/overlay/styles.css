@@ -1,11 +1,37 @@
 :root {
-  --snapora-accent: #0a84ff;
-  --snapora-mask: rgb(0 0 0 / 48%);
-  --snapora-toolbar: rgb(61 63 68 / 96%);
-  --snapora-toolbar-hover: rgb(255 255 255 / 11%);
-  --snapora-toolbar-border: rgb(255 255 255 / 12%);
-  --snapora-tooltip: rgb(25 27 31 / 98%);
-  --snapora-text: rgb(255 255 255 / 92%);
+  /* 基础色阶：只供语义层引用，不直接进入组件规则。 */
+  --snapora-blue-500: #0a84ff;
+  --snapora-red-500: #ff453a;
+  --snapora-neutral-0: #fff;
+  --snapora-neutral-900: #202226;
+  --snapora-neutral-950: #191b1f;
+
+  /* 语义层：宿主 ScreenshotTheme 的稳定覆盖入口。 */
+  --snapora-color-accent: var(--snapora-blue-500);
+  --snapora-color-on-accent: var(--snapora-neutral-0);
+  --snapora-color-mask: rgb(0 0 0 / 48%);
+  --snapora-color-surface: rgb(61 63 68 / 96%);
+  --snapora-color-on-surface: rgb(255 255 255 / 92%);
+  --snapora-color-border: rgb(255 255 255 / 12%);
+  --snapora-color-hover: rgb(255 255 255 / 11%);
+  --snapora-color-tooltip: rgb(25 27 31 / 98%);
+  --snapora-color-on-tooltip: rgb(255 255 255 / 92%);
+  --snapora-color-danger: rgb(255 69 58 / 76%);
+  --snapora-color-handle: var(--snapora-neutral-0);
+
+  /* 组件层：保留内部别名，后续重构 DOM 不影响公共主题字段。 */
+  --snapora-accent: var(--snapora-color-accent);
+  --snapora-accent-foreground: var(--snapora-color-on-accent);
+  --snapora-mask: var(--snapora-color-mask);
+  --snapora-toolbar: var(--snapora-color-surface);
+  --snapora-toolbar-foreground: var(--snapora-color-on-surface);
+  --snapora-toolbar-hover: var(--snapora-color-hover);
+  --snapora-toolbar-border: var(--snapora-color-border);
+  --snapora-tooltip: var(--snapora-color-tooltip);
+  --snapora-tooltip-foreground: var(--snapora-color-on-tooltip);
+  --snapora-danger: var(--snapora-color-danger);
+  --snapora-handle: var(--snapora-color-handle);
+  --snapora-text: var(--snapora-toolbar-foreground);
 
   color-scheme: dark;
   font-family:
@@ -17,6 +43,18 @@
     'Segoe UI',
     sans-serif;
   background: transparent;
+}
+
+:root[data-snapora-theme='light'] {
+  --snapora-color-surface: rgb(250 250 250 / 96%);
+  --snapora-color-on-surface: rgb(24 24 27 / 88%);
+  --snapora-color-border: rgb(24 24 27 / 14%);
+  --snapora-color-hover: rgb(24 24 27 / 9%);
+  --snapora-color-tooltip: rgb(39 39 42 / 98%);
+  --snapora-color-on-tooltip: rgb(255 255 255 / 94%);
+  --snapora-color-danger: rgb(220 38 38 / 82%);
+
+  color-scheme: light;
 }
 
 * {
@@ -130,7 +168,7 @@ input {
   padding: 0;
   border: 2px solid var(--snapora-accent);
   border-radius: 50%;
-  background: #fff;
+  background: var(--snapora-handle);
   box-shadow: 0 1px 4px rgb(0 0 0 / 44%);
   pointer-events: auto;
 }
@@ -259,7 +297,7 @@ input {
   padding: 0;
   border: 0;
   border-radius: 6px;
-  color: rgb(255 255 255 / 78%);
+  color: var(--snapora-toolbar-foreground);
   background: transparent;
   cursor: pointer;
   place-items: center;
@@ -287,7 +325,7 @@ input {
 }
 
 .icon-button:hover:not(:disabled) {
-  color: #fff;
+  color: var(--snapora-toolbar-foreground);
   background: var(--snapora-toolbar-hover);
 }
 
@@ -297,7 +335,7 @@ input {
 
 .tool-button[data-active='true'],
 .confirm-button {
-  color: #fff;
+  color: var(--snapora-accent-foreground);
   background: var(--snapora-accent);
 }
 
@@ -308,8 +346,8 @@ input {
 }
 
 .cancel-button:hover:not(:disabled) {
-  color: #fff;
-  background: rgb(255 69 58 / 76%);
+  color: var(--snapora-accent-foreground);
+  background: var(--snapora-danger);
 }
 
 .icon-button:disabled {
@@ -320,7 +358,7 @@ input {
 .icon-button:focus-visible,
 .color-input:focus-visible,
 .selection-toolbar select:focus-visible {
-  outline: 2px solid #fff;
+  outline: 2px solid var(--snapora-toolbar-foreground);
   outline-offset: -3px;
 }
 
@@ -363,7 +401,7 @@ input {
   height: 27px;
   padding: 0;
   overflow: hidden;
-  border: 2px solid rgb(255 255 255 / 64%);
+  border: 2px solid var(--snapora-toolbar-foreground);
   border-radius: 50%;
   background: transparent;
   cursor: pointer;
@@ -427,7 +465,7 @@ input {
   padding: 7px 9px;
   border: 1px solid rgb(255 255 255 / 10%);
   border-radius: 7px;
-  color: rgb(255 255 255 / 92%);
+  color: var(--snapora-tooltip-foreground);
   background: var(--snapora-tooltip);
   box-shadow: 0 6px 18px rgb(0 0 0 / 34%);
   content: attr(data-tooltip);

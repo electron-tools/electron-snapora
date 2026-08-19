@@ -450,9 +450,10 @@ Overlay 使用接近原生截图工具的紧凑悬浮布局，视觉层不依赖
 - 输出操作在同一面板内保留明确按钮间距和面板内边距，不让保存、取消和确认按钮贴边或互相粘连。
 - 图标通过包内 SVG Sprite 提供，不加载网络资源、字体图标或第三方品牌素材。
 - 工具名称和快捷键通过延迟出现的气泡展示；气泡根据工具栏位于选区上方或下方自动改变方向。
-- 中文和英文的工具名、样式名及输出操作由 Overlay 自身本地化，不依赖宿主翻译系统。
+- 中文和英文的工具名、状态、样式名、输出操作及无障碍标签由 Overlay 自身本地化，不依赖宿主翻译系统；宿主可按字段覆盖文案。
 - `V/R/O/A/P/T/M` 切换工具，`Ctrl/Command + C` 或 `Enter` 复制并完成，`Ctrl/Command + S` 保存，`Escape` 取消；按钮保留键盘焦点态和 `aria-label`。
-- 主题继续通过 CSS Token 覆盖强调色、遮罩色和工具栏背景；动效遵守 `prefers-reduced-motion`。
+- 主题使用“基础色阶、公开语义 Token、内部组件 Token”三层结构，支持暗色/亮色模式，并允许宿主覆盖强调色、遮罩、工具栏、气泡、危险操作和选区控制点颜色；动效遵守 `prefers-reduced-motion`。
+- 文案按英文完整基线、内置语言、宿主字段覆盖的顺序合并；缺少局部翻译时始终回退到完整英文文案。
 - 核心交互仅依赖普通 HTML、CSS 和 SVG 能力，较新的视觉增强不可用时允许自然降级，不按 Electron 版本号分支。
 
 文档模型：
@@ -620,9 +621,12 @@ export interface ScreenshotOptions {
   defaultTool?:
     'select' | 'rectangle' | 'ellipse' | 'arrow' | 'brush' | 'text' | 'mosaic';
   locale?: 'zh-CN' | 'en-US';
+  messages?: Partial<ScreenshotMessages>;
   theme?: ScreenshotTheme;
 }
 ```
+
+默认语言固定为 `en-US`，避免库行为受宿主启动时机或操作系统语言变化影响。`ScreenshotTheme` 只暴露语义颜色和 `dark` / `light` 模式，`ScreenshotMessages` 覆盖可见文案、气泡和无障碍标签；二者都在主进程 IPC 边界按字段白名单校验。
 
 当前稳定的 `desktopCapturer` 缩略图接口无法跨平台可靠控制鼠标指针是否进入图像，因此不公开无实际行为的 `includeCursor`。后续只有在适配器能够保证平台语义并完成验证后才重新增加。
 
@@ -663,6 +667,16 @@ export type ScreenshotErrorCode =
   | 'INVALID_RESULT'
   | 'UNSUPPORTED_PLATFORM';
 ```
+
+### 12.3 生命周期与多窗口策略
+
+单个 `ScreenshotManager` 始终只运行一个全屏 Overlay，避免多个置顶窗口竞争输入。默认 `busyPolicy: 'reject'`，后续调用立即返回 `CAPTURE_BUSY`；多窗口宿主可选择 `busyPolicy: 'queue'` 并以 `maxQueuedCaptures` 限制 FIFO 队列。
+
+- 不同宿主 WebContents 可以排队；同一 WebContents 同时只允许一个活动或排队任务，防止重复点击堆积。
+- 队列达到上限时返回 `CAPTURE_BUSY`，不会创建 Overlay 或捕获屏幕。
+- `cancel(senderWebContentsId)` 同时取消该窗口的活动任务并移除它的排队任务。
+- 宿主 WebContents 销毁时由 IPC 注册层调用取消，因此无主任务不会在稍后被启动。
+- 活动任务无论完成、取消或失败都会统一释放资源，然后启动下一项。
 
 ## 13. npm 包使用方式
 

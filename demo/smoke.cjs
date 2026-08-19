@@ -20,11 +20,18 @@ const smokeTimeout = setTimeout(() => {
 app.on('browser-window-created', (_event, window) => {
   // 等待透明预热之后的 Renderer 初始化完成，避免把预热 show 事件误当成可交互状态。
   window.webContents.once('did-finish-load', async () => {
-    await window.webContents.executeJavaScript(`
+    const presentation = await window.webContents.executeJavaScript(`
       new Promise((resolve) => {
         const waitUntilReady = () => {
           if (document.querySelector('.capture-surface')?.dataset.state === 'ready') {
-            resolve();
+            const root = document.documentElement;
+            resolve({
+              locale: root.lang,
+              mode: root.dataset.snaporaTheme,
+              accent: getComputedStyle(root).getPropertyValue('--snapora-color-accent').trim(),
+              confirm: document.querySelector('.confirm-button')?.dataset.tooltip,
+              selection: document.querySelector('.selection')?.getAttribute('aria-label'),
+            });
             return;
           }
           setTimeout(waitUntilReady, 10);
@@ -32,6 +39,15 @@ app.on('browser-window-created', (_event, window) => {
         waitUntilReady();
       })
     `);
+    if (
+      presentation.locale !== 'zh-CN' ||
+      presentation.mode !== 'light' ||
+      presentation.accent !== '#6750a4' ||
+      presentation.confirm !== '复制到聊天框' ||
+      presentation.selection !== '截图选区'
+    ) {
+      throw new Error(`Overlay presentation mismatch: ${JSON.stringify(presentation)}`);
+    }
     window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
     window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
   });
@@ -39,7 +55,16 @@ app.on('browser-window-created', (_event, window) => {
 
 app.whenReady().then(async () => {
   const manager = new ScreenshotManager();
-  const result = await manager.capture({ display: 'cursor' });
+  const result = await manager.capture({
+    display: 'cursor',
+    locale: 'zh-CN',
+    messages: { confirm: '复制到聊天框' },
+    theme: {
+      mode: 'light',
+      accentColor: '#6750a4',
+      accentForegroundColor: '#ffffff',
+    },
+  });
   clearTimeout(smokeTimeout);
 
   if (result.status !== 'cancelled') {

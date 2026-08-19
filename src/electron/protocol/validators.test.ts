@@ -131,7 +131,12 @@ describe('screenshot protocol validators', () => {
       tools: ['text', 'rectangle', 'text'],
       defaultTool: 'text',
       locale: 'zh-CN',
-      theme: { accentColor: '#1677ff' },
+      messages: { confirm: '复制到输入框' },
+      theme: {
+        mode: 'light',
+        accentColor: '#1677ff',
+        toolbarForeground: '#111111',
+      },
     };
 
     expect(parseScreenshotOptions(input)).toEqual({
@@ -141,7 +146,12 @@ describe('screenshot protocol validators', () => {
         tools: ['text', 'rectangle'],
         defaultTool: 'text',
         locale: 'zh-CN',
-        theme: { accentColor: '#1677ff' },
+        messages: { confirm: '复制到输入框' },
+        theme: {
+          mode: 'light',
+          accentColor: '#1677ff',
+          toolbarForeground: '#111111',
+        },
       },
     });
   });
@@ -154,6 +164,9 @@ describe('screenshot protocol validators', () => {
     { tools: Array.from({ length: 7 }, () => 'text') },
     { tools: ['rectangle'], defaultTool: 'text' },
     { locale: 'fr-FR' },
+    { messages: { unknown: 'value' } },
+    { messages: { confirm: '' } },
+    { theme: { mode: 'system' } },
     { theme: { accentColor: '' } },
     { includeCursor: 'yes' },
   ])('rejects malformed host options: %o', (input) => {

@@ -1,6 +1,7 @@
 export {
   ScreenshotManager,
   type ScreenshotExecution,
+  type ScreenshotBusyPolicy,
   type ScreenshotJobContext,
   type ScreenshotRunner,
   type ScreenshotManagerOptions,
@@ -69,6 +70,9 @@ export type {
   ScreenshotBounds,
   ScreenshotErrorCode,
   ScreenshotImageResult,
+  ScreenshotLocale,
+  ScreenshotMessageOverrides,
+  ScreenshotMessages,
   ScreenshotOptions,
   ScreenshotOutputMetadata,
   ScreenshotResult,

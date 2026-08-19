@@ -31,6 +31,8 @@ export interface ScreenshotExecution {
   cancel(): boolean;
 }
 
+export type ScreenshotBusyPolicy = 'reject' | 'queue';
+
 export type ScreenshotRunner = (
   jobId: string,
   options: ScreenshotOptions,
@@ -52,7 +54,18 @@ export interface ScreenshotManagerOptions {
   overlayOptions?: Omit<OverlayWindowOptions, 'display'>;
   overlayReadyTimeoutMs?: number;
   resourceLimits?: ScreenshotResourceLimitOptions;
+  /** reject 保持即时失败；queue 仅为其他宿主窗口按 FIFO 排队。 */
+  busyPolicy?: ScreenshotBusyPolicy;
+  maxQueuedCaptures?: number;
 }
+
+interface QueuedCapture {
+  options: ScreenshotOptions;
+  context: ScreenshotJobContext;
+  resolve(result: ScreenshotResult): void;
+}
+
+const DEFAULT_MAX_QUEUED_CAPTURES = 8;
 
 function createDefaultRunner(
   managerOptions: ScreenshotManagerOptions
@@ -118,11 +131,29 @@ function createDefaultRunner(
  */
 export class ScreenshotManager {
   readonly #runner: ScreenshotRunner;
+  readonly #busyPolicy: ScreenshotBusyPolicy;
+  readonly #maxQueuedCaptures: number;
+  readonly #queue: QueuedCapture[] = [];
   #activeJobId: string | undefined;
   #activeSenderWebContentsId: number | undefined;
   #cancelActive: (() => boolean) | undefined;
 
   constructor(options: ScreenshotManagerOptions = {}) {
+    if (
+      options.busyPolicy !== undefined &&
+      !['reject', 'queue'].includes(options.busyPolicy)
+    ) {
+      throw new TypeError('busyPolicy must be either reject or queue.');
+    }
+    this.#busyPolicy = options.busyPolicy ?? 'reject';
+    this.#maxQueuedCaptures = options.maxQueuedCaptures ?? DEFAULT_MAX_QUEUED_CAPTURES;
+    if (
+      !Number.isSafeInteger(this.#maxQueuedCaptures) ||
+      this.#maxQueuedCaptures < 1 ||
+      this.#maxQueuedCaptures > 100
+    ) {
+      throw new TypeError('maxQueuedCaptures must be an integer between 1 and 100.');
+    }
     this.#runner = options.runner ?? createDefaultRunner(options);
   }
 
@@ -130,30 +161,81 @@ export class ScreenshotManager {
     return this.#activeJobId;
   }
 
-  /** 不传 sender ID 时供主进程直接取消；传入时只允许取消该页面创建的任务。 */
-  cancel(senderWebContentsId?: number): boolean {
-    if (
-      !this.#activeJobId ||
-      (senderWebContentsId !== undefined &&
-        this.#activeSenderWebContentsId !== senderWebContentsId)
-    ) {
-      return false;
-    }
-    return this.#cancelActive?.() ?? false;
+  get queuedCaptureCount(): number {
+    return this.#queue.length;
   }
 
-  async capture(
+  /** 不传 sender ID 时供主进程直接取消；传入时只允许取消该页面创建的任务。 */
+  cancel(senderWebContentsId?: number): boolean {
+    let cancelled = false;
+    if (
+      this.#activeJobId &&
+      (senderWebContentsId === undefined ||
+        this.#activeSenderWebContentsId === senderWebContentsId)
+    ) {
+      cancelled = this.#cancelActive?.() ?? false;
+    }
+
+    // Renderer 销毁时同时移除它尚未启动的任务，避免无主 Overlay 稍后被唤起。
+    if (senderWebContentsId !== undefined) {
+      for (let index = this.#queue.length - 1; index >= 0; index -= 1) {
+        const queued = this.#queue[index];
+        if (queued?.context.senderWebContentsId !== senderWebContentsId) {
+          continue;
+        }
+        this.#queue.splice(index, 1);
+        queued.resolve({ status: 'cancelled' });
+        cancelled = true;
+      }
+    }
+    return cancelled;
+  }
+
+  capture(
     options: ScreenshotOptions = {},
     context: ScreenshotJobContext = {}
   ): Promise<ScreenshotResult> {
     if (this.#activeJobId) {
-      return {
-        status: 'failed',
-        code: 'CAPTURE_BUSY',
-        message: 'A screenshot task is already running.',
-      };
+      return this.#handleBusyCapture(options, context);
     }
 
+    return this.#executeCapture(options, context);
+  }
+
+  #handleBusyCapture(
+    options: ScreenshotOptions,
+    context: ScreenshotJobContext
+  ): Promise<ScreenshotResult> {
+    const senderWebContentsId = context.senderWebContentsId;
+    const sameSenderAlreadyPending =
+      senderWebContentsId !== undefined &&
+      (this.#activeSenderWebContentsId === senderWebContentsId ||
+        this.#queue.some(
+          (queued) => queued.context.senderWebContentsId === senderWebContentsId
+        ));
+    if (
+      this.#busyPolicy === 'reject' ||
+      sameSenderAlreadyPending ||
+      this.#queue.length >= this.#maxQueuedCaptures
+    ) {
+      return Promise.resolve({
+        status: 'failed',
+        code: 'CAPTURE_BUSY',
+        message: sameSenderAlreadyPending
+          ? 'This window already has a screenshot task pending.'
+          : 'A screenshot task is already running.',
+      });
+    }
+
+    return new Promise((resolve) => {
+      this.#queue.push({ options, context, resolve });
+    });
+  }
+
+  async #executeCapture(
+    options: ScreenshotOptions,
+    context: ScreenshotJobContext
+  ): Promise<ScreenshotResult> {
     const jobId = randomUUID();
     this.#activeJobId = jobId;
     this.#activeSenderWebContentsId = context.senderWebContentsId;
@@ -172,8 +254,17 @@ export class ScreenshotManager {
         this.#activeJobId = undefined;
         this.#activeSenderWebContentsId = undefined;
         this.#cancelActive = undefined;
+        this.#startNextQueuedCapture();
       }
     }
+  }
+
+  #startNextQueuedCapture(): void {
+    const next = this.#queue.shift();
+    if (!next) {
+      return;
+    }
+    void this.#executeCapture(next.options, next.context).then(next.resolve);
   }
 }
 
