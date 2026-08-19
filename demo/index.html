@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self'; script-src 'self'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Electron Snapora Demo</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">ELECTRON SNAPORA</p>
+      <h1>Reusable screenshots for Electron.</h1>
+      <p class="description">
+        Capture the display under the cursor through the package's isolated main,
+        preload and overlay pipeline.
+      </p>
+      <button class="capture-button" type="button">Take screenshot</button>
+      <p class="hint">
+        Select a region, annotate it, then copy and finish or save locally. Press Escape
+        to cancel.
+      </p>
+      <pre class="result" aria-live="polite">No screenshot task has run yet.</pre>
+    </main>
+    <script src="./renderer.js"></script>
+  </body>
+</html>

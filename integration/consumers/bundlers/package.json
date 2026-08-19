@@ -1,0 +1,13 @@
+{
+  "name": "electron-snapora-bundler-consumer",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "electron-snapora": "file:__SNAPORA_TARBALL__"
+  },
+  "devDependencies": {
+    "electron-vite": "5.0.0",
+    "webpack": "5.109.2",
+    "webpack-cli": "7.2.2"
+  }
+}

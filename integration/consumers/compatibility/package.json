@@ -1,0 +1,11 @@
+{
+  "name": "electron-snapora-compatibility-consumer",
+  "private": true,
+  "main": "main.cjs",
+  "dependencies": {
+    "electron-snapora": "file:__SNAPORA_TARBALL__"
+  },
+  "devDependencies": {
+    "electron": "__ELECTRON_VERSION__"
+  }
+}

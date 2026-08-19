@@ -1,0 +1,23 @@
+{
+  "name": "electron-snapora-packaged-consumer",
+  "version": "1.0.0",
+  "private": true,
+  "main": "main.cjs",
+  "dependencies": {
+    "electron-snapora": "file:__SNAPORA_TARBALL__"
+  },
+  "devDependencies": {
+    "electron": "43.3.0"
+  },
+  "build": {
+    "appId": "tools.electron.snapora.package-check",
+    "productName": "Electron Snapora Package Check",
+    "executableName": "snapora-package-check",
+    "asar": true,
+    "npmRebuild": false,
+    "files": [
+      "main.cjs",
+      "package.json"
+    ]
+  }
+}

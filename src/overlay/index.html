@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' data:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Electron Snapora</title>
+  </head>
+  <body>
+    <main id="app" aria-live="polite">
+      <div class="capture-surface" data-state="waiting">
+        <img class="screen-frame" alt="" draggable="false" />
+        <canvas class="annotation-canvas" aria-label="Screenshot annotations"></canvas>
+        <div class="screen-mask" aria-hidden="true"></div>
+        <div class="selection" role="group" aria-label="Screenshot selection" hidden>
+          <output class="size-hint" aria-live="off"></output>
+          <span
+            class="resize-handle handle-nw"
+            data-handle="nw"
+            aria-hidden="true"
+          ></span>
+          <span
+            class="resize-handle handle-n"
+            data-handle="n"
+            aria-hidden="true"
+          ></span>
+          <span
+            class="resize-handle handle-ne"
+            data-handle="ne"
+            aria-hidden="true"
+          ></span>
+          <span
+            class="resize-handle handle-e"
+            data-handle="e"
+            aria-hidden="true"
+          ></span>
+          <span
+            class="resize-handle handle-se"
+            data-handle="se"
+            aria-hidden="true"
+          ></span>
+          <span
+            class="resize-handle handle-s"
+            data-handle="s"
+            aria-hidden="true"
+          ></span>
+          <span
+            class="resize-handle handle-sw"
+            data-handle="sw"
+            aria-hidden="true"
+          ></span>
+          <span
+            class="resize-handle handle-w"
+            data-handle="w"
+            aria-hidden="true"
+          ></span>
+        </div>
+        <div
+          class="selection-toolbar"
+          role="toolbar"
+          aria-label="Screenshot actions"
+          hidden
+        >
+          <div class="toolbar-panel selection-tool-panel">
+            <button
+              class="tool-button icon-button"
+              type="button"
+              data-tool="select"
+              data-tooltip="Select"
+              data-shortcut="V"
+              aria-label="Select"
+            >
+              <svg class="toolbar-icon" aria-hidden="true">
+                <use href="#icon-pointer"></use>
+              </svg>
+            </button>
+          </div>
+          <div
+            class="toolbar-panel toolbar-group tool-group"
+            aria-label="Annotation tools"
+          >
+            <label class="color-control" data-tooltip="Color">
+              <span class="sr-only">Color</span>
+              <input class="color-input" type="color" value="#ff3b30" />
+            </label>
+            <button
+              class="tool-button icon-button"
+              type="button"
+              data-tool="rectangle"
+              data-tooltip="Rectangle"
+              data-shortcut="R"
+              aria-label="Rectangle"
+            >
+              <svg class="toolbar-icon" aria-hidden="true">
+                <use href="#icon-rectangle"></use>
+              </svg>
+            </button>
+            <button
+              class="tool-button icon-button"
+              type="button"
+              data-tool="ellipse"
+              data-tooltip="Ellipse"
+              data-shortcut="O"
+              aria-label="Ellipse"
+            >
+              <svg class="toolbar-icon" aria-hidden="true">
+                <use href="#icon-ellipse"></use>
+              </svg>
+            </button>
+            <button
+              class="tool-button icon-button"
+              type="button"
+              data-tool="arrow"
+              data-tooltip="Arrow"
+              data-shortcut="A"
+              aria-label="Arrow"
+            >
+              <svg class="toolbar-icon" aria-hidden="true">
+                <use href="#icon-arrow"></use>
+              </svg>
+            </button>
+            <button
+              class="tool-button icon-button"
+              type="button"
+              data-tool="brush"
+              data-tooltip="Brush"
+              data-shortcut="P"
+              aria-label="Brush"
+            >
+              <svg class="toolbar-icon" aria-hidden="true">
+                <use href="#icon-pen"></use>
+              </svg>
+            </button>
+            <button
+              class="tool-button icon-button"
+              type="button"
+              data-tool="text"
+              data-tooltip="Text"
+              data-shortcut="T"
+              aria-label="Text"
+            >
+              <svg class="toolbar-icon" aria-hidden="true">
+                <use href="#icon-text"></use>
+              </svg>
+            </button>
+            <button
+              class="tool-button icon-button"
+              type="button"
+              data-tool="mosaic"
+              data-tooltip="Mosaic"
+              data-shortcut="M"
+              aria-label="Mosaic"
+            >
+              <svg class="toolbar-icon icon-mosaic" aria-hidden="true">
+                <use href="#icon-mosaic"></use>
+              </svg>
+            </button>
+          </div>
+          <div class="toolbar-panel toolbar-group settings-panel">
+            <div class="toolbar-group history-group" aria-label="History">
+              <button
+                class="tool-button icon-button undo-button"
+                type="button"
+                data-tooltip="Undo"
+                data-shortcut="Ctrl/⌘ Z"
+                aria-label="Undo"
+                disabled
+              >
+                <svg class="toolbar-icon" aria-hidden="true">
+                  <use href="#icon-undo"></use>
+                </svg>
+              </button>
+              <button
+                class="tool-button icon-button redo-button"
+                type="button"
+                data-tooltip="Redo"
+                data-shortcut="Ctrl/⌘ ⇧ Z"
+                aria-label="Redo"
+                disabled
+              >
+                <svg class="toolbar-icon" aria-hidden="true">
+                  <use href="#icon-redo"></use>
+                </svg>
+              </button>
+            </div>
+            <span class="toolbar-divider" aria-hidden="true"></span>
+            <div class="toolbar-group style-group" aria-label="Annotation style">
+              <label class="select-control line-control" data-tooltip="Line width">
+                <span class="sr-only">Line width</span>
+                <select class="line-width-select" aria-label="Line width">
+                  <option value="2">2</option>
+                  <option value="4" selected>4</option>
+                  <option value="6">6</option>
+                  <option value="10">10</option>
+                </select>
+              </label>
+              <label class="select-control font-control" data-tooltip="Font size">
+                <span class="sr-only">Font size</span>
+                <select class="font-size-select" aria-label="Font size">
+                  <option value="16">16</option>
+                  <option value="24" selected>24</option>
+                  <option value="32">32</option>
+                  <option value="48">48</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div
+            class="toolbar-panel toolbar-group action-group"
+            aria-label="Output actions"
+          >
+            <button
+              class="toolbar-button icon-button save-button"
+              type="button"
+              data-tooltip="Save"
+              data-shortcut="Ctrl/⌘ S"
+              aria-label="Save"
+            >
+              <svg class="toolbar-icon" aria-hidden="true">
+                <use href="#icon-save"></use>
+              </svg>
+            </button>
+            <button
+              class="toolbar-button icon-button cancel-button"
+              type="button"
+              data-tooltip="Cancel"
+              data-shortcut="Esc"
+              aria-label="Cancel"
+            >
+              <svg class="toolbar-icon" aria-hidden="true">
+                <use href="#icon-close"></use>
+              </svg>
+            </button>
+            <button
+              class="toolbar-button icon-button confirm-button"
+              type="button"
+              data-tooltip="Copy & Done"
+              data-shortcut="Enter / Ctrl/⌘ C"
+              aria-label="Copy & Done"
+            >
+              <svg class="toolbar-icon" aria-hidden="true">
+                <use href="#icon-check"></use>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <textarea
+          class="text-editor"
+          rows="1"
+          maxlength="500"
+          aria-label="Annotation text"
+          hidden
+        ></textarea>
+        <p class="status">Preparing screenshot…</p>
+      </div>
+    </main>
+    <svg class="icon-sprite" aria-hidden="true">
+      <symbol id="icon-pointer" viewBox="0 0 24 24">
+        <path d="M5 3.8 18.5 14l-6.2 1.1-3.2 5.4L5 3.8Z" />
+      </symbol>
+      <symbol id="icon-rectangle" viewBox="0 0 24 24">
+        <rect x="4.5" y="5" width="15" height="14" rx="1.5" />
+      </symbol>
+      <symbol id="icon-ellipse" viewBox="0 0 24 24">
+        <ellipse cx="12" cy="12" rx="7.5" ry="7" />
+      </symbol>
+      <symbol id="icon-arrow" viewBox="0 0 24 24">
+        <path d="m5 19 14-14M10 5h9v9" />
+      </symbol>
+      <symbol id="icon-pen" viewBox="0 0 24 24">
+        <path
+          d="m4.5 18.5 3.2-.7L18.4 7.1a2 2 0 0 0 0-2.8l-.7-.7a2 2 0 0 0-2.8 0L4.2 14.3l-.7 3.2 1 1Z"
+        />
+        <path d="m13.7 4.8 5.5 5.5" />
+      </symbol>
+      <symbol id="icon-text" viewBox="0 0 24 24">
+        <path d="M5 7V4.5h14V7M12 4.5v15M8.5 19.5h7" />
+      </symbol>
+      <symbol id="icon-mosaic" viewBox="0 0 24 24">
+        <rect x="4" y="4" width="6" height="6" rx="1" />
+        <rect x="14" y="4" width="6" height="6" rx="1" />
+        <rect x="4" y="14" width="6" height="6" rx="1" />
+        <rect x="14" y="14" width="6" height="6" rx="1" />
+      </symbol>
+      <symbol id="icon-undo" viewBox="0 0 24 24">
+        <path d="m9 7-4 4 4 4M5 11h8.5a5.5 5.5 0 0 1 5.5 5.5" />
+      </symbol>
+      <symbol id="icon-redo" viewBox="0 0 24 24">
+        <path d="m15 7 4 4-4 4M19 11h-8.5A5.5 5.5 0 0 0 5 16.5" />
+      </symbol>
+      <symbol id="icon-save" viewBox="0 0 24 24">
+        <path d="M12 3v11m0 0 4-4m-4 4-4-4M5 16v3h14v-3" />
+      </symbol>
+      <symbol id="icon-close" viewBox="0 0 24 24">
+        <path d="m6 6 12 12M18 6 6 18" />
+      </symbol>
+      <symbol id="icon-check" viewBox="0 0 24 24">
+        <path d="m5 12.5 4.3 4.3L19 7" />
+      </symbol>
+    </svg>
+    <script type="module" src="/main.ts"></script>
+  </body>
+</html>

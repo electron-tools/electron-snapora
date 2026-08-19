@@ -1,0 +1,12 @@
+{
+  "name": "electron-snapora-consumer-esm",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "electron": "43.3.0",
+    "electron-snapora": "file:__SNAPORA_TARBALL__"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}
