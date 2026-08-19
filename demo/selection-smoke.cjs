@@ -256,11 +256,14 @@ app.whenReady().then(async () => {
       (() => {
         const feedback = document.querySelector('.copy-feedback');
         const feedbackStyle = getComputedStyle(feedback);
+        const feedbackBounds = feedback.getBoundingClientRect();
         const iconStyle = getComputedStyle(document.querySelector('.copy-feedback-icon'));
         const checkStyle = getComputedStyle(document.querySelector('.copy-feedback-check'));
         return {
           text: feedback.textContent?.trim(),
+          height: feedbackBounds.height,
           borderColor: feedbackStyle.borderTopColor,
+          whiteSpace: feedbackStyle.whiteSpace,
           bodyBackground: getComputedStyle(document.body).backgroundColor,
           screenDisplay: getComputedStyle(document.querySelector('.screen-frame')).display,
           statusDisplay: getComputedStyle(document.querySelector('.status')).display,
@@ -273,7 +276,9 @@ app.whenReady().then(async () => {
     const feedbackBounds = feedbackWindow.getContentBounds();
     if (
       !feedbackState.text.includes('clipboard') ||
+      feedbackState.height > 50 ||
       feedbackState.borderColor !== 'rgb(246, 189, 70)' ||
+      feedbackState.whiteSpace !== 'nowrap' ||
       feedbackState.bodyBackground !== 'rgba(0, 0, 0, 0)' ||
       feedbackState.screenDisplay !== 'none' ||
       feedbackState.statusDisplay !== 'none' ||

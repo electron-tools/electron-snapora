@@ -617,6 +617,8 @@ input {
   left: 50%;
   z-index: 20;
   display: flex;
+  width: max-content;
+  max-width: calc(100vw - 16px);
   min-height: 48px;
   align-items: center;
   gap: 10px;
@@ -630,9 +632,14 @@ input {
   font-size: 14px;
   font-weight: 600;
   line-height: 20px;
+  white-space: nowrap;
   transform: translateX(-50%);
   animation: snapora-feedback-in 180ms ease-out;
   pointer-events: none;
+}
+
+.copy-feedback-text {
+  white-space: nowrap;
 }
 
 .copy-feedback-icon {
