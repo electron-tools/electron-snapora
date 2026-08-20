@@ -190,7 +190,7 @@ M4 按照“先关闭发布阻塞，再完善公共能力，最后发布”的�
   - [x] 建立 Windows/macOS/Linux `pnpm check` 与 Windows 完整 npm 消费矩阵 CI。
   - [ ] 首次包所有权建立后配置 npm Trusted Publisher、OIDC 发布 workflow、provenance 和 2FA 保护。
 - [x] M4.15 发布正式版 1.0.1 到 npm `latest`，并在发布后完成 registry 元数据与真实安装验证。
-- [-] M4.15.1 发布修订版 1.0.2，开放 Electron 42 以上 peer 范围并强化最低版本安装说明。
+- [x] M4.15.1 发布修订版 1.0.2，开放 Electron 42 以上 peer 范围并强化最低版本安装说明。
 
 ### P3：发布后增强
 
@@ -214,7 +214,7 @@ M3 功能与视觉阶段已完成，当前进入 M4 发布准备阶段，严格�
 7. M4.7～M4.11 使用者体验、维护性和包体积完善。
 8. M4.12～M4.15 alpha/beta、CI 和正式 npm 发布。
 
-当前任务：修订版 1.0.2 正在发布；M3.23 复制反馈与截图层稳定性修复已完成；M4.1～M4.3、M4.6～M4.13、M4.15 已完成；M4.14 等待配置 Trusted Publishing；M4.4 剩余 ARM64、签名 Mac 与 Linux 验收。
+当前任务：修订版 1.0.2 已发布；M3.23 复制反馈与截图层稳定性修复已完成；M4.1～M4.3、M4.6～M4.13、M4.15 已完成；M4.14 等待配置 Trusted Publishing；M4.4 剩余 ARM64、签名 Mac 与 Linux 验收。
 
 ## 风险与约束
 
@@ -277,3 +277,4 @@ M3 功能与视觉阶段已完成，当前进入 M4 发布准备阶段，严格�
 | 2026-08-20 | M4.6  | 一步初始化 API、README 三步快速开始和真实 npm 消费验证完成                                |
 | 2026-08-20 | M4.11 | npm 公开内容边界、tarball 体积基线、内部发布文档和精简候选完成                            |
 | 2026-08-20 | M4.15 | `electron-snapora@1.0.1` 已发布到 npm `latest`，registry 安装与 `v1.0.1` 标签验证完成     |
+| 2026-08-20 | M4.15 | `electron-snapora@1.0.2` 已发布到 npm `latest`，Electron peer 最低版本与标签验证完成      |
