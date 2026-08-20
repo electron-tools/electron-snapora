@@ -1,13 +1,22 @@
 {
   "name": "electron-snapora",
-  "version": "0.0.0",
-  "description": "Framework-agnostic screenshot and annotation toolkit for Electron applications.",
+  "version": "1.0.1",
+  "description": "Electron screenshot and annotation toolkit for region capture, editing, clipboard copy, and PNG export.",
+  "license": "MIT",
   "keywords": [
     "electron",
+    "electron-screenshot",
+    "electron-plugin",
     "screenshot",
+    "screenshot-tool",
+    "screenshot-editor",
     "screen-capture",
+    "desktop-capture",
+    "region-capture",
+    "snipping-tool",
     "annotation",
-    "canvas"
+    "image-annotation",
+    "png"
   ],
   "repository": {
     "type": "git",
@@ -17,13 +26,20 @@
     "url": "https://github.com/electron-tools/electron-snapora/issues"
   },
   "homepage": "https://github.com/electron-tools/electron-snapora#readme",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/",
+    "tag": "next"
+  },
   "type": "module",
   "main": "./dist/main/index.cjs",
   "module": "./dist/main/index.mjs",
   "types": "./dist/main/index.d.ts",
   "files": [
     "dist",
-    "README.md"
+    "CHANGELOG.md",
+    "LICENSE",
+    "README*.md"
   ],
   "exports": {
     ".": {
@@ -98,7 +114,7 @@
     "build:overlay": "vite build --config vite.config.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run && node --test scripts/verify-release-metadata.test.mjs",
     "test:watch": "vitest",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -106,7 +122,13 @@
     "verify:bundlers": "pnpm run build && node scripts/verify-bundler-consumers.mjs",
     "verify:electron-matrix": "pnpm run build && node scripts/verify-electron-matrix.mjs",
     "verify:packaged": "pnpm run build && node scripts/verify-packaged-consumer.mjs",
-    "check": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build"
+    "verify:package:built": "node scripts/verify-package-consumers.mjs && node scripts/verify-bundler-consumers.mjs && node scripts/verify-electron-matrix.mjs && node scripts/verify-packaged-consumer.mjs",
+    "verify:package": "pnpm run build && pnpm run verify:package:built",
+    "verify:release-metadata": "node scripts/verify-release-metadata.mjs",
+    "check": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build",
+    "release:check": "pnpm run check && pnpm run verify:release-metadata && pnpm run verify:package:built",
+    "prepack": "pnpm run build",
+    "prepublishOnly": "pnpm run release:check"
   },
   "engines": {
     "node": ">=20"

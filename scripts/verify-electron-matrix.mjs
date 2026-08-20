@@ -30,7 +30,10 @@ function runPnpm(args, cwd, environment = {}) {
 }
 
 function createTarball() {
-  runPnpm(['pack', '--pack-destination', temporaryRoot], repositoryRoot);
+  runPnpm(
+    ['pack', '--config.ignore-scripts=true', '--pack-destination', temporaryRoot],
+    repositoryRoot
+  );
   const tarballName = readdirSync(temporaryRoot).find((name) => name.endsWith('.tgz'));
   if (!tarballName) {
     throw new Error('pnpm pack did not create an electron-snapora tarball.');
@@ -64,5 +67,10 @@ try {
     `Electron Snapora compatibility matrix passed: ${electronVersions.join(', ')}.`
   );
 } finally {
-  rmSync(temporaryRoot, { recursive: true, force: true });
+  rmSync(temporaryRoot, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 200,
+  });
 }

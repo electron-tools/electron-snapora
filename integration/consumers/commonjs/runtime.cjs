@@ -1,21 +1,20 @@
 const { existsSync } = require('node:fs');
-const { app } = require('electron');
+const { app, ipcMain } = require('electron');
 const {
-  resolveHostPreloadPath,
   resolveOverlayResources,
+  setupElectronSnapora,
 } = require('electron-snapora/main');
 
 app.disableHardwareAcceleration();
 app.whenReady().then(() => {
-  const resources = [
-    resolveHostPreloadPath(),
-    ...Object.values(resolveOverlayResources()),
-  ];
+  const snapora = setupElectronSnapora({ ipcMain });
+  const resources = [snapora.preloadPath, ...Object.values(resolveOverlayResources())];
   if (!resources.every((path) => existsSync(path))) {
     throw new Error(
       `CommonJS consumer cannot resolve packaged resources: ${resources.join(', ')}`
     );
   }
+  snapora.unregister();
   console.log('Electron Snapora CommonJS consumer passed.');
   app.quit();
 });

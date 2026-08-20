@@ -46,7 +46,10 @@ export {
 } from './electron/main/screenshot-session.js';
 export {
   registerScreenshotIpc,
+  setupElectronSnapora,
   type RegisterScreenshotIpcOptions,
+  type SetupElectronSnaporaOptions,
+  type SetupElectronSnaporaResult,
   type ValidateScreenshotIpcSender,
 } from './electron/main/register-host-ipc.js';
 export {

@@ -6,7 +6,11 @@ import {
   DEFAULT_HOST_CAPTURE_CHANNEL,
 } from '../protocol/channels.js';
 import { parseScreenshotOptions } from '../protocol/validators.js';
-import type { ScreenshotManager } from './screenshot-manager.js';
+import { resolveHostPreloadPath } from './resource-paths.js';
+import {
+  ScreenshotManager,
+  type ScreenshotManagerOptions,
+} from './screenshot-manager.js';
 
 export type ValidateScreenshotIpcSender = (event: IpcMainInvokeEvent) => boolean;
 
@@ -16,6 +20,36 @@ export interface RegisterScreenshotIpcOptions {
   channel?: string;
   cancelChannel?: string;
   validateSender?: ValidateScreenshotIpcSender;
+}
+
+export interface SetupElectronSnaporaOptions extends Omit<
+  RegisterScreenshotIpcOptions,
+  'manager'
+> {
+  managerOptions?: ScreenshotManagerOptions;
+}
+
+export interface SetupElectronSnaporaResult {
+  manager: ScreenshotManager;
+  preloadPath: string;
+  unregister: () => void;
+}
+
+/**
+ * 创建默认截图管理器、注册宿主 IPC，并返回可直接交给 BrowserWindow 的 Preload 路径。
+ * 高级宿主仍可分别使用 ScreenshotManager 和 registerScreenshotIpc。
+ */
+export function setupElectronSnapora(
+  options: SetupElectronSnaporaOptions
+): SetupElectronSnaporaResult {
+  const { managerOptions, ...ipcOptions } = options;
+  const manager = new ScreenshotManager(managerOptions);
+
+  return {
+    manager,
+    preloadPath: resolveHostPreloadPath(),
+    unregister: registerScreenshotIpc({ ...ipcOptions, manager }),
+  };
 }
 
 /** 注册宿主渲染进程调用入口，并返回可用于应用退出或热重载的清理函数。 */

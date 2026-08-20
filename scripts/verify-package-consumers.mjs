@@ -41,7 +41,10 @@ function prepareConsumer(name, tarballPath) {
 }
 
 try {
-  runPnpm(['pack', '--pack-destination', temporaryRoot], repositoryRoot);
+  runPnpm(
+    ['pack', '--config.ignore-scripts=true', '--pack-destination', temporaryRoot],
+    repositoryRoot
+  );
   const tarballName = readdirSync(temporaryRoot).find((name) => name.endsWith('.tgz'));
   if (!tarballName) {
     throw new Error('pnpm pack did not create an electron-snapora tarball.');
@@ -51,7 +54,7 @@ try {
   for (const name of ['esm', 'commonjs']) {
     const consumerDirectory = prepareConsumer(name, tarballPath);
     runPnpm(
-      ['install', '--offline', '--ignore-scripts', '--no-frozen-lockfile'],
+      ['install', '--prefer-offline', '--ignore-scripts', '--no-frozen-lockfile'],
       consumerDirectory
     );
     runPnpm(['exec', 'tsc', '--noEmit'], consumerDirectory);
@@ -63,5 +66,10 @@ try {
 
   console.log('Electron Snapora ESM and CommonJS tarball consumers passed.');
 } finally {
-  rmSync(temporaryRoot, { recursive: true, force: true });
+  rmSync(temporaryRoot, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 200,
+  });
 }

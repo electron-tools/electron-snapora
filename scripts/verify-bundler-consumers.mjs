@@ -28,7 +28,10 @@ function runPnpm(args, cwd) {
 }
 
 function prepareConsumer() {
-  runPnpm(['pack', '--pack-destination', temporaryRoot], repositoryRoot);
+  runPnpm(
+    ['pack', '--config.ignore-scripts=true', '--pack-destination', temporaryRoot],
+    repositoryRoot
+  );
   const tarballName = readdirSync(temporaryRoot).find((name) => name.endsWith('.tgz'));
   if (!tarballName) {
     throw new Error('pnpm pack did not create an electron-snapora tarball.');
@@ -71,5 +74,10 @@ try {
   assertExternalized(join(consumerDirectory, 'out', 'webpack', 'main.cjs'), 'webpack');
   console.log('Electron Snapora electron-vite and webpack external checks passed.');
 } finally {
-  rmSync(temporaryRoot, { recursive: true, force: true });
+  rmSync(temporaryRoot, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 200,
+  });
 }

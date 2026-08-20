@@ -1,64 +1,99 @@
-# electron-snapora
+# electron-snapora — Electron screenshot and annotation toolkit
 
-Framework-agnostic screenshot and annotation toolkit for Electron applications.
+[English](https://github.com/electron-tools/electron-snapora/blob/main/README.md) | [简体中文](https://github.com/electron-tools/electron-snapora/blob/main/README.zh-CN.md) | [日本語](https://github.com/electron-tools/electron-snapora/blob/main/README.ja.md) | [한국어](https://github.com/electron-tools/electron-snapora/blob/main/README.ko.md) | [Español](https://github.com/electron-tools/electron-snapora/blob/main/README.es.md)
 
-## Status
+Add region screenshot capture, a snipping overlay, annotations, clipboard copy, and PNG export to Electron applications.
 
-The main-process screenshot lifecycle, interactive region selection, six annotation tools, native
-save dialog, clipboard output, and PNG export are implemented. The package captures the requested
-display, opens an isolated overlay, validates its IPC messages, and settles each job exactly once.
+## Features
 
-## Goals
+- Electron screenshot and screen capture.
+- Region capture with an interactive snipping overlay.
+- Screenshot editing with rectangle, ellipse, arrow, brush, text, and mosaic annotations.
+- Clipboard copy and native PNG save.
+- TypeScript, ESM, and CommonJS support.
 
-- Fast integration into Electron applications.
-- A framework-independent TypeScript and Canvas drawing core.
-- A self-contained screenshot overlay that does not depend on the host UI stack.
-- No native addon or post-install compilation in the default package.
-- A narrow, typed IPC contract between renderer and main processes.
-- PNG output without coupling the package to storage, upload, or product logic.
+Repository: [github.com/electron-tools/electron-snapora](https://github.com/electron-tools/electron-snapora)
 
-## Package entry points
+## Quick start
 
-```ts
-import { ScreenshotManager } from 'electron-snapora/main';
-import { exposeScreenshotApi } from 'electron-snapora/preload';
-import { normalizeRect } from 'electron-snapora/core';
+Requirements: Node.js 20 or newer and Electron `>=42 <44`.
+
+### 1. Install
+
+```bash
+npm install electron-snapora
 ```
 
-## Minimal integration
+Keep the package in the application's production `dependencies`. It contains the screenshot UI and
+Preload files needed by the packaged application.
 
-Main process:
+### 2. Set up the main process
+
+`setupElectronSnapora()` creates the screenshot manager, registers IPC, and gives the window a
+ready-to-use Preload path:
 
 ```ts
 import { app, BrowserWindow, ipcMain } from 'electron';
-import {
-  ScreenshotManager,
-  registerScreenshotIpc,
-  resolveHostPreloadPath,
-} from 'electron-snapora/main';
-
-const screenshotManager = new ScreenshotManager();
+import { setupElectronSnapora } from 'electron-snapora/main';
 
 app.whenReady().then(() => {
-  const unregister = registerScreenshotIpc({
-    ipcMain,
-    manager: screenshotManager,
-  });
-
-  const window = new BrowserWindow({
+  const snapora = setupElectronSnapora({ ipcMain });
+  const mainWindow = new BrowserWindow({
     webPreferences: {
-      preload: resolveHostPreloadPath(),
-      nodeIntegration: false,
+      preload: snapora.preloadPath,
       contextIsolation: true,
       sandbox: true,
     },
   });
 
-  app.once('before-quit', unregister);
+  mainWindow.loadFile('index.html');
+  app.once('before-quit', snapora.unregister);
 });
 ```
 
-If the application already has its own preload, import the helper there instead:
+That is the complete default integration. Keep `electron-snapora` external when bundling the Electron
+main process so its packaged HTML, CSS, and Preload files remain beside the library entry point. See
+[Bundling and packaging](#bundling-and-packaging) for electron-vite, Webpack, electron-builder, and
+Forge examples.
+
+### 3. Capture from the renderer
+
+```ts
+const result = await window.electronSnapora.capture({ display: 'cursor' });
+
+if (result.status === 'completed') {
+  // PNG bytes for upload, preview, or other host application logic.
+  console.log(result.data, result.bounds, result.output);
+}
+```
+
+The screenshot overlay lets the user select a region, draw rectangles, ellipses, arrows, brush
+strokes, text, or mosaic, then copy or save the final PNG. `Escape` cancels. The result is always one
+of `completed`, `cancelled`, or `failed`, so callers do not need exception-based control flow for
+normal user actions.
+
+Cancel an active task from the same renderer with:
+
+```ts
+await window.electronSnapora.cancel();
+```
+
+For TypeScript, declare the injected renderer API once in the host application:
+
+```ts
+import type { ScreenshotRendererApi } from 'electron-snapora/types';
+
+declare global {
+  interface Window {
+    electronSnapora: ScreenshotRendererApi;
+  }
+}
+```
+
+## Applications with an existing Preload
+
+Keep the main-process setup, ignore `snapora.preloadPath`, and expose the API from the application's
+own bundled Preload:
 
 ```ts
 import { contextBridge, ipcRenderer } from 'electron';
@@ -67,20 +102,19 @@ import { exposeScreenshotApi } from 'electron-snapora/preload';
 exposeScreenshotApi({ contextBridge, ipcRenderer });
 ```
 
-Sandboxed preload scripts cannot load arbitrary npm modules at runtime. Existing host preloads
-must therefore be bundled by the application's build tool. `resolveHostPreloadPath()` points to
-the package's pre-bundled default preload and needs no additional configuration.
+Sandboxed Preload scripts cannot load arbitrary npm modules at runtime, so an existing host Preload
+must be bundled. Applications without an existing Preload should use the package-provided path from
+the quick start and need no extra Preload configuration.
 
-### IPC sender authorization
+## Custom page origins
 
-`registerScreenshotIpc()` always rejects iframe calls. By default it also accepts only a top-level
-page loaded through `BrowserWindow.loadFile()`. Applications that use a custom protocol or a local
-development server must explicitly authorize that origin:
+For safety, screenshot IPC accepts only top-level pages loaded with `BrowserWindow.loadFile()` by
+default and always rejects iframe calls. If the host uses a custom protocol or local development
+server, allow only the exact trusted origins:
 
 ```ts
-const unregister = registerScreenshotIpc({
+const snapora = setupElectronSnapora({
   ipcMain,
-  manager: screenshotManager,
   validateSender(event) {
     const senderUrl = event.senderFrame?.url;
     if (!senderUrl) return false;
@@ -94,56 +128,26 @@ const unregister = registerScreenshotIpc({
 });
 ```
 
-The package still enforces the top-level-frame rule when a custom validator is present.
-`ScreenshotOptions` are parsed again in the main process; unknown fields, invalid enum values,
-oversized strings, and inconsistent `tools` / `defaultTool` combinations return an
-`INVALID_REQUEST` result without starting screen capture.
+Snapora still enforces the top-level-frame rule. It also parses capture options again in the main
+process and returns `INVALID_REQUEST` before screen capture for unknown or invalid values.
 
-Renderer:
+## Package entry points
 
-```ts
-const result = await window.electronSnapora.capture({ display: 'cursor' });
-
-if (result.status === 'completed') {
-  // result.data is a PNG Uint8Array.
-  // result.bounds is the selected region in global Electron Screen DIP coordinates.
-  // result.output.action is "copy" or "save".
-  if (result.output.action === 'save') {
-    console.log(`Saved to ${result.output.filePath}`);
-  }
-}
-```
-
-Cancel an active task from the same host renderer when its screen or route is leaving:
+Most applications need only `electron-snapora/main` and the injected `window.electronSnapora` API.
+The other entry points support custom Preloads and advanced integrations:
 
 ```ts
-const cancelled = await window.electronSnapora.cancel();
+import { setupElectronSnapora } from 'electron-snapora/main';
+import { exposeScreenshotApi } from 'electron-snapora/preload';
+import { normalizeRect } from 'electron-snapora/core';
 ```
 
-The pending `capture()` promise then resolves with `{ status: 'cancelled' }`. A task is also
-cancelled automatically if the host `WebContents` that started it is destroyed. Custom capture
-channels automatically use a matching `<channel>:cancel` channel unless `cancelChannel` is set on
-both `registerScreenshotIpc()` and `exposeScreenshotApi()`.
+The default package has no native addon and no post-install compilation.
 
-In the overlay, drag on the captured frame to create a region. The region can be moved or resized
-from eight handles. Rectangle, ellipse, arrow, brush, text, and mosaic annotations are available;
-annotations can be selected, moved, resized, deleted, undone, and redone. Color, line width, and
-font size are configurable.
+## Advanced configuration
 
-- **Copy & Done**, `Enter`, or double-clicking inside an existing selection: copy the composited PNG
-  to the operating-system clipboard, then return it to the host application. After the capture mask
-  disappears, a separate click-through warning-colored toast window confirms the copy for three
-  seconds without delaying the returned result. It is shown only after its renderer is ready, so a
-  fast copy does not flash an intermediate loading state. Starting another capture dismisses any
-  remaining toast first, so feedback cannot leak into the next screenshot. The full-screen capture
-  window remains opaque with a fixed page zoom; transparency is limited to the small feedback
-  window to keep Screen DIP and captured pixels visually aligned.
-- **Save**: open Electron's native save dialog, choose a local filename/directory, and write PNG.
-- **Escape**: cancel the screenshot task.
-
-CSS interaction coordinates are mapped against the captured frame's actual pixel dimensions, so
-the PNG remains aligned on mixed-DPI and high-resolution displays. Dialog, clipboard, and file
-system capabilities remain in the main process and are not exposed to the host renderer.
+Pass manager settings through `setupElectronSnapora()` so the simple integration shape stays the
+same as requirements grow.
 
 ### Theme and localization
 
@@ -182,15 +186,18 @@ selection-handle colors.
 
 ### Host policy injection
 
-Most applications can use `new ScreenshotManager()` without configuration. Applications with a
-custom capture source, storage policy, or overlay host can replace those dependencies directly:
+Applications with a custom capture source, storage policy, or overlay host can pass those
+dependencies without changing the setup flow:
 
 ```ts
-const screenshotManager = new ScreenshotManager({
-  captureAdapter: myCaptureAdapter,
-  outputAdapter: myOutputAdapter,
-  createOverlay: (display) => myOverlayFactory.create(display),
-  overlayReadyTimeoutMs: 15_000,
+const snapora = setupElectronSnapora({
+  ipcMain,
+  managerOptions: {
+    captureAdapter: myCaptureAdapter,
+    outputAdapter: myOutputAdapter,
+    createOverlay: (display) => myOverlayFactory.create(display),
+    overlayReadyTimeoutMs: 15_000,
+  },
 });
 ```
 
@@ -207,11 +214,14 @@ that omit this method keep the compatible capture-then-load sequence.
 Resource limits can be lowered per host application:
 
 ```ts
-const screenshotManager = new ScreenshotManager({
-  resourceLimits: {
-    maxCapturePixels: 32 * 1024 * 1024,
-    maxCaptureDataUrlBytes: 96 * 1024 * 1024,
-    maxOutputBytes: 32 * 1024 * 1024,
+const snapora = setupElectronSnapora({
+  ipcMain,
+  managerOptions: {
+    resourceLimits: {
+      maxCapturePixels: 32 * 1024 * 1024,
+      maxCaptureDataUrlBytes: 96 * 1024 * 1024,
+      maxOutputBytes: 32 * 1024 * 1024,
+    },
   },
 });
 ```
@@ -221,7 +231,7 @@ ceilings are 128 Mi pixels / 256 MiB / 256 MiB. Invalid configuration fails duri
 construction; oversized capture adapters and Overlay output are rejected with
 `RESOURCE_LIMIT_EXCEEDED` or `INVALID_REQUEST` before clipboard or disk processing.
 
-### Bundling and packaging
+## Bundling and packaging
 
 Keep `electron-snapora` in the application's production `dependencies` and externalize it from the
 Electron main-process bundle. Its main entry locates sibling Overlay HTML, CSS, and Preload files
@@ -264,17 +274,11 @@ Vite or Webpack main-process config. Forge projects that use pnpm should use a h
 `node_modules` layout because Forge discovers production dependencies from the physical dependency
 tree.
 
-Add the renderer type once in the host application:
+### Published package contents
 
-```ts
-import type { ScreenshotRendererApi } from 'electron-snapora/types';
-
-declare global {
-  interface Window {
-    electronSnapora: ScreenshotRendererApi;
-  }
-}
-```
+The npm package contains only the compiled ESM/CommonJS entry points, TypeScript declarations,
+Preloads, Overlay HTML/CSS/JavaScript, package metadata, README, changelog, and license. Source files,
+tests, demos, repository documentation, CI configuration, and release scripts are not published.
 
 ## Support baseline
 
@@ -293,10 +297,6 @@ Electron officially supports only its latest three stable major lines. This pack
 compatibility with an Electron version merely because installation succeeds; the peer range is
 expanded only after its capture, Overlay, preload, and packaging matrix passes. Native Wayland is
 especially not assumed equivalent to X11 because Electron documents limitations in its Screen API.
-
-A synthetic high-entropy 3840×2160 PNG stress run on the Windows x64 development host produced a
-28,535,687-byte PNG in 273.4 ms with a 399.11 MiB aggregate peak working set. This is a regression
-reference, not a guarantee for other hardware; Retina validation remains part of the macOS lane.
 
 ### macOS permission
 
@@ -332,9 +332,12 @@ keeps existing behavior: a second call immediately resolves with `CAPTURE_BUSY`.
 multiple host windows can opt into a bounded FIFO queue:
 
 ```ts
-const screenshotManager = new ScreenshotManager({
-  busyPolicy: 'queue',
-  maxQueuedCaptures: 4,
+const snapora = setupElectronSnapora({
+  ipcMain,
+  managerOptions: {
+    busyPolicy: 'queue',
+    maxQueuedCaptures: 4,
+  },
 });
 ```
 
@@ -343,19 +346,23 @@ so repeated button clicks still return `CAPTURE_BUSY`; a full queue does the sam
 renderer task or destroying that `WebContents` removes its queued request before an Overlay can be
 opened. `queuedCaptureCount` exposes the current queue length for diagnostics.
 
-Use one manager for one application-wide screenshot lane, or separate managers only when the
-application intentionally supports independent capture lanes. Call the cleanup returned by
-`registerScreenshotIpc()` during app shutdown or main-process hot reload. Active-task completion,
-cancellation, and failure all advance the queue and release Overlay listeners and windows.
+Use one setup for one application-wide screenshot lane, or separate managers only when the
+application intentionally supports independent capture lanes. `snapora.manager.queuedCaptureCount`
+exposes the queue length, and `snapora.unregister()` cleans up IPC during shutdown or main-process
+hot reload. Active-task completion, cancellation, and failure all advance the queue and release
+Overlay listeners and windows.
 
 ### Main-process diagnostics
 
 Use the optional structured hook to feed application logs or performance telemetry:
 
 ```ts
-const screenshotManager = new ScreenshotManager({
-  onDiagnostic(event) {
-    logger.debug('electron-snapora', event);
+const snapora = setupElectronSnapora({
+  ipcMain,
+  managerOptions: {
+    onDiagnostic(event) {
+      logger.debug('electron-snapora', event);
+    },
   },
 });
 ```
@@ -383,33 +390,3 @@ thrown by the application's logger are isolated and never change the screenshot 
 | `EXPORT_FAILED`           | Clipboard, save dialog, PNG encoding, or file output failed.     |
 | `INVALID_RESULT`          | The Overlay returned an invalid result or lifecycle message.     |
 | `UNSUPPORTED_PLATFORM`    | The current OS/display protocol is explicitly unsupported.       |
-
-## Development
-
-```bash
-pnpm install
-pnpm check
-```
-
-Useful commands:
-
-```bash
-pnpm dev
-pnpm demo
-pnpm demo:selection-smoke
-pnpm demo:copy-smoke
-pnpm demo:double-click-smoke
-pnpm demo:stress-4k
-pnpm verify:consumers
-pnpm verify:bundlers
-pnpm verify:electron-matrix
-pnpm verify:packaged
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
-```
-
-The architecture and staged delivery plan are documented in
-[`docs/implementation-plan.md`](docs/implementation-plan.md). Execution status and acceptance
-criteria are tracked in [`docs/plan.md`](docs/plan.md).

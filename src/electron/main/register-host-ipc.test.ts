@@ -2,12 +2,17 @@ import { EventEmitter } from 'node:events';
 import type { IpcMain, IpcMainInvokeEvent } from 'electron';
 import { describe, expect, it, vi } from 'vitest';
 
+vi.mock('./resource-paths.js', () => ({
+  resolveHostPreloadPath: () =>
+    'C:\\app\\node_modules\\electron-snapora\\dist\\preload\\auto.cjs',
+}));
+
 import {
   DEFAULT_HOST_CANCEL_CHANNEL,
   DEFAULT_HOST_CAPTURE_CHANNEL,
 } from '../protocol/channels.js';
-import type { ScreenshotManager } from './screenshot-manager.js';
-import { registerScreenshotIpc } from './register-host-ipc.js';
+import { ScreenshotManager } from './screenshot-manager.js';
+import { registerScreenshotIpc, setupElectronSnapora } from './register-host-ipc.js';
 
 type CaptureHandler = (event: IpcMainInvokeEvent, options: unknown) => unknown;
 
@@ -149,5 +154,36 @@ describe('registerScreenshotIpc', () => {
     expect(harness.cancel).toHaveBeenCalledWith(7);
     finishCapture?.();
     await expect(result).resolves.toEqual({ status: 'cancelled' });
+  });
+});
+
+describe('setupElectronSnapora', () => {
+  it('creates the manager, registers IPC, and returns the bundled preload path', () => {
+    const handlers = new Map<string, CaptureHandler>();
+    const removeHandler = vi.fn();
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: CaptureHandler) => {
+        handlers.set(channel, handler);
+      }),
+      removeHandler,
+    } as unknown as IpcMain;
+
+    const snapora = setupElectronSnapora({
+      ipcMain,
+      managerOptions: {
+        runner: async () => ({ status: 'cancelled' }),
+      },
+    });
+
+    expect(snapora.manager).toBeInstanceOf(ScreenshotManager);
+    expect(snapora.preloadPath).toBe(
+      'C:\\app\\node_modules\\electron-snapora\\dist\\preload\\auto.cjs'
+    );
+    expect(handlers.has(DEFAULT_HOST_CAPTURE_CHANNEL)).toBe(true);
+    expect(handlers.has(DEFAULT_HOST_CANCEL_CHANNEL)).toBe(true);
+
+    snapora.unregister();
+    expect(removeHandler).toHaveBeenCalledWith(DEFAULT_HOST_CAPTURE_CHANNEL);
+    expect(removeHandler).toHaveBeenCalledWith(DEFAULT_HOST_CANCEL_CHANNEL);
   });
 });
