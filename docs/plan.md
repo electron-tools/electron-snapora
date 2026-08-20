@@ -171,24 +171,24 @@ M4 按照“先关闭发布阻塞，再完善公共能力，最后发布”的�
   - 验收：成功、取消、输出超限、队列等待、资源缺失和日志钩子抛错均有自动化覆盖。
 - [ ] M4.10 Overlay 结构拆分：将 900 行以上入口拆为初始化、选择交互、标注交互、输出、本地化和视图渲染模块。
 - [-] M4.11 发布包精简：评估 Source Map、内部未导出 ESM Preload 和辅助声明文件，控制包体积并保留必要调试能力。
-  - [x] 建立 50 个条目、165,735 bytes 压缩体积的 tarball 基线，并确认源码、测试、Demo、CI、内部文档和发布脚本均未进入 npm 包。
+  - [x] 建立 50 个条目、165,861 bytes 压缩体积的 tarball 基线，并确认源码、测试、Demo、CI、内部文档和发布脚本均未进入 npm 包。
   - [x] 识别 Source Map、内部 Overlay ESM Preload/声明及默认宿主 ESM Preload 为候选精简项。
-  - [ ] 首个 beta 保留 Source Map 供真实宿主排错；提升 `latest` 前根据诊断收益决定是否裁剪，并重新执行完整消费验证。
+  - [x] 正式版 1.0.1 保留 Source Map 供真实宿主排错；后续版本根据诊断收益决定是否裁剪，并重新执行完整消费验证。
 
 ### P2：npm 发布
 
-- [-] M4.12 设置首个公开版本、CHANGELOG、发布标签和兼容性说明。
-  - [x] 建立 `CHANGELOG.md` 的 Unreleased 基线，并将预发布默认固定到 npm `next` tag。
+- [x] M4.12 设置首个公开版本、CHANGELOG、发布标签和兼容性说明。
+  - [x] 将 `CHANGELOG.md` 发布记录确定为 1.0.1，并将正式版发布标签设置为 npm `latest`。
   - [x] 在内部发布文档记录主版本、次版本和修订版本的可复制命令，自动执行 SemVer 自增且不暴露到 npm manifest。
-  - [ ] 由项目所有者确定首个 prerelease 版本并补充对应兼容性说明。
+  - [x] 项目所有者确定首个正式版本为 1.0.1，并补充 Node.js 20、Electron 42～43 兼容性说明。
 - [x] M4.13 增加 `prepack`/`prepublishOnly`，发布前强制执行检查、构建、tarball 内容和独立消费测试。
   - [x] `prepack` 每次重建 `dist`；独立消费脚本使用 pnpm `ignore-scripts` 配置避免嵌套 pack 重复触发生命周期。
   - [x] `release:check` 串联质量、构建、发布元数据和四类真实消费/成品验证。
-  - [x] 发布元数据门禁拒绝 `0.0.0`、缺失许可证、错误 registry 和 prerelease 误发 `latest`。
+  - [x] 发布元数据门禁拒绝 `0.0.0`、缺失许可证、错误 registry，并按版本类型约束 prerelease 使用 `next`、正式版使用 `latest`。
 - [-] M4.14 建立 GitHub Actions：Windows/macOS/Linux 检查、npm Trusted Publishing、provenance 和 2FA 发布保护。
   - [x] 建立 Windows/macOS/Linux `pnpm check` 与 Windows 完整 npm 消费矩阵 CI。
   - [ ] 首次包所有权建立后配置 npm Trusted Publisher、OIDC 发布 workflow、provenance 和 2FA 保护。
-- [ ] M4.15 先发布 alpha/beta 并完成真实宿主试用，再将验证版本提升为 npm `latest`。
+- [-] M4.15 发布正式版 1.0.1 到 npm `latest`，并在发布后完成安装验证。
 
 ### P3：发布后增强
 
@@ -212,7 +212,7 @@ M3 功能与视觉阶段已完成，当前进入 M4 发布准备阶段，严格�
 7. M4.7～M4.11 使用者体验、维护性和包体积完善。
 8. M4.12～M4.15 alpha/beta、CI 和正式 npm 发布。
 
-当前任务：M3.23 复制反馈与截图层稳定性修复已完成；M4.1～M4.3、M4.6～M4.9、M4.13 已完成；M4.11 已建立 tarball 基线并记录精简候选；M4.12 等待首个版本决策；M4.14 等待首次包所有权后配置 Trusted Publishing；M4.4 剩余 ARM64、签名 Mac 与 Linux 验收。
+当前任务：M3.23 复制反馈与截图层稳定性修复已完成；M4.1～M4.3、M4.6～M4.13 已完成；M4.15 正在发布正式版 1.0.1；M4.14 等待首次包所有权后配置 Trusted Publishing；M4.4 剩余 ARM64、签名 Mac 与 Linux 验收。
 
 ## 风险与约束
 

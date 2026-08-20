@@ -11,7 +11,7 @@ export function releaseMetadataErrors(packageJson, fileExists) {
     errors.push('package name must remain electron-snapora');
   }
   if (!packageJson.version || packageJson.version === '0.0.0') {
-    errors.push('replace version 0.0.0 with the approved prerelease version');
+    errors.push('replace version 0.0.0 with the approved release version');
   }
   if (!packageJson.license) {
     errors.push('choose an SPDX license and set package.json#license');
@@ -33,9 +33,10 @@ export function releaseMetadataErrors(packageJson, fileExists) {
   if (publishConfig.access !== 'public') {
     errors.push('publishConfig.access must be public');
   }
-  if (publishConfig.tag !== 'next') {
+  const expectedTag = packageJson.version?.includes('-') ? 'next' : 'latest';
+  if (publishConfig.tag !== expectedTag) {
     errors.push(
-      'publishConfig.tag must remain next until prerelease validation is complete'
+      `publishConfig.tag must be ${expectedTag} for ${packageJson.version?.includes('-') ? 'prerelease' : 'stable'} versions`
     );
   }
 

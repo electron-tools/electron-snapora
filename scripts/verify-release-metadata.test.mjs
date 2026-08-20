@@ -24,6 +24,20 @@ test('accepts complete prerelease metadata', () => {
   );
 });
 
+test('accepts a stable release published as latest', () => {
+  assert.deepEqual(
+    releaseMetadataErrors(
+      {
+        ...validPackage,
+        version: '1.0.1',
+        publishConfig: { ...validPackage.publishConfig, tag: 'latest' },
+      },
+      () => true
+    ),
+    []
+  );
+});
+
 test('reports owner decisions and unsafe publish targets', () => {
   const errors = releaseMetadataErrors(
     {
@@ -33,7 +47,7 @@ test('reports owner decisions and unsafe publish targets', () => {
       publishConfig: {
         access: 'restricted',
         registry: 'https://registry.npmmirror.com/',
-        tag: 'latest',
+        tag: 'next',
       },
     },
     () => false
@@ -43,5 +57,5 @@ test('reports owner decisions and unsafe publish targets', () => {
   assert.ok(errors.some((error) => error.includes('version 0.0.0')));
   assert.ok(errors.some((error) => error.includes('SPDX license')));
   assert.ok(errors.some((error) => error.includes('registry.npmjs.org')));
-  assert.ok(errors.some((error) => error.includes('must remain next')));
+  assert.ok(errors.some((error) => error.includes('must be latest')));
 });
