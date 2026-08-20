@@ -185,6 +185,7 @@ M4 按照“先关闭发布阻塞，再完善公共能力，最后发布”的�
   - [x] `prepack` 每次重建 `dist`；独立消费脚本使用 pnpm `ignore-scripts` 配置避免嵌套 pack 重复触发生命周期。
   - [x] `release:check` 串联质量、构建、发布元数据和四类真实消费/成品验证。
   - [x] 发布元数据门禁拒绝 `0.0.0`、缺失许可证、错误 registry，并按版本类型约束 prerelease 使用 `next`、正式版使用 `latest`。
+  - [x] 包消费脚本兼容本地 pnpm JavaScript CLI 与 GitHub Windows runner 的 `pnpm` 命令入口。
 - [-] M4.14 建立 GitHub Actions：Windows/macOS/Linux 检查、npm Trusted Publishing、provenance 和 2FA 发布保护。
   - [x] 建立 Windows/macOS/Linux `pnpm check` 与 Windows 完整 npm 消费矩阵 CI。
   - [ ] 首次包所有权建立后配置 npm Trusted Publisher、OIDC 发布 workflow、provenance 和 2FA 保护。

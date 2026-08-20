@@ -21,7 +21,20 @@ if (!pnpmCli) {
 }
 
 function runPnpm(args, cwd) {
-  execFileSync(process.execPath, [pnpmCli, ...args], {
+  const isJavaScriptCli = /\.[cm]?js$/i.test(pnpmCli);
+  const isWindowsShim = process.platform === 'win32' && pnpmCli === 'pnpm';
+  const executable = isJavaScriptCli
+    ? process.execPath
+    : isWindowsShim
+      ? (process.env.ComSpec ?? 'cmd.exe')
+      : pnpmCli;
+  const commandArgs = isJavaScriptCli
+    ? [pnpmCli, ...args]
+    : isWindowsShim
+      ? ['/d', '/s', '/c', pnpmCli, ...args]
+      : args;
+
+  execFileSync(executable, commandArgs, {
     cwd,
     stdio: 'inherit',
   });
