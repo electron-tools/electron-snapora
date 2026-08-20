@@ -119,7 +119,7 @@ M4 按照“先关闭发布阻塞，再完善公共能力，最后发布”的�
   - [x] M4.3.4 验证 CJS、ESM、NodeNext 类型解析；让 `require` 条件使用生成的 `.d.cts`。
   - 验收：独立消费项目在开发态和安装包中均可截图；缺失资源时返回可定位的错误，不出现白屏或静默超时。
 - [-] M4.4 Electron 与操作系统支持基线。
-  - [x] M4.4.1 对齐 Node 构建目标、`engines` 与 Electron peer 范围，移除未经验证的 Electron 28 承诺。
+  - [x] M4.4.1 对齐 Node 构建目标、`engines` 与 Electron peer 最低版本，将 Electron 42 设为下限。
   - [-] M4.4.2 建立当前 Electron、最低支持版本的 Windows x64 自动化矩阵，并补充 Windows ARM64 手工验收。
     - [x] Windows 11 x64 上 Electron 42.8.0、43.3.0 的真实捕获/Overlay 矩阵通过。
     - [ ] Windows ARM64 实机验收。
@@ -171,7 +171,7 @@ M4 按照“先关闭发布阻塞，再完善公共能力，最后发布”的�
   - 验收：成功、取消、输出超限、队列等待、资源缺失和日志钩子抛错均有自动化覆盖。
 - [ ] M4.10 Overlay 结构拆分：将 900 行以上入口拆为初始化、选择交互、标注交互、输出、本地化和视图渲染模块。
 - [-] M4.11 发布包精简：评估 Source Map、内部未导出 ESM Preload 和辅助声明文件，控制包体积并保留必要调试能力。
-  - [x] 建立 50 个条目、165,861 bytes 压缩体积的 tarball 基线，并确认源码、测试、Demo、CI、内部文档和发布脚本均未进入 npm 包。
+  - [x] 更新 1.0.2 的 tarball 基线为 50 个条目、165,943 bytes，并确认源码、测试、Demo、CI、内部文档和发布脚本均未进入 npm 包。
   - [x] 识别 Source Map、内部 Overlay ESM Preload/声明及默认宿主 ESM Preload 为候选精简项。
   - [x] 正式版 1.0.1 保留 Source Map 供真实宿主排错；后续版本根据诊断收益决定是否裁剪，并重新执行完整消费验证。
 
@@ -180,7 +180,7 @@ M4 按照“先关闭发布阻塞，再完善公共能力，最后发布”的�
 - [x] M4.12 设置首个公开版本、CHANGELOG、发布标签和兼容性说明。
   - [x] 将 `CHANGELOG.md` 发布记录确定为 1.0.1，并将正式版发布标签设置为 npm `latest`。
   - [x] 在内部发布文档记录主版本、次版本和修订版本的可复制命令，自动执行 SemVer 自增且不暴露到 npm manifest。
-  - [x] 项目所有者确定首个正式版本为 1.0.1，并补充 Node.js 20、Electron 42～43 兼容性说明。
+  - [x] 项目所有者确定首个正式版本为 1.0.1，并补充 Node.js 20、Electron 42 最低版本与验证矩阵说明。
 - [x] M4.13 增加 `prepack`/`prepublishOnly`，发布前强制执行检查、构建、tarball 内容和独立消费测试。
   - [x] `prepack` 每次重建 `dist`；独立消费脚本使用 pnpm `ignore-scripts` 配置避免嵌套 pack 重复触发生命周期。
   - [x] `release:check` 串联质量、构建、发布元数据和四类真实消费/成品验证。
@@ -190,6 +190,7 @@ M4 按照“先关闭发布阻塞，再完善公共能力，最后发布”的�
   - [x] 建立 Windows/macOS/Linux `pnpm check` 与 Windows 完整 npm 消费矩阵 CI。
   - [ ] 首次包所有权建立后配置 npm Trusted Publisher、OIDC 发布 workflow、provenance 和 2FA 保护。
 - [x] M4.15 发布正式版 1.0.1 到 npm `latest`，并在发布后完成 registry 元数据与真实安装验证。
+- [-] M4.15.1 发布修订版 1.0.2，开放 Electron 42 以上 peer 范围并强化最低版本安装说明。
 
 ### P3：发布后增强
 
@@ -213,7 +214,7 @@ M3 功能与视觉阶段已完成，当前进入 M4 发布准备阶段，严格�
 7. M4.7～M4.11 使用者体验、维护性和包体积完善。
 8. M4.12～M4.15 alpha/beta、CI 和正式 npm 发布。
 
-当前任务：M3.23 复制反馈与截图层稳定性修复已完成；M4.1～M4.3、M4.6～M4.13、M4.15 已完成；正式版 1.0.1 已发布到 npm `latest`；M4.14 等待配置 Trusted Publishing；M4.4 剩余 ARM64、签名 Mac 与 Linux 验收。
+当前任务：修订版 1.0.2 正在发布；M3.23 复制反馈与截图层稳定性修复已完成；M4.1～M4.3、M4.6～M4.13、M4.15 已完成；M4.14 等待配置 Trusted Publishing；M4.4 剩余 ARM64、签名 Mac 与 Linux 验收。
 
 ## 风险与约束
 
@@ -265,7 +266,7 @@ M3 功能与视觉阶段已完成，当前进入 M4 发布准备阶段，严格�
 | 2026-08-19 | M4.1  | 宿主 Frame 授权、运行时参数白名单和 `INVALID_REQUEST`，78 个测试及真实回归通过            |
 | 2026-08-19 | M4.2  | 公共结果语义、程序化/窗口销毁取消和高层策略注入完成，86 个测试及真实 Electron 回归通过    |
 | 2026-08-19 | M4.3  | 真实 tgz 的 ESM/CJS、electron-vite/webpack、electron-builder ASAR/目录消费验收通过        |
-| 2026-08-19 | M4.4  | peer 收敛为 Electron 42～43；Windows 11 x64 的 42.8/43.3 真实捕获矩阵通过，跨平台项待验收 |
+| 2026-08-19 | M4.4  | peer 最低版本为 Electron 42；Windows 11 x64 的 42.8/43.3 真实捕获矩阵通过，跨平台项待验收 |
 | 2026-08-19 | M4.5  | 捕获/IPC/输出三层资源上限完成；4K 高熵 PNG 压力通过，Retina 数据待 macOS 实机补测         |
 | 2026-08-19 | M4.6  | 设计与接入文档已对齐，源码/配置/锁文件纳入 Git；许可证选择仍阻塞公开发布                  |
 | 2026-08-19 | M4.7  | 三层主题 Token、暗亮模式、完整文案回退和宿主覆盖完成；97 个测试及真实 Overlay 验收通过    |

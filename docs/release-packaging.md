@@ -103,12 +103,12 @@ pnpm run verify:release-metadata && pnpm version patch --no-git-tag-version && n
 
 ## 当前 tarball 基线
 
-2026-08-20 在 Windows 开发环境执行 `pnpm pack --dry-run` 和临时 tarball 检查得到：
+2026-08-20 对 `electron-snapora@1.0.2` 在 Windows 开发环境执行 `npm pack --dry-run` 和临时 tarball 检查得到：
 
 | 指标                 | 结果                  |
 | -------------------- | --------------------- |
 | tarball 条目         | 50                    |
-| tarball 压缩体积     | 165,861 bytes         |
+| tarball 压缩体积     | 165,943 bytes         |
 | `dist` 文件数        | 42                    |
 | `dist` 未压缩体积    | 640,036 bytes         |
 | Source Map           | 13 个 / 406,459 bytes |

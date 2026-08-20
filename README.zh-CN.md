@@ -14,12 +14,18 @@
 
 ## 快速开始
 
-环境要求：Node.js 20 或更高版本、Electron `>=42 <44`。
+**Electron 最低版本：** Electron 42。同时需要 Node.js 20 或更高版本。
 
 ### 1. 安装
 
 ```bash
 npm install electron-snapora
+```
+
+Electron 由宿主应用提供。如果项目还没有安装 Electron：
+
+```bash
+npm install --save-dev electron
 ```
 
 请将它保留在应用的生产环境 `dependencies` 中。

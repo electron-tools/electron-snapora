@@ -16,12 +16,18 @@ Repository: [github.com/electron-tools/electron-snapora](https://github.com/elec
 
 ## Quick start
 
-Requirements: Node.js 20 or newer and Electron `>=42 <44`.
+**Minimum Electron version:** Electron 42. Node.js 20 or newer is also required.
 
 ### 1. Install
 
 ```bash
 npm install electron-snapora
+```
+
+This package expects the host application to provide Electron. If Electron is not installed yet:
+
+```bash
+npm install --save-dev electron
 ```
 
 Keep the package in the application's production `dependencies`. It contains the screenshot UI and
@@ -282,9 +288,8 @@ tests, demos, repository documentation, CI configuration, and release scripts ar
 
 ## Support baseline
 
-The npm peer range is intentionally limited to Electron `>=42 <44`. The package is built for a
-Node.js 20 baseline and has passed the real capture/Overlay lifecycle on Windows 11 x64 with
-Electron 42.8.0 and 43.3.0.
+The minimum supported version is Electron 42. The package is built for a Node.js 20 baseline and has
+passed the real capture/Overlay lifecycle on Windows 11 x64 with Electron 42.8.0 and 43.3.0.
 
 | Environment                                      | Status                                                  |
 | ------------------------------------------------ | ------------------------------------------------------- |
@@ -293,10 +298,9 @@ Electron 42.8.0 and 43.3.0.
 | macOS, Retina and signed app                     | Code/tests complete; signed hardware validation pending |
 | Linux X11 / XWayland / native Wayland / PipeWire | Not yet declared supported                              |
 
-Electron officially supports only its latest three stable major lines. This package does not claim
-compatibility with an Electron version merely because installation succeeds; the peer range is
-expanded only after its capture, Overlay, preload, and packaging matrix passes. Native Wayland is
-especially not assumed equivalent to X11 because Electron documents limitations in its Screen API.
+New Electron majors remain subject to the capture, Overlay, preload, and packaging matrix. Native
+Wayland is especially not assumed equivalent to X11 because Electron documents limitations in its
+Screen API.
 
 ### macOS permission
 

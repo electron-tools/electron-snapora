@@ -1,6 +1,6 @@
 {
   "name": "electron-snapora",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Electron screenshot and annotation toolkit for region capture, editing, clipboard copy, and PNG export.",
   "license": "MIT",
   "keywords": [
@@ -135,7 +135,7 @@
   },
   "packageManager": "pnpm@11.19.0",
   "peerDependencies": {
-    "electron": ">=42 <44"
+    "electron": ">=42"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

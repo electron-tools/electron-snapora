@@ -14,7 +14,7 @@ Añade captura por región, selección interactiva, anotaciones, copia al portap
 
 ## Inicio rápido
 
-Requisitos: Node.js 20 o posterior y Electron `>=42 <44`.
+Requisitos: Node.js 20 o posterior y Electron 42 o posterior.
 
 ### 1. Instalar
 

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.2] - 2026-08-20
+
+### Changed
+
+- Declare Electron 42 as the minimum peer version without hard-coding the current tested maximum.
+
 ## [1.0.1] - 2026-08-20
 
 ### Added
