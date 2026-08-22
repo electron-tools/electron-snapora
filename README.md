@@ -8,8 +8,8 @@ Add region screenshot capture, a snipping overlay, annotations, clipboard copy, 
 
 - Electron screenshot and screen capture.
 - Region capture with an interactive snipping overlay.
-- Screenshot editing with rectangle, ellipse, arrow, brush, text, and mosaic annotations.
-- Clipboard copy and native PNG save.
+- Contextual presets for rectangle, ellipse, arrow, brush, text, adjustable mosaic, and tiled watermark annotations.
+- Clipboard copy, native PNG save, and pin-to-screen windows.
 - TypeScript, ESM, and CommonJS support.
 
 Repository: [github.com/electron-tools/electron-snapora](https://github.com/electron-tools/electron-snapora)
@@ -74,9 +74,14 @@ if (result.status === 'completed') {
 ```
 
 The screenshot overlay lets the user select a region, draw rectangles, ellipses, arrows, brush
-strokes, text, or mosaic, then copy or save the final PNG. `Escape` cancels. The result is always one
-of `completed`, `cancelled`, or `failed`, so callers do not need exception-based control flow for
-normal user actions.
+strokes, text, adjustable mosaic, or a tiled watermark, then copy, save, or pin the final PNG. `Escape` cancels. The result is
+always one of `completed`, `cancelled`, or `failed`, so callers do not need exception-based control
+flow for normal user actions.
+
+The vertical pin button creates an always-on-top frameless window at the selected screen position.
+Each pinned screenshot can be dragged independently or clicked to move above other pinned windows.
+The circular close control appears only while hovering the pinned window. Right-click to copy, save,
+or close it; a successful copy shows a localized in-window confirmation.
 
 Cancel an active task from the same renderer with:
 
@@ -166,6 +171,9 @@ await window.electronSnapora.capture({
   messages: {
     confirm: '复制到聊天框',
     copied: '截图已复制',
+    copy: '复制',
+    save: '保存',
+    close: '关闭',
   },
   theme: {
     mode: 'light',
@@ -183,6 +191,12 @@ Message resolution is deterministic: English baseline, selected built-in locale,
 overrides. This means a partial `messages` object always falls back to a complete accessible
 label set. Unknown message or theme keys, empty messages, and unsupported modes are rejected at
 the main-process IPC boundary.
+
+Pinned screenshots resolve their menu labels from the same `locale` and `messages` passed to the
+capture that created them. After a host language switch, pass the new locale to the next
+`capture()` call; newly pinned screenshots use it immediately. Existing pinned windows keep the
+language captured at creation because they are independent desktop windows and there is no global
+host-language subscription.
 
 Theme styling uses three layers: internal base colors, public semantic colors, and private
 component aliases. `ScreenshotTheme` only changes semantic values, so applications do not depend
@@ -328,6 +342,25 @@ With `display: 'cursor'`, Snapora resolves the display under the pointer once at
 that display ID through capture and Overlay creation. If the monitor is disconnected or its geometry
 or scale changes during startup, the task fails with `DISPLAY_NOT_FOUND` and should be retried instead
 of displaying a screenshot on the wrong monitor.
+
+### Window snapping
+
+Before a freehand selection starts, hovering a visible window from the current Electron process
+previews its bounds; click to select that exact region, or drag at least 4px to switch back to a
+freehand selection. Hosts with platform-native external-window discovery can provide global Screen
+DIP bounds through `managerOptions.getWindowSnapRegions`:
+
+```ts
+const snapora = setupElectronSnapora({
+  ipcMain,
+  managerOptions: {
+    getWindowSnapRegions: () => nativeWindowBounds,
+  },
+});
+```
+
+Electron does not expose external application window bounds directly, so the default provider is
+limited to the current application's visible `BrowserWindow` instances.
 
 ### Lifecycle and concurrency
 

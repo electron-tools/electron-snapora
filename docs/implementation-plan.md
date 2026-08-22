@@ -412,28 +412,36 @@ Pointer / Text Input
   → Offscreen Canvas Final Composition
 ```
 
-- 支持矩形、椭圆、箭头、画笔、文字和马赛克六类元素。
+- 支持矩形、椭圆、箭头、画笔、文字和马赛克六类可选元素，并提供覆盖整个选区的平铺文字水印。
 - 选择工具提供命中检测、移动、八方向缩放和删除；所有提交操作支持撤销、重做。
-- 颜色、线宽、字号和文字布局指标存入元素本身，保证文档可序列化和重放；马赛克块大小属于渲染常量，不进入元素模型。
+- 颜色、线宽、字号、文字样式、文字布局指标和马赛克块大小存入元素本身，保证文档可序列化和重放；旧文字文档缺少样式时回退到默认文字，旧马赛克文档缺少块大小时回退到 8 Image Pixel。
 - 样式控件既更新后续绘制的默认值，也更新当前选中元素；对已选元素的修改通过 `UpdateElementCommand` 进入撤销、重做历史。
-- 文字编辑器保持 Canvas `pointerdown` 后的输入焦点，`Shift + Enter` 创建多行，`Enter` 提交；点击另一个 Canvas 区域时必须先提交当前 textarea，再清空并打开下一次输入，避免复用输入框导致未回车内容丢失。文字提交后默认不选中，只有切换到选择工具并再次点击文字才显示 resize 控制点。输入框、预览、命中边界和最终 PNG 使用相同的字体与 1.3 倍多行行高。提交时将 textarea 的边框、内边距及行框半行留白按当前 DPI 换算为 Image Pixel，并使用同字体的 `fontBoundingBoxAscent/Descent` 计算 Canvas 首行基线；字体框指标不可用时再回退到实际字形指标，使 Windows 等平台确认前后的文字保持原位。文字提交时通过 Canvas `measureText()` 记录实际宽度、上升部和下降部，中文全角字符、英文及混排文字都以真实布局指标计算选中框，字号调整和缩放时同步按比例更新指标。
-- 颜色控件在全部工具状态下常显，位于第二个标注工具分栏的第一位；历史与属性面板始终只展示当前有效的线宽或字号控件，不保留无意义空位。
-- 马赛克采用 Lark 风格的框选区域：拖动时实时渲染矩形马赛克，并叠加 24% 蓝色底纹、深色外描边和亮蓝虚线内描边，在明暗或复杂背景上都能清楚识别范围，但不显示控制点；松开后取消临时反馈，切换到选择工具并点击区域时才显示八方向控制点，随后可拖拽或缩放。像素块固定为 8 Image Pixel，不提供 size 控件；渲染时将网格对齐到原图，只截取框选周边缩小并使用高质量平均色，再关闭平滑放大，避免整屏单点降采样产生大块纯白或纯灰。底纹、边框和控制点都属于交互反馈，不进入最终 PNG。
+- 文字编辑器保持 Canvas `pointerdown` 后的输入焦点，`Shift + Enter` 创建多行，`Enter` 提交；点击另一个 Canvas 区域时必须先提交当前 textarea，再清空并打开下一次输入，避免复用输入框导致未回车内容丢失。文字预设提供默认、填充和描边三种样式：填充以当前颜色绘制圆角色块并自动选择黑白对比文字，描边以当前颜色填字并增加黑白对比描边；输入态、预览和最终 PNG 保持一致。文字提交后默认不选中，只有切换到选择工具并再次点击文字才显示 resize 控制点。输入框、预览、命中边界和最终 PNG 使用相同的字体与 1.3 倍多行行高。提交时将 textarea 的边框、内边距及行框半行留白按当前 DPI 换算为 Image Pixel，并使用同字体的 `fontBoundingBoxAscent/Descent` 计算 Canvas 首行基线；字体框指标不可用时再回退到实际字形指标，使 Windows 等平台确认前后的文字保持原位。文字提交时通过 Canvas `measureText()` 记录实际宽度、上升部和下降部，中文全角字符、英文及混排文字都以真实布局指标计算选中框，字号调整和缩放时同步按比例更新指标。
+- 主工具栏只保留工具、历史和输出操作；选择矩形、椭圆、箭头、画笔、文字、马赛克或水印时，在下方显示与当前工具匹配的预设面板，自定义颜色控件位于颜色预设末尾。
+- 自定义颜色使用 Overlay 内的 HSV 取色器，不再打开系统色盘；入口只显示完整彩环，不叠加中央色值圆点，选中对钩与固定颜色预设共用尺寸和线宽。饱和度/明度区域与底部色相条共用同一宽度 Token，深浅主题和弹出位置均由 Overlay 控制。
+- 马赛克采用 Lark 风格的框选区域：拖动时实时渲染矩形马赛克，并叠加 24% 蓝色底纹、深色外描边和亮蓝虚线内描边，在明暗或复杂背景上都能清楚识别范围，但不显示控制点；松开后取消临时反馈，切换到选择工具并点击区域时才显示八方向控制点，随后可拖拽或缩放。预设面板只保留矩形区域模式与模糊度滑杆，块大小按当前 DPI 存入元素；渲染时将网格对齐到原图，只截取框选周边缩小并使用高质量平均色，再关闭平滑放大，避免整屏单点降采样产生大块纯白或纯灰。底纹、边框和控制点都属于交互反馈，不进入最终 PNG。
+- 水印面板提供最多 16 个字符的文字、不透明度和颜色设置；非空文字以错行斜排方式覆盖选区，并参与预览、复制、保存和固定图片的最终合成。
+- 文字输入框以 44px 最小宽度起步，按 Canvas 对最长一行的实际测量宽度增长，不预留固定长输入框；宽高始终以选区为硬边界，靠近右下角时自动向左、向上回收，超过整块选区宽度时自动换行，提交时将软换行转换为 Canvas 真实换行。
+- Overlay 初始化时接收全局 Screen DIP 窗口候选；未框选时 hover 显示窗口边界，单击直接生成同尺寸选区，拖动超过 4px 切回自由框选。默认候选来自当前进程的可见 `BrowserWindow`，宿主可通过 `getWindowSnapRegions` 接入平台原生的外部窗口枚举。
 - 文字编辑器根据 `scrollHeight` 自动增长并隐藏滚动区域，输入期间不出现内部滚动条。
 - 预览 Canvas 使用捕获帧真实像素尺寸，最终导出时重新在独立 Canvas 上裁剪背景并绘制标注，选区边框、控制点和工具栏不会进入 PNG。
 - 自由画笔使用笔刷语义图标，笔迹提交后直接取消选中，不显示与连续笔迹编辑方式不匹配的缩放边框；用户仍可切换选择工具后重新命中和移动笔迹。
+- 箭头按下但拖拽距离不足 2 Image Pixel 时不绘制草稿，只有形成方向后才显示箭身和箭头，单击不会闪现零长度箭头。
 
-保存与复制通过单独的主进程输出通道完成：
+保存、复制与固定到屏幕通过单独的主进程输出通道完成：
 
 ```text
 Overlay 合成 PNG
-  → invoke(output: save | copy)
+  → invoke(output: save | copy | pin)
   → OutputRouter 校验 protocolVersion / jobId / sender
   ├─ save → showSaveDialog → writeFile
-  └─ copy → nativeImage.createFromBuffer → clipboard.writeImage
+  ├─ copy → nativeImage.createFromBuffer → clipboard.writeImage
+  └─ pin → 创建独立置顶窗口 → 显示最终 PNG
   → 成功后 confirm 并立即结算截图会话
   └─ copy → 销毁全屏截图层 → 独立鼠标穿透 Toast 窗口 3s → 销毁 Toast
 ```
+
+固定窗口按截图选区的 Screen DIP 坐标和宽高创建，保持最终图片比例；每次固定都创建独立窗口，支持同时存在多个。窗口没有系统边框，整张图片区域通过受限 IPC 驱动窗口拖拽；主进程始终使用创建时的截图宽高写入移动后的外框，避免 Windows 高 DPI 回读取整值反复写回造成窗口持续变大。右上角圆形关闭按钮默认透明且不接收鼠标，鼠标进入窗口后才淡入。点击窗口后刷新原生 Z 序。右键菜单只提供复制、保存和关闭，使用固定宽度、统一 16px 单色图标与标准 item 间距；复制成功后主进程回传确认事件，由当前固定窗口显示本地化 Toast。不向 Renderer 暴露文件系统、剪贴板或通用 IPC。
 
 保存对话框取消时返回 Overlay，不丢失选区和标注；输出失败显示错误并允许重试。蓝色确认按钮、`Enter`、`Ctrl/Command + C` 和有效选区内双击统一执行复制后完成：主进程成功写入系统剪贴板后，立即向宿主返回 PNG，并销毁全屏截图窗口；随后在目标显示器顶部创建独立、透明、不可聚焦且鼠标穿透的小窗口。Toast Renderer 应用主题和文案并回传 `feedback-ready` 后窗口才显示，避免准备状态或导出状态闪现，3 秒后自动销毁。快速导出在 180ms 内不显示进度，超过阈值才显示 loading。成功图标使用 warning 色实心对钩，不绘制外层色块。Toast 按内容宽度单行展示，并在反馈窗口内保留 8px 安全边距，避免绝对定位的自动收缩宽度造成短文案换行。下一次截图开始前强制清理尚未结束的 Toast，避免反馈进入下一张捕获帧。选区外双击不触发输出，避免重新框选时误提交。自定义 Overlay 没有实现反馈能力时直接关闭，保持现有接入兼容。文件系统、系统对话框和剪贴板对象始终只存在于主进程。
 
@@ -445,7 +453,7 @@ Overlay 使用接近原生截图工具的紧凑悬浮布局，视觉层不依赖
 选择工具面板
   + 标注工具分段面板（颜色控件位于首位）
   + 历史与样式面板
-  + 保存 / 取消 / 复制完成面板
+  + 固定 / 保存 / 取消 / 复制完成面板
 ```
 
 - 每个面板使用统一高度、灰色半透明表面和轻量阴影；当前工具只使用一个强调色表达激活状态。
@@ -621,10 +629,19 @@ Preload 只实现上述固定方法，不能允许 Renderer 自由指定 IPC cha
 export interface ScreenshotOptions {
   display?: 'cursor' | 'primary' | string;
 
-  tools?: Array<'rectangle' | 'ellipse' | 'arrow' | 'brush' | 'text' | 'mosaic'>;
+  tools?: Array<
+    'rectangle' | 'ellipse' | 'arrow' | 'brush' | 'text' | 'mosaic' | 'watermark'
+  >;
 
   defaultTool?:
-    'select' | 'rectangle' | 'ellipse' | 'arrow' | 'brush' | 'text' | 'mosaic';
+    | 'select'
+    | 'rectangle'
+    | 'ellipse'
+    | 'arrow'
+    | 'brush'
+    | 'text'
+    | 'mosaic'
+    | 'watermark';
   locale?: 'zh-CN' | 'en-US';
   messages?: Partial<ScreenshotMessages>;
   theme?: ScreenshotTheme;
@@ -645,7 +662,8 @@ export type ScreenshotResult =
       mimeType: 'image/png';
       bounds: ScreenshotBounds;
       displayId: string;
-      output: { action: 'copy' } | { action: 'save'; filePath: string };
+      output:
+        { action: 'copy' } | { action: 'save'; filePath: string } | { action: 'pin' };
     }
   | {
       status: 'cancelled';
@@ -768,7 +786,7 @@ declare global {
 }
 ```
 
-通用包默认通过主进程适配器完成剪贴板复制或本地保存，并在结果中返回动作元数据。宿主可通过 `ScreenshotManager` 的 `outputAdapter` 替换为业务临时目录、上传或其他输出策略；也可通过 `captureAdapter`、`createOverlay`、`overlayOptions` 和 `ipcMain` 替换对应宿主能力，而无需接管底层 runner。
+通用包默认通过主进程适配器完成剪贴板复制或本地保存，并在结果中返回动作元数据。宿主可通过 `ScreenshotManager` 的 `outputAdapter` 替换为业务临时目录、上传或其他输出策略；也可通过 `captureAdapter`、`createOverlay`、`overlayOptions`、`getWindowSnapRegions` 和 `ipcMain` 替换对应宿主能力，而无需接管底层 runner。
 
 ## 14. package.json 建议
 

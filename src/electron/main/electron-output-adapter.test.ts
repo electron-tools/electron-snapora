@@ -4,7 +4,7 @@ import type { ScreenshotOutputPayload } from '../protocol/messages.js';
 import { SCREENSHOT_PROTOCOL_VERSION } from '../protocol/messages.js';
 import { ElectronOutputAdapter } from './electron-output-adapter.js';
 
-function createPayload(action: 'save' | 'copy'): ScreenshotOutputPayload {
+function createPayload(action: 'save' | 'copy' | 'pin'): ScreenshotOutputPayload {
   return {
     protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
     jobId: 'job-1',
@@ -54,5 +54,25 @@ describe('ElectronOutputAdapter', () => {
     await expect(
       adapter.execute(createPayload('save'), { senderWebContentsId: 7 })
     ).resolves.toEqual({ status: 'cancelled' });
+  });
+
+  it('passes host presentation options to pinned screenshots', async () => {
+    const pinImage = vi.fn(async () => undefined);
+    const adapter = new ElectronOutputAdapter({ pinImage });
+    const captureOptions = {
+      locale: 'zh-CN' as const,
+      messages: { save: '存图' },
+    };
+
+    await expect(
+      adapter.execute(createPayload('pin'), {
+        senderWebContentsId: 7,
+        captureOptions,
+      })
+    ).resolves.toEqual({ status: 'completed', action: 'pin' });
+    expect(pinImage).toHaveBeenCalledWith(
+      expect.objectContaining({ displayId: 'display-1' }),
+      captureOptions
+    );
   });
 });

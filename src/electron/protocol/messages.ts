@@ -48,6 +48,8 @@ export interface ScreenshotInitializePayload {
   jobId: string;
   options: ScreenshotOptions;
   frames: CapturedFrame[];
+  /** 可单击吸附的可见窗口区域，使用全局 Screen DIP 坐标。 */
+  windowSnapRegions?: ScreenshotBounds[];
 }
 
 export interface ScreenshotFeedbackPayload {
@@ -74,7 +76,7 @@ export interface ScreenshotErrorPayload {
   message: string;
 }
 
-export type ScreenshotOutputAction = 'save' | 'copy';
+export type ScreenshotOutputAction = 'save' | 'copy' | 'pin';
 
 export interface ScreenshotOutputPayload {
   protocolVersion: typeof SCREENSHOT_PROTOCOL_VERSION;
@@ -86,5 +88,6 @@ export interface ScreenshotOutputPayload {
 export type ScreenshotOutputResponse =
   | { status: 'completed'; action: 'copy' }
   | { status: 'completed'; action: 'save'; filePath: string }
+  | { status: 'completed'; action: 'pin' }
   | { status: 'cancelled' }
   | { status: 'failed'; code: ScreenshotErrorCode; message: string };

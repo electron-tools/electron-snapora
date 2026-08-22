@@ -43,6 +43,8 @@ const defaultStyle: AnnotationStyle = {
   color: '#ff3b30',
   lineWidth: 4,
   fontSize: 24,
+  textStyle: 'default',
+  mosaicStrength: 8,
 };
 
 export function createAnnotationStore(): AnnotationStore {

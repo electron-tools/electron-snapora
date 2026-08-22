@@ -41,6 +41,7 @@ const SCREENSHOT_TOOLS = new Set<ScreenshotTool>([
   'brush',
   'text',
   'mosaic',
+  'watermark',
 ]);
 
 const SCREENSHOT_OPTION_KEYS = new Set([
@@ -76,8 +77,11 @@ const SCREENSHOT_MESSAGE_KEYS = [
   'exporting',
   'copied',
   'saveCancelled',
+  'copy',
   'cancel',
   'save',
+  'close',
+  'pin',
   'confirm',
   'select',
   'rectangle',
@@ -85,12 +89,20 @@ const SCREENSHOT_MESSAGE_KEYS = [
   'arrow',
   'brush',
   'text',
+  'textDefault',
+  'textFill',
+  'textOutline',
   'mosaic',
+  'watermark',
   'undo',
   'redo',
   'color',
+  'customColor',
   'lineWidth',
   'fontSize',
+  'mosaicStrength',
+  'opacity',
+  'watermarkPlaceholder',
   'annotationCanvas',
   'selection',
   'actions',
@@ -313,6 +325,9 @@ function isOutputMetadata(value: unknown): value is ScreenshotOutputMetadata {
   if (value.action === 'copy') {
     return true;
   }
+  if (value.action === 'pin') {
+    return true;
+  }
   return (
     value.action === 'save' &&
     typeof value.filePath === 'string' &&
@@ -392,7 +407,7 @@ export function isOutputPayload(
     hasProtocolVersion(value) &&
     typeof value.jobId === 'string' &&
     value.jobId.length > 0 &&
-    (value.action === 'save' || value.action === 'copy') &&
+    (value.action === 'save' || value.action === 'copy' || value.action === 'pin') &&
     isImageResult(value.result, maxOutputBytes)
   );
 }

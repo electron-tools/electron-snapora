@@ -152,6 +152,8 @@ describe('OverlayWindow', () => {
     });
     expect(fake.setBounds).not.toHaveBeenCalled();
     expect(fake.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver');
+
+    expect(fake.moveTop).toHaveBeenCalledTimes(2);
   });
 
   it('does not access webContents while cleaning up a destroyed window', () => {
@@ -199,6 +201,7 @@ describe('OverlayWindow', () => {
 
 function createFakeWindow(id: number) {
   const webContentsEvents = new EventEmitter();
+  const windowEvents = new EventEmitter();
   let destroyed = false;
   const send = vi.fn();
   const destroy = vi.fn(() => {
@@ -224,8 +227,8 @@ function createFakeWindow(id: number) {
     destroy,
     isDestroyed: vi.fn(() => destroyed),
     loadFile,
-    on: vi.fn(),
-    removeListener: vi.fn(),
+    on: windowEvents.on.bind(windowEvents),
+    removeListener: windowEvents.removeListener.bind(windowEvents),
     setBounds,
     setIgnoreMouseEvents,
     setAlwaysOnTop,
@@ -239,6 +242,7 @@ function createFakeWindow(id: number) {
 
   return {
     window,
+    windowEvents,
     webContentsEvents,
     send,
     destroy,

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; img-src blob:; style-src 'self'; script-src 'self'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pinned screenshot</title>
+  </head>
+  <body>
+    <main class="pinned-surface" aria-label="Pinned screenshot">
+      <img class="pinned-image" alt="Pinned screenshot" draggable="false" />
+      <button class="pinned-close" type="button" aria-label="Close pinned screenshot">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m7 7 10 10M17 7 7 17"></path>
+        </svg>
+      </button>
+      <div class="pinned-copy-feedback" role="status" aria-live="polite" hidden>
+        <svg class="pinned-copy-feedback-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m5 12.5 4.2 4.2L19 7"></path>
+        </svg>
+        <span class="pinned-copy-feedback-label">Copied to clipboard</span>
+      </div>
+      <div
+        class="pinned-context-menu"
+        role="menu"
+        aria-label="Image actions"
+        tabindex="-1"
+        hidden
+      >
+        <button class="pinned-menu-item pinned-copy" type="button" role="menuitem">
+          <svg class="pinned-menu-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="8" y="8" width="11" height="11" rx="2"></rect>
+            <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
+          </svg>
+          <span class="pinned-copy-label">Copy</span>
+        </button>
+        <button class="pinned-menu-item pinned-save" type="button" role="menuitem">
+          <svg class="pinned-menu-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 4v10m0 0 4-4m-4 4-4-4"></path>
+            <path d="M5 17v2h14v-2"></path>
+          </svg>
+          <span class="pinned-save-label">Save</span>
+        </button>
+        <div class="pinned-menu-separator" role="separator"></div>
+        <button
+          class="pinned-menu-item pinned-menu-close"
+          type="button"
+          role="menuitem"
+        >
+          <svg class="pinned-menu-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m7 7 10 10M17 7 7 17"></path>
+          </svg>
+          <span class="pinned-menu-close-label">Close</span>
+        </button>
+      </div>
+    </main>
+    <script type="module" src="/pinned.ts"></script>
+  </body>
+</html>

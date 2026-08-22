@@ -128,10 +128,14 @@ describe('screenshot protocol validators', () => {
   it('parses and copies supported host screenshot options', () => {
     const input = {
       display: 'primary',
-      tools: ['text', 'rectangle', 'text'],
+      tools: ['text', 'rectangle', 'watermark', 'text'],
       defaultTool: 'text',
       locale: 'zh-CN',
-      messages: { confirm: '复制到输入框', copied: '截图已复制' },
+      messages: {
+        confirm: '复制到输入框',
+        copied: '截图已复制',
+        save: '存图',
+      },
       theme: {
         mode: 'light',
         accentColor: '#1677ff',
@@ -144,10 +148,14 @@ describe('screenshot protocol validators', () => {
       success: true,
       value: {
         display: 'primary',
-        tools: ['text', 'rectangle'],
+        tools: ['text', 'rectangle', 'watermark'],
         defaultTool: 'text',
         locale: 'zh-CN',
-        messages: { confirm: '复制到输入框', copied: '截图已复制' },
+        messages: {
+          confirm: '复制到输入框',
+          copied: '截图已复制',
+          save: '存图',
+        },
         theme: {
           mode: 'light',
           accentColor: '#1677ff',
@@ -163,7 +171,7 @@ describe('screenshot protocol validators', () => {
     { unknown: true },
     { display: '' },
     { tools: ['crop'] },
-    { tools: Array.from({ length: 7 }, () => 'text') },
+    { tools: Array.from({ length: 8 }, () => 'text') },
     { tools: ['rectangle'], defaultTool: 'text' },
     { locale: 'fr-FR' },
     { messages: { unknown: 'value' } },

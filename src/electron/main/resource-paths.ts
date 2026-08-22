@@ -6,6 +6,11 @@ export interface OverlayResources {
   preloadPath: string;
 }
 
+export interface PinnedResources {
+  htmlPath: string;
+  preloadPath: string;
+}
+
 export type PackagedResourceExists = (path: string) => boolean;
 
 export interface MissingPackagedResource {
@@ -59,6 +64,18 @@ export function resolveHostPreloadPath(
   return preloadPath;
 }
 
+export function resolvePinnedResources(
+  mainModuleDirectory = __dirname,
+  resourceExists: PackagedResourceExists = existsSync
+): PinnedResources {
+  const resources = {
+    htmlPath: resolve(mainModuleDirectory, '..', 'overlay', 'pinned.html'),
+    preloadPath: resolve(mainModuleDirectory, '..', 'pinned', 'preload.cjs'),
+  };
+  assertPinnedResources(resources, resourceExists);
+  return resources;
+}
+
 export function assertOverlayResources(
   resources: OverlayResources,
   resourceExists: PackagedResourceExists = existsSync
@@ -67,6 +84,19 @@ export function assertOverlayResources(
     [
       { label: 'overlay HTML', path: resources.htmlPath },
       { label: 'overlay preload', path: resources.preloadPath },
+    ],
+    resourceExists
+  );
+}
+
+export function assertPinnedResources(
+  resources: PinnedResources,
+  resourceExists: PackagedResourceExists = existsSync
+): void {
+  assertPackagedResources(
+    [
+      { label: 'pinned screenshot HTML', path: resources.htmlPath },
+      { label: 'pinned screenshot preload', path: resources.preloadPath },
     ],
     resourceExists
   );

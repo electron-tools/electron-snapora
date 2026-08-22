@@ -1,6 +1,10 @@
 import type { IpcMain, IpcMainEvent } from 'electron';
 
-import type { ScreenshotOptions, ScreenshotResult } from '../../types.js';
+import type {
+  ScreenshotBounds,
+  ScreenshotOptions,
+  ScreenshotResult,
+} from '../../types.js';
 import { OVERLAY_CHANNELS } from '../protocol/channels.js';
 import {
   SCREENSHOT_PROTOCOL_VERSION,
@@ -54,10 +58,11 @@ export interface ScreenshotSessionOptions {
   ipcMain: Pick<IpcMain, 'on' | 'removeListener'>;
   createOverlay: ScreenshotOverlayFactory;
   overlayReadyTimeoutMs?: number;
-  onSettled?: () => void;
+  onSettled?: (result: ScreenshotResult) => void;
   registerOutputHandler?: (senderWebContentsId: number, jobId: string) => () => void;
   resourceLimits?: ScreenshotResourceLimitOptions;
   onDiagnostic?: ScreenshotDiagnosticListener;
+  windowSnapRegions?: ScreenshotBounds[];
 }
 
 type SessionResolver = (result: ScreenshotResult) => void;
@@ -312,6 +317,9 @@ export class ScreenshotSession {
       jobId: this.#options.jobId,
       options: this.#options.captureOptions,
       frames: this.#frames,
+      ...(this.#options.windowSnapRegions?.length
+        ? { windowSnapRegions: this.#options.windowSnapRegions }
+        : {}),
     });
     this.#frames = [];
     this.#startReadyTimeout(
@@ -465,7 +473,7 @@ export class ScreenshotSession {
     } else {
       this.#overlay?.destroy();
     }
-    this.#options.onSettled?.();
+    this.#options.onSettled?.(result);
     this.#resolve?.(result);
     this.#resolve = undefined;
   }

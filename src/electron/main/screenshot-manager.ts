@@ -1,9 +1,13 @@
 import { randomUUID } from 'node:crypto';
 
-import { ipcMain as electronIpcMain, webContents } from 'electron';
+import { BrowserWindow, ipcMain as electronIpcMain, webContents } from 'electron';
 import type { IpcMain } from 'electron';
 
-import type { ScreenshotOptions, ScreenshotResult } from '../../types.js';
+import type {
+  ScreenshotBounds,
+  ScreenshotOptions,
+  ScreenshotResult,
+} from '../../types.js';
 import {
   emitScreenshotDiagnostic,
   type ScreenshotDiagnosticContextValue,
@@ -66,6 +70,8 @@ export interface ScreenshotManagerOptions {
   busyPolicy?: ScreenshotBusyPolicy;
   maxQueuedCaptures?: number;
   onDiagnostic?: ScreenshotDiagnosticListener;
+  /** 默认返回当前 Electron 进程的可见窗口；宿主可注入平台原生窗口枚举。 */
+  getWindowSnapRegions?: () => ScreenshotBounds[];
 }
 
 interface QueuedCapture {
@@ -96,6 +102,9 @@ function createDefaultRunner(
     // 连续截图前清理仍在展示的复制提示，避免 Toast 被下一次屏幕采集写入图片。
     previousOverlay?.destroy();
     previousOverlay = undefined;
+    const windowSnapRegions = resolveWindowSnapRegions(
+      managerOptions.getWindowSnapRegions ?? getVisibleBrowserWindowBounds
+    );
     const reportDiagnostic: ScreenshotDiagnosticListener = (event) => {
       emitScreenshotDiagnostic(managerOptions.onDiagnostic, {
         ...event,
@@ -109,6 +118,7 @@ function createDefaultRunner(
       captureOptions,
       captureAdapter,
       ipcMain,
+      windowSnapRegions,
       createOverlay: (display) => {
         const overlay = createOverlayWindow(display);
         previousOverlay = overlay;
@@ -145,7 +155,10 @@ function createDefaultRunner(
                       code: 'RESOURCE_LIMIT_EXCEEDED' as const,
                       message: `Screenshot output exceeds the ${resourceLimits.maxOutputBytes} byte limit.`,
                     }
-                  : await outputAdapter.execute(payload, outputContext);
+                  : await outputAdapter.execute(payload, {
+                      ...outputContext,
+                      captureOptions,
+                    });
             } catch (error) {
               const timestamp = Date.now();
               reportDiagnostic({
@@ -182,7 +195,10 @@ function createDefaultRunner(
             return response;
           }
         ),
-      onSettled: () => {
+      onSettled: (result) => {
+        if (result.status === 'completed' && result.output.action === 'pin') {
+          return;
+        }
         if (context.senderWebContentsId === undefined) {
           return;
         }
@@ -199,6 +215,34 @@ function createDefaultRunner(
       cancel: () => session.cancel(),
     };
   };
+}
+
+/** 窗口嗅探属于辅助体验，提供器失败时退回普通自由框选。 */
+function resolveWindowSnapRegions(
+  provider: () => ScreenshotBounds[]
+): ScreenshotBounds[] {
+  try {
+    return provider().filter(
+      (bounds) =>
+        Number.isFinite(bounds.x) &&
+        Number.isFinite(bounds.y) &&
+        Number.isFinite(bounds.width) &&
+        Number.isFinite(bounds.height) &&
+        bounds.width >= 4 &&
+        bounds.height >= 4
+    );
+  } catch {
+    return [];
+  }
+}
+
+/** Electron 默认只能可靠获取本进程 BrowserWindow 的屏幕边界。 */
+function getVisibleBrowserWindowBounds(): ScreenshotBounds[] {
+  return BrowserWindow.getAllWindows()
+    .filter(
+      (window) => !window.isDestroyed() && window.isVisible() && !window.isMinimized()
+    )
+    .map((window) => window.getBounds());
 }
 
 /**

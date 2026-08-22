@@ -1,5 +1,6 @@
 import type { IpcMain, IpcMainInvokeEvent } from 'electron';
 
+import type { ScreenshotOptions } from '../../types.js';
 import { OVERLAY_CHANNELS } from '../protocol/channels.js';
 import type {
   ScreenshotOutputPayload,
@@ -9,6 +10,7 @@ import { isOutputPayload } from '../protocol/validators.js';
 
 export interface ScreenshotOutputContext {
   senderWebContentsId: number;
+  captureOptions?: ScreenshotOptions;
 }
 
 export type ScreenshotOutputHandler = (

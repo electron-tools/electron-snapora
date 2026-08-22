@@ -7,8 +7,8 @@ Añade captura por región, selección interactiva, anotaciones, copia al portap
 ## Funciones
 
 - Captura de regiones rectangulares mediante una superposición interactiva.
-- Anotaciones con rectángulos, elipses, flechas, pincel, texto y mosaico.
-- Deshacer, rehacer, copiar al portapapeles y guardar PNG de forma nativa.
+- Anotaciones con rectángulos, elipses, flechas, pincel, texto, mosaico ajustable y marca de agua.
+- Deshacer, rehacer, copiar, guardar PNG de forma nativa y fijar capturas en pantalla.
 - Compatible con TypeScript, ESM y CommonJS.
 - Sin complementos nativos ni compilación posterior a la instalación.
 

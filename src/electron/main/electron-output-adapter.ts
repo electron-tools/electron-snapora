@@ -1,13 +1,17 @@
-import { writeFile } from 'node:fs/promises';
+import { BrowserWindow, webContents } from 'electron';
 
-import { BrowserWindow, clipboard, dialog, nativeImage, webContents } from 'electron';
-import type { SaveDialogOptions } from 'electron';
-
+import type { ScreenshotOptions } from '../../types.js';
 import type {
   ScreenshotOutputPayload,
   ScreenshotOutputResponse,
 } from '../protocol/messages.js';
 import type { ScreenshotOutputContext } from './output-action-router.js';
+import {
+  copyPngToClipboard,
+  createSuggestedName,
+  savePngWithDialog,
+} from './image-output.js';
+import { PinnedWindowManager } from './pinned-window.js';
 
 export interface ElectronOutputAdapterOptions {
   saveFile?: (
@@ -16,6 +20,10 @@ export interface ElectronOutputAdapterOptions {
     senderWebContentsId: number
   ) => Promise<string | undefined>;
   copyImage?: (data: Uint8Array) => void;
+  pinImage?: (
+    result: ScreenshotOutputPayload['result'],
+    options: ScreenshotOptions
+  ) => Promise<void>;
   createSuggestedName?: () => string;
 }
 
@@ -29,13 +37,28 @@ export interface ScreenshotOutputExecutor {
 export class ElectronOutputAdapter implements ScreenshotOutputExecutor {
   readonly #saveFile: NonNullable<ElectronOutputAdapterOptions['saveFile']>;
   readonly #copyImage: NonNullable<ElectronOutputAdapterOptions['copyImage']>;
+  readonly #pinImage: NonNullable<ElectronOutputAdapterOptions['pinImage']>;
   readonly #createSuggestedName: NonNullable<
     ElectronOutputAdapterOptions['createSuggestedName']
   >;
 
   constructor(options: ElectronOutputAdapterOptions = {}) {
-    this.#saveFile = options.saveFile ?? savePngWithDialog;
+    this.#saveFile =
+      options.saveFile ??
+      ((data, suggestedName, senderWebContentsId) =>
+        savePngWithDialog(
+          data,
+          suggestedName,
+          resolveOwnerWindow(senderWebContentsId)
+        ));
     this.#copyImage = options.copyImage ?? copyPngToClipboard;
+    let pinnedWindows: PinnedWindowManager | undefined;
+    this.#pinImage =
+      options.pinImage ??
+      ((result, captureOptions) => {
+        pinnedWindows ??= new PinnedWindowManager();
+        return pinnedWindows.pin(result, captureOptions);
+      });
     this.#createSuggestedName = options.createSuggestedName ?? createSuggestedName;
   }
 
@@ -46,6 +69,11 @@ export class ElectronOutputAdapter implements ScreenshotOutputExecutor {
     if (payload.action === 'copy') {
       this.#copyImage(payload.result.data);
       return { status: 'completed', action: 'copy' };
+    }
+
+    if (payload.action === 'pin') {
+      await this.#pinImage(payload.result, context.captureOptions ?? {});
+      return { status: 'completed', action: 'pin' };
     }
 
     const filePath = await this.#saveFile(
@@ -59,42 +87,7 @@ export class ElectronOutputAdapter implements ScreenshotOutputExecutor {
   }
 }
 
-async function savePngWithDialog(
-  data: Uint8Array,
-  suggestedName: string,
-  senderWebContentsId: number
-): Promise<string | undefined> {
+function resolveOwnerWindow(senderWebContentsId: number): BrowserWindow | null {
   const sender = webContents.fromId(senderWebContentsId);
-  const owner = sender ? BrowserWindow.fromWebContents(sender) : null;
-  const options: SaveDialogOptions = {
-    title: 'Save screenshot',
-    defaultPath: suggestedName,
-    filters: [{ name: 'PNG image', extensions: ['png'] }],
-    properties: ['createDirectory', 'showOverwriteConfirmation'],
-  };
-  const result = owner
-    ? await dialog.showSaveDialog(owner, options)
-    : await dialog.showSaveDialog(options);
-  if (result.canceled || !result.filePath) {
-    return undefined;
-  }
-
-  await writeFile(result.filePath, data);
-  return result.filePath;
-}
-
-function copyPngToClipboard(data: Uint8Array): void {
-  const image = nativeImage.createFromBuffer(Buffer.from(data));
-  if (image.isEmpty()) {
-    throw new Error('The exported PNG could not be decoded for the clipboard.');
-  }
-  clipboard.writeImage(image);
-}
-
-function createSuggestedName(): string {
-  const timestamp = new Date()
-    .toISOString()
-    .replaceAll(':', '-')
-    .replace(/\.\d{3}Z$/, '');
-  return `screenshot-${timestamp}.png`;
+  return sender ? BrowserWindow.fromWebContents(sender) : null;
 }

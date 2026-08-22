@@ -7,10 +7,19 @@ process.on('unhandledRejection', (error) => {
   process.exit(4);
 });
 
-const { app, clipboard } = require('electron');
+const { app, clipboard, nativeImage, screen } = require('electron');
 const { ScreenshotManager } = require('electron-snapora/main');
 
 app.disableHardwareAcceleration();
+
+// NativeImage 位图通道顺序由平台决定，先用已知红色像素定位 R/B 通道。
+const redPixel = nativeImage
+  .createFromDataURL(
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+  )
+  .toBitmap();
+const redChannelOffset = redPixel[0] > redPixel[2] ? 0 : 2;
+const blueChannelOffset = redChannelOffset === 0 ? 2 : 0;
 
 const smokeTimeout = setTimeout(() => {
   console.error('Electron Snapora tools smoke test timed out.');
@@ -67,10 +76,22 @@ async function waitForReveal(window) {
   }
 }
 
+/** Windows 剪贴板写入可能晚于 IPC 返回一个消息循环，短轮询避免瞬时空读。 */
+async function waitForClipboardImage(maximumWaitMs = 600) {
+  const deadline = Date.now() + maximumWaitMs;
+  do {
+    if (!clipboard.readImage().isEmpty()) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  } while (Date.now() < deadline);
+  return false;
+}
+
 async function getToolCenter(window, tool) {
   return window.webContents.executeJavaScript(`
     (() => {
-      const button = document.querySelector('[data-tool="${tool}"]');
+      const button = document.querySelector('button[data-tool="${tool}"]');
       const bounds = button?.getBoundingClientRect();
       return bounds && !button.hidden && bounds.width > 0 && bounds.height > 0
         ? { x: Math.round(bounds.x + bounds.width / 2), y: Math.round(bounds.y + bounds.height / 2) }
@@ -85,14 +106,25 @@ async function activateTool(window, tool) {
     throw new Error(`${tool} tool was not rendered.`);
   }
   sendClick(window, center);
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  await window.webContents.executeJavaScript(`
+    Promise.all(
+      document.getAnimations().map((animation) =>
+        animation.finished.catch(() => undefined)
+      )
+    )
+  `);
   const toolState = await window.webContents.executeJavaScript(`
     (() => {
+      const surface = document.querySelector('.capture-surface');
+      const presetPanel = document.querySelector('.preset-panel');
       const colorControl = document.querySelector('.color-control');
       const colorBounds = colorControl?.getBoundingClientRect();
       const colorStyle = colorControl ? getComputedStyle(colorControl) : null;
       return {
-        surfaceTool: document.querySelector('.capture-surface')?.dataset.tool,
+        surfaceTool: surface?.dataset.tool,
+        preset: surface?.dataset.preset ?? null,
+        presetVisible: Boolean(presetPanel && !presetPanel.hidden),
         colorVisible: Boolean(
           colorBounds &&
           colorBounds.width > 0 &&
@@ -102,7 +134,22 @@ async function activateTool(window, tool) {
       };
     })()
   `);
-  if (toolState.surfaceTool !== tool || !toolState.colorVisible) {
+  const expectedPreset = {
+    rectangle: 'stroke',
+    ellipse: 'stroke',
+    arrow: 'stroke',
+    brush: 'stroke',
+    text: 'text',
+    mosaic: 'mosaic',
+    watermark: 'watermark',
+  }[tool];
+  const expectedColorVisible = expectedPreset !== undefined && tool !== 'mosaic';
+  if (
+    toolState.surfaceTool !== tool ||
+    toolState.preset !== (expectedPreset ?? null) ||
+    toolState.presetVisible !== Boolean(expectedPreset) ||
+    toolState.colorVisible !== expectedColorVisible
+  ) {
     const hitTarget = await window.webContents.executeJavaScript(`
       (() => {
         const target = document.elementFromPoint(${center.x}, ${center.y});
@@ -148,6 +195,33 @@ async function countRegionPixels(window, region) {
   `);
 }
 
+/** 读取指定区域内红色文字的可见像素边界，用于比较输入态和 Canvas 提交态的位置。 */
+async function getRedPixelBounds(window, region) {
+  const image = await window.webContents.capturePage(region);
+  const { width, height } = image.getSize();
+  const bitmap = image.toBitmap();
+  let left = width;
+  let top = height;
+  let right = -1;
+  let bottom = -1;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = (y * width + x) * 4;
+      const blue = bitmap[index + blueChannelOffset];
+      const green = bitmap[index + 1];
+      const red = bitmap[index + redChannelOffset];
+      const alpha = bitmap[index + 3];
+      if (red > 180 && red > green * 1.5 && red > blue * 1.5 && alpha > 128) {
+        left = Math.min(left, x);
+        top = Math.min(top, y);
+        right = Math.max(right, x);
+        bottom = Math.max(bottom, y);
+      }
+    }
+  }
+  return right >= left ? { left, top, right, bottom } : null;
+}
+
 async function assertToolDraws(window, tool, start, end, steps = 1) {
   await activateTool(window, tool);
   const padding = 16;
@@ -163,6 +237,14 @@ async function assertToolDraws(window, tool, start, end, steps = 1) {
   const after = await countRegionPixels(window, region);
   if (after <= before) {
     throw new Error(`${tool} tool did not add visible pixels (${before} -> ${after}).`);
+  }
+  if (['rectangle', 'ellipse', 'arrow'].includes(tool)) {
+    const selectedType = await window.webContents.executeJavaScript(
+      `document.querySelector('.capture-surface')?.dataset.selectedType ?? null`
+    );
+    if (selectedType !== null) {
+      throw new Error(`${tool} remained selected after drawing: ${selectedType}`);
+    }
   }
 }
 
@@ -198,6 +280,78 @@ app.on('browser-window-created', (_event, window) => {
     }
 
     const { width, height } = window.getContentBounds();
+    const snapPoint = await window.webContents.executeJavaScript(
+      `({ x: Math.round(window.innerWidth / 2), y: Math.round(window.innerHeight / 2) })`
+    );
+    await window.webContents.executeJavaScript(`
+      document.querySelector('.annotation-canvas')?.dispatchEvent(
+        new PointerEvent('pointermove', {
+          bubbles: true,
+          pointerId: 41,
+          pointerType: 'mouse',
+          clientX: ${snapPoint.x},
+          clientY: ${snapPoint.y}
+        })
+      )
+    `);
+    await nextFrame(window);
+    const snapPreview = await window.webContents.executeJavaScript(`
+      (() => {
+        const preview = document.querySelector('.window-snap-preview');
+        const mask = document.querySelector('.screen-mask');
+        return {
+          visible: Boolean(preview && !preview.hidden),
+          bounds: preview?.getBoundingClientRect().toJSON(),
+          maskHidden: mask?.hidden,
+        };
+      })()
+    `);
+    if (
+      !snapPreview.visible ||
+      !snapPreview.maskHidden ||
+      snapPreview.bounds.width <= 0 ||
+      snapPreview.bounds.height <= 0
+    ) {
+      throw new Error(
+        `Window snap hover preview was invalid: ${JSON.stringify({ snapPoint, snapPreview })}`
+      );
+    }
+    await window.webContents.executeJavaScript(`
+      (() => {
+        const canvas = document.querySelector('.annotation-canvas');
+        const options = {
+          bubbles: true,
+          pointerId: 42,
+          pointerType: 'mouse',
+          isPrimary: true,
+          button: 0,
+          clientX: ${snapPoint.x},
+          clientY: ${snapPoint.y}
+        };
+        canvas?.dispatchEvent(new PointerEvent('pointerdown', options));
+        canvas?.dispatchEvent(new PointerEvent('pointerup', options));
+      })()
+    `);
+    await nextFrame(window);
+    const snappedSelection = await window.webContents.executeJavaScript(`
+      (() => {
+        const surface = document.querySelector('.capture-surface');
+        const selection = document.querySelector('.selection');
+        return {
+          phase: surface?.dataset.state,
+          bounds: selection?.getBoundingClientRect().toJSON(),
+        };
+      })()
+    `);
+    if (
+      snappedSelection.phase !== 'selected' ||
+      Math.abs(snappedSelection.bounds.width - snapPreview.bounds.width) > 1 ||
+      Math.abs(snappedSelection.bounds.height - snapPreview.bounds.height) > 1
+    ) {
+      throw new Error(
+        `Window snap click did not create the expected selection: ${JSON.stringify(snappedSelection)}`
+      );
+    }
     const selectionStart = {
       x: Math.round(width * 0.1),
       y: Math.round(height * 0.1),
@@ -207,6 +361,7 @@ app.on('browser-window-created', (_event, window) => {
       y: Math.round(height * 0.72),
     };
     sendDrag(window, selectionStart, selectionEnd);
+    await nextFrame(window);
     const selectionReady = await window.webContents.executeJavaScript(`
       new Promise((resolve) => {
         let remainingFrames = 30;
@@ -227,29 +382,208 @@ app.on('browser-window-created', (_event, window) => {
       throw new Error('Selection toolbar did not become ready.');
     }
 
+    await activateTool(window, 'rectangle');
     const colorPlacement = await window.webContents.executeJavaScript(`
       (() => {
-        const panels = Array.from(document.querySelectorAll('.selection-toolbar > .toolbar-panel'));
+        const preset = document.querySelector('.preset-panel');
+        const palette = document.querySelector('.color-palette');
         const color = document.querySelector('.color-control');
+        const customColorIcon = color?.querySelector('.custom-color-icon');
+        const customColorInput = document.querySelector('.color-input');
         const toolPanel = document.querySelector('.tool-group');
+        const selectPanel = document.querySelector('.selection-tool-panel');
+        const activeColor = document.querySelector('[data-color="#ff3b30"]');
+        const linePreset = document.querySelector('[data-line-width="4"]');
+        const lineDot = linePreset?.querySelector('.line-width-dot');
+        const rectangleButton = document.querySelector(
+          'button[data-tool="rectangle"]'
+        );
+        const presetBounds = preset?.getBoundingClientRect();
+        const buttonBounds = rectangleButton?.getBoundingClientRect();
+        const arrowStyle = preset ? getComputedStyle(preset, '::before') : null;
+        const arrowX = preset
+          ? parseFloat(getComputedStyle(preset).getPropertyValue('--preset-arrow-x'))
+          : null;
+        const activeColorStyle = activeColor ? getComputedStyle(activeColor) : null;
+        const activeCheckStyle = activeColor
+          ? getComputedStyle(activeColor, '::after')
+          : null;
+        const customColorStyle = color ? getComputedStyle(color) : null;
+        const customIconStyle = customColorIcon
+          ? getComputedStyle(customColorIcon)
+          : null;
+        const customInputStyle = customColorInput
+          ? getComputedStyle(customColorInput)
+          : null;
         return {
-          panelIndex: panels.indexOf(color?.parentElement),
-          isFirst: toolPanel?.firstElementChild === color,
+          colorRemovedFromMain: !toolPanel?.contains(color),
+          customColorIsLast: palette?.lastElementChild === color,
+          presetVisible: Boolean(preset && !preset.hidden),
+          presetKind: document.querySelector('.capture-surface')?.dataset.preset,
+          presetInlineLeft: preset?.style.left,
+          presetInlineArrow: preset?.style.getPropertyValue('--preset-arrow-x'),
+          presetComputedLeft: preset ? getComputedStyle(preset).left : null,
+          presetBounds: presetBounds?.toJSON(),
+          buttonBounds: buttonBounds?.toJSON(),
+          toolbarBounds: document
+            .querySelector('.selection-toolbar')
+            ?.getBoundingClientRect()
+            .toJSON(),
+          toolbarHasPreset: document.querySelector('.selection-toolbar')?.dataset
+            .hasPreset,
           brushIcon: document
-            .querySelector('[data-tool="brush"] use')
+            .querySelector('button[data-tool="brush"] use')
             ?.getAttribute('href'),
           hasBrushSymbol: Boolean(document.querySelector('#icon-brush')),
+          selectPanelWidth: selectPanel?.getBoundingClientRect().width,
+          colorSize: activeColor?.getBoundingClientRect().width,
+          customColorSize: color?.getBoundingClientRect().width,
+          customColorIconSize: customColorIcon?.getBoundingClientRect().width,
+          colorBorderWidth: activeColorStyle?.borderTopWidth,
+          colorTransition: activeColorStyle?.transitionDuration,
+          checkOpacity: activeCheckStyle?.opacity,
+          checkFilter: activeCheckStyle?.filter,
+          customColorActive: color?.dataset.active,
+          customColorBorderWidth: customColorStyle?.borderTopWidth,
+          customColorBackground: customColorStyle?.backgroundColor,
+          customIconGradient: customIconStyle?.backgroundImage,
+          customInputDisplay: customInputStyle?.display,
+          customInputType: customColorInput?.type,
+          lineTransition: linePreset
+            ? getComputedStyle(linePreset).transitionDuration
+            : null,
+          dotTransition: lineDot ? getComputedStyle(lineDot).transitionDuration : null,
+          arrowDistance:
+            presetBounds && buttonBounds && Number.isFinite(arrowX)
+              ? Math.abs(
+                  arrowX -
+                    (buttonBounds.left + buttonBounds.width / 2 - presetBounds.left)
+                )
+              : null,
+          arrowContent: arrowStyle?.content,
         };
       })()
     `);
     if (
-      colorPlacement.panelIndex !== 1 ||
-      !colorPlacement.isFirst ||
+      !colorPlacement.colorRemovedFromMain ||
+      !colorPlacement.customColorIsLast ||
+      !colorPlacement.presetVisible ||
+      colorPlacement.presetKind !== 'stroke' ||
       colorPlacement.brushIcon !== '#icon-brush' ||
-      !colorPlacement.hasBrushSymbol
+      !colorPlacement.hasBrushSymbol ||
+      typeof colorPlacement.selectPanelWidth !== 'number' ||
+      colorPlacement.selectPanelWidth > 50 ||
+      typeof colorPlacement.colorSize !== 'number' ||
+      colorPlacement.colorSize > 24.5 ||
+      typeof colorPlacement.customColorSize !== 'number' ||
+      typeof colorPlacement.customColorIconSize !== 'number' ||
+      Math.abs(colorPlacement.customColorSize - colorPlacement.colorSize) > 0.5 ||
+      Math.abs(colorPlacement.customColorIconSize - colorPlacement.colorSize) > 0.5 ||
+      colorPlacement.colorBorderWidth !== '0px' ||
+      colorPlacement.colorTransition === '0s' ||
+      colorPlacement.checkOpacity !== '1' ||
+      !colorPlacement.checkFilter ||
+      colorPlacement.checkFilter === 'none' ||
+      colorPlacement.customColorActive !== 'false' ||
+      colorPlacement.customColorBorderWidth !== '0px' ||
+      colorPlacement.customColorBackground === 'rgb(255, 59, 48)' ||
+      !colorPlacement.customIconGradient?.includes('conic-gradient') ||
+      colorPlacement.customInputDisplay !== 'none' ||
+      colorPlacement.customInputType !== 'hidden' ||
+      colorPlacement.lineTransition === '0s' ||
+      colorPlacement.dotTransition === '0s' ||
+      typeof colorPlacement.arrowDistance !== 'number' ||
+      colorPlacement.arrowDistance > 3 ||
+      colorPlacement.arrowContent === 'none'
     ) {
       throw new Error(
-        `Tool panel placement or brush icon was invalid: ${JSON.stringify(colorPlacement)}`
+        `Preset panel placement or brush icon was invalid: ${JSON.stringify(colorPlacement)}`
+      );
+    }
+
+    const customPickerLayout = await window.webContents.executeJavaScript(`
+      (() => {
+        const control = document.querySelector('.color-control');
+        control?.click();
+        const picker = document.querySelector('.color-picker-popover');
+        const saturation = document.querySelector('.color-picker-saturation');
+        const hue = document.querySelector('.color-picker-hue');
+        return {
+          visible: Boolean(picker && !picker.hidden),
+          saturationWidth: saturation?.getBoundingClientRect().width,
+          hueWidth: hue?.getBoundingClientRect().width,
+          inputType: document.querySelector('.color-input')?.type,
+          expanded: control?.getAttribute('aria-expanded'),
+        };
+      })()
+    `);
+    if (
+      !customPickerLayout.visible ||
+      customPickerLayout.inputType !== 'hidden' ||
+      customPickerLayout.expanded !== 'true' ||
+      typeof customPickerLayout.saturationWidth !== 'number' ||
+      typeof customPickerLayout.hueWidth !== 'number' ||
+      Math.abs(customPickerLayout.saturationWidth - customPickerLayout.hueWidth) > 0.5
+    ) {
+      throw new Error(
+        `Custom color picker layout was invalid: ${JSON.stringify(customPickerLayout)}`
+      );
+    }
+
+    const customColorState = await window.webContents.executeJavaScript(`
+      (async () => {
+        const input = document.querySelector('.color-input');
+        const custom = document.querySelector('.color-control');
+        const customCheck = document.querySelector('.color-check');
+        const customCheckStyle = getComputedStyle(customCheck);
+        const presetCheck = getComputedStyle(
+          document.querySelector('.preset-color-button'),
+          '::after'
+        );
+        input.value = '#bf5af2';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        await Promise.all(
+          document.getAnimations().map((animation) =>
+            animation.finished.catch(() => undefined)
+          )
+        );
+        const state = {
+          active: custom?.dataset.active,
+          fixedActiveCount: document.querySelectorAll(
+            '.preset-color-button[data-active="true"]'
+          ).length,
+          hasInnerCircle: Boolean(document.querySelector('.custom-color-swatch')),
+          checkOpacity: custom
+            ? customCheckStyle.opacity
+            : null,
+          checkWidth: parseFloat(customCheckStyle.width),
+          checkHeight: parseFloat(customCheckStyle.height),
+          presetCheckWidth: parseFloat(presetCheck.width),
+          presetCheckHeight: parseFloat(presetCheck.height),
+          borderWidth: custom ? getComputedStyle(custom).borderTopWidth : null,
+          boxShadow: custom ? getComputedStyle(custom).boxShadow : null,
+        };
+        document.querySelector('[data-color="#ff3b30"]')?.click();
+        return state;
+      })()
+    `);
+    if (
+      customColorState.active !== 'true' ||
+      customColorState.fixedActiveCount !== 0 ||
+      customColorState.hasInnerCircle ||
+      customColorState.checkOpacity !== '1' ||
+      typeof customColorState.checkWidth !== 'number' ||
+      typeof customColorState.checkHeight !== 'number' ||
+      Math.abs(customColorState.checkWidth - customColorState.presetCheckWidth) > 0.5 ||
+      Math.abs(customColorState.checkHeight - customColorState.presetCheckHeight) >
+        0.5 ||
+      customColorState.borderWidth !== '0px' ||
+      !customColorState.boxShadow ||
+      customColorState.boxShadow === 'none'
+    ) {
+      throw new Error(
+        `Custom color did not stay visually distinct from presets: ${JSON.stringify(customColorState)}`
       );
     }
 
@@ -322,15 +656,42 @@ app.on('browser-window-created', (_event, window) => {
     );
     const mosaicSettings = await window.webContents.executeJavaScript(`
       (() => {
-        const styleGroup = document.querySelector('.style-group');
+        const mosaicOptions = document.querySelector('.mosaic-options');
+        const colorPalette = document.querySelector('.color-palette');
+        const strength = document.querySelector('.mosaic-strength-input');
+        const preset = document.querySelector('.preset-panel');
+        const mosaicButton = document.querySelector('button[data-tool="mosaic"]');
+        const presetBounds = preset?.getBoundingClientRect();
+        const buttonBounds = mosaicButton?.getBoundingClientRect();
+        const arrowStyle = preset ? getComputedStyle(preset, '::before') : null;
+        const arrowX = preset
+          ? parseFloat(getComputedStyle(preset).getPropertyValue('--preset-arrow-x'))
+          : null;
         return {
-          styleDisplay: styleGroup ? getComputedStyle(styleGroup).display : null,
+          mosaicDisplay: mosaicOptions ? getComputedStyle(mosaicOptions).display : null,
+          colorDisplay: colorPalette ? getComputedStyle(colorPalette).display : null,
+          strengthMaximum: strength?.max,
+          arrowDistance:
+            presetBounds && buttonBounds && Number.isFinite(arrowX)
+              ? Math.abs(
+                  arrowX -
+                    (buttonBounds.left + buttonBounds.width / 2 - presetBounds.left)
+                )
+              : null,
+          arrowContent: arrowStyle?.content,
         };
       })()
     `);
-    if (mosaicSettings.styleDisplay !== 'none') {
+    if (
+      mosaicSettings.mosaicDisplay !== 'flex' ||
+      mosaicSettings.colorDisplay !== 'none' ||
+      mosaicSettings.strengthMaximum !== '32' ||
+      typeof mosaicSettings.arrowDistance !== 'number' ||
+      mosaicSettings.arrowDistance > 3 ||
+      mosaicSettings.arrowContent === 'none'
+    ) {
       throw new Error(
-        `Mosaic still exposed a size control: ${JSON.stringify(mosaicSettings)}`
+        `Mosaic preset controls were invalid: ${JSON.stringify(mosaicSettings)}`
       );
     }
 
@@ -345,6 +706,86 @@ app.on('browser-window-created', (_event, window) => {
       width: 220,
       height: 70,
     };
+    const textPresetState = await window.webContents.executeJavaScript(`
+      (() => {
+        const buttons = Array.from(document.querySelectorAll('[data-text-style]'));
+        document.querySelector('[data-text-style="fill"]')?.click();
+        return buttons.map((button) => button.dataset.textStyle);
+      })()
+    `);
+    if (
+      JSON.stringify(textPresetState) !== JSON.stringify(['default', 'fill', 'outline'])
+    ) {
+      throw new Error(
+        `Text style presets were invalid: ${JSON.stringify(textPresetState)}`
+      );
+    }
+    sendClick(window, textPoint);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const fillEditorStyle = await window.webContents.executeJavaScript(`
+      (() => {
+        const editor = document.querySelector('.text-editor');
+        const style = editor ? getComputedStyle(editor) : null;
+        return {
+          visible: Boolean(editor && !editor.hidden),
+          backgroundColor: style?.backgroundColor,
+          color: style?.color,
+        };
+      })()
+    `);
+    if (
+      !fillEditorStyle.visible ||
+      fillEditorStyle.backgroundColor !== 'rgb(255, 59, 48)' ||
+      fillEditorStyle.color !== 'rgb(255, 255, 255)'
+    ) {
+      throw new Error(
+        `Text fill preset was not previewed: ${JSON.stringify(fillEditorStyle)}`
+      );
+    }
+    window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+    window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+    await nextFrame(window);
+    await window.webContents.executeJavaScript(
+      `document.querySelector('[data-text-style="default"]')?.click()`
+    );
+    const edgeTextPoint = { x: selectionEnd.x - 6, y: selectionEnd.y - 6 };
+    sendClick(window, edgeTextPoint);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await window.webContents.insertText('Boundary text '.repeat(35));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const boundedEditor = await window.webContents.executeJavaScript(`
+      (() => {
+        const editor = document.querySelector('.text-editor');
+        const selection = document.querySelector('.selection');
+        const editorBounds = editor?.getBoundingClientRect();
+        const selectionBounds = selection?.getBoundingClientRect();
+        return {
+          visible: Boolean(editor && !editor.hidden),
+          left: editorBounds?.left,
+          top: editorBounds?.top,
+          right: editorBounds?.right,
+          bottom: editorBounds?.bottom,
+          selectionLeft: selectionBounds?.left,
+          selectionTop: selectionBounds?.top,
+          selectionRight: selectionBounds?.right,
+          selectionBottom: selectionBounds?.bottom,
+        };
+      })()
+    `);
+    if (
+      !boundedEditor.visible ||
+      boundedEditor.left < boundedEditor.selectionLeft - 1 ||
+      boundedEditor.top < boundedEditor.selectionTop - 1 ||
+      boundedEditor.right > boundedEditor.selectionRight + 1 ||
+      boundedEditor.bottom > boundedEditor.selectionBottom + 1
+    ) {
+      throw new Error(
+        `Text editor exceeded the screenshot selection: ${JSON.stringify(boundedEditor)}`
+      );
+    }
+    window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+    window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+    await nextFrame(window);
     const beforeText = await countRegionPixels(window, textRegion);
     sendClick(window, textPoint);
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -373,6 +814,12 @@ app.on('browser-window-created', (_event, window) => {
         `Text editor did not open and receive focus: ${JSON.stringify(editorState)}`
       );
     }
+    const emptyEditorWidth = await window.webContents.executeJavaScript(
+      `document.querySelector('.text-editor')?.getBoundingClientRect().width ?? 0`
+    );
+    if (emptyEditorWidth <= 0 || emptyEditorWidth > 64) {
+      throw new Error(`Empty text editor was not compact: ${emptyEditorWidth}`);
+    }
     await window.webContents.insertText(
       'Snapora\nTools\nNo scrollbar\nLine 4\nLine 5\nLine 6\nLine 7'
     );
@@ -384,17 +831,20 @@ app.on('browser-window-created', (_event, window) => {
         const style = getComputedStyle(editor);
         return {
           overflowY: style.overflowY,
+          clientWidth: editor.clientWidth,
           clientHeight: editor.clientHeight,
           scrollHeight: editor.scrollHeight,
           backgroundColor: style.backgroundColor,
           borderTopColor: style.borderTopColor,
           borderTopWidth: style.borderTopWidth,
+          boxShadow: style.boxShadow,
         };
       })()
     `);
     if (
       !editorOverflow ||
       editorOverflow.overflowY !== 'hidden' ||
+      editorOverflow.clientWidth <= emptyEditorWidth ||
       editorOverflow.clientHeight < editorOverflow.scrollHeight
     ) {
       throw new Error(
@@ -406,12 +856,14 @@ app.on('browser-window-created', (_event, window) => {
       !['rgb(255, 255, 255)', 'rgba(255, 255, 255, 0.9)'].includes(
         editorOverflow.borderTopColor
       ) ||
-      editorOverflow.borderTopWidth === '0px'
+      editorOverflow.borderTopWidth === '0px' ||
+      editorOverflow.boxShadow !== 'none'
     ) {
       throw new Error(
         `Text editor did not use a transparent background and white border: ${JSON.stringify(editorOverflow)}`
       );
     }
+    const editingTextBounds = await getRedPixelBounds(window, textRegion);
     const nextTextPoint = { x: textPoint.x - 60, y: textPoint.y };
     sendClick(window, nextTextPoint);
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -432,6 +884,17 @@ app.on('browser-window-created', (_event, window) => {
     ) {
       throw new Error(
         `Clicking another text area did not commit and open a clean editor: ${JSON.stringify(nextEditorState)}`
+      );
+    }
+    const committedTextBounds = await getRedPixelBounds(window, textRegion);
+    if (
+      !editingTextBounds ||
+      !committedTextBounds ||
+      Math.abs(editingTextBounds.left - committedTextBounds.left) > 1 ||
+      Math.abs(editingTextBounds.top - committedTextBounds.top) > 1
+    ) {
+      throw new Error(
+        `Text moved after commit: ${JSON.stringify({ editingTextBounds, committedTextBounds })}`
       );
     }
     window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
@@ -521,6 +984,51 @@ app.on('browser-window-created', (_event, window) => {
     });
     await nextFrame(window);
 
+    await activateTool(window, 'watermark');
+    const watermarkRegion = {
+      x: selectionStart.x,
+      y: selectionStart.y,
+      width: selectionEnd.x - selectionStart.x,
+      height: selectionEnd.y - selectionStart.y,
+    };
+    const beforeWatermark = await countRegionPixels(window, watermarkRegion);
+    const watermarkSettings = await window.webContents.executeJavaScript(`
+      (() => {
+        const input = document.querySelector('.watermark-text-input');
+        const opacity = document.querySelector('.watermark-opacity-input');
+        const output = document.querySelector('.watermark-opacity-output');
+        const palette = document.querySelector('.color-palette');
+        const customColor = document.querySelector('.color-control');
+        const inputStyle = getComputedStyle(input);
+        input.value = 'Snapora';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        opacity.value = '42';
+        opacity.dispatchEvent(new Event('input', { bubbles: true }));
+        return {
+          maxLength: input.maxLength,
+          opacity: output.value,
+          customColorIsLast: palette.lastElementChild === customColor,
+          borderWidth: inputStyle.borderTopWidth,
+          outlineStyle: inputStyle.outlineStyle,
+        };
+      })()
+    `);
+    await nextFrame(window);
+    const afterWatermark = await countRegionPixels(window, watermarkRegion);
+    if (
+      watermarkSettings.maxLength !== 16 ||
+      watermarkSettings.opacity !== '42%' ||
+      !watermarkSettings.customColorIsLast ||
+      parseFloat(watermarkSettings.borderWidth) <= 0 ||
+      parseFloat(watermarkSettings.borderWidth) > 1 ||
+      watermarkSettings.outlineStyle !== 'none' ||
+      afterWatermark <= beforeWatermark
+    ) {
+      throw new Error(
+        `Watermark preset or rendering was invalid: ${JSON.stringify({ watermarkSettings, beforeWatermark, afterWatermark })}`
+      );
+    }
+    await activateTool(window, 'select');
     window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' });
     window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' });
   });
@@ -530,6 +1038,17 @@ app.whenReady().then(async () => {
   const diagnostics = [];
   const manager = new ScreenshotManager({
     onDiagnostic: (event) => diagnostics.push(event),
+    getWindowSnapRegions: () => {
+      const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+      return [
+        {
+          x: display.bounds.x + Math.round(display.bounds.width * 0.15),
+          y: display.bounds.y + Math.round(display.bounds.height * 0.15),
+          width: Math.round(display.bounds.width * 0.7),
+          height: Math.round(display.bounds.height * 0.7),
+        },
+      ];
+    },
   });
   const result = await manager.capture({ display: 'cursor' });
   clearTimeout(smokeTimeout);
@@ -547,7 +1066,7 @@ app.whenReady().then(async () => {
     return;
   }
 
-  if (clipboard.readImage().isEmpty()) {
+  if (!(await waitForClipboardImage())) {
     console.error('Electron Snapora confirmation did not copy an image.');
     process.exit(1);
     return;

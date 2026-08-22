@@ -11,6 +11,12 @@ describe('overlay presentation', () => {
     expect(DEFAULT_SCREENSHOT_LOCALE).toBe('en-US');
     expect(resolveScreenshotMessages().confirm).toBe('Copy & Done');
     expect(resolveScreenshotMessages('zh-CN').copied).toBe('已复制到剪贴板');
+    expect(resolveScreenshotMessages('zh-CN').watermark).toBe('水印');
+    expect(resolveScreenshotMessages('zh-CN')).toMatchObject({
+      copy: '复制',
+      save: '保存',
+      close: '关闭',
+    });
     expect(
       resolveScreenshotMessages('zh-CN', {
         confirm: '复制到聊天框',

@@ -38,17 +38,24 @@ export interface TextLayoutMetrics {
   descent: number;
 }
 
+/** 文字预设对应普通文字、色块填充和对比色描边。 */
+export type TextStyle = 'default' | 'fill' | 'outline';
+
 export interface TextElement extends AnnotationElementBase {
   type: 'text';
   position: Point;
   value: string;
   fontSize: number;
   metrics: TextLayoutMetrics;
+  /** 缺省时兼容旧文档并按普通文字渲染。 */
+  textStyle?: TextStyle;
 }
 
 export interface MosaicElement extends AnnotationElementBase {
   type: 'mosaic';
   bounds: Rect;
+  /** 马赛克块边长，使用 Image Pixel；缺省时兼容旧文档并回退到 8。 */
+  blockSize?: number;
 }
 
 export type AnnotationElement =

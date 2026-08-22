@@ -1,5 +1,5 @@
 export type ScreenshotTool =
-  'rectangle' | 'ellipse' | 'arrow' | 'brush' | 'text' | 'mosaic';
+  'rectangle' | 'ellipse' | 'arrow' | 'brush' | 'text' | 'mosaic' | 'watermark';
 
 export interface ScreenshotBounds {
   x: number;
@@ -16,8 +16,11 @@ export interface ScreenshotMessages {
   exporting: string;
   copied: string;
   saveCancelled: string;
+  copy: string;
   cancel: string;
   save: string;
+  close: string;
+  pin: string;
   confirm: string;
   select: string;
   rectangle: string;
@@ -25,12 +28,20 @@ export interface ScreenshotMessages {
   arrow: string;
   brush: string;
   text: string;
+  textDefault: string;
+  textFill: string;
+  textOutline: string;
   mosaic: string;
+  watermark: string;
   undo: string;
   redo: string;
   color: string;
+  customColor: string;
   lineWidth: string;
   fontSize: string;
+  mosaicStrength: string;
+  opacity: string;
+  watermarkPlaceholder: string;
   annotationCanvas: string;
   selection: string;
   actions: string;
@@ -90,7 +101,7 @@ export interface ScreenshotImageResult {
 }
 
 export type ScreenshotOutputMetadata =
-  { action: 'copy' } | { action: 'save'; filePath: string };
+  { action: 'copy' } | { action: 'save'; filePath: string } | { action: 'pin' };
 
 export type ScreenshotResult =
   | (ScreenshotImageResult & { output: ScreenshotOutputMetadata })

@@ -27,6 +27,10 @@ export const webContents = {
 };
 
 export class BrowserWindow {
+  static getAllWindows(): BrowserWindow[] {
+    return [];
+  }
+
   constructor() {
     unavailable();
   }

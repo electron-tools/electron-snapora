@@ -3,19 +3,40 @@ import {
   calculateTextBaselinePosition,
   createDrawableElement,
   getElementBounds,
+  getResizeHandleAtPoint,
   hitTestElement,
+  isElementResizable,
   measureTextBaselineMetrics,
   measureTextLayout,
   scaleElementToBounds,
   translateElement,
   updateDrawableElement,
   updateElementStyle,
+  wrapTextToWidth,
 } from './annotation-elements.js';
 
-const style = { color: '#f00', lineWidth: 4, fontSize: 24 };
+const style = {
+  color: '#f00',
+  lineWidth: 4,
+  fontSize: 24,
+  textStyle: 'default' as const,
+  mosaicStrength: 8,
+};
 const identity = { id: 'element-1', zIndex: 0, createdAt: 1 };
 
 describe('annotation element geometry', () => {
+  it('wraps text to the measured selection width', () => {
+    const context = {
+      font: '12px serif',
+      measureText: vi.fn(
+        (value: string) => ({ width: value.length * 10 }) as TextMetrics
+      ),
+    };
+
+    expect(wrapTextToWidth(context, 'ABCDE\n中文', 20, 25)).toBe('AB\nCD\nE\n中文');
+    expect(context.font).toBe('12px serif');
+  });
+
   it('creates and updates a normalized rectangle', () => {
     const initial = createDrawableElement(
       'rectangle',
@@ -78,6 +99,7 @@ describe('annotation element geometry', () => {
     expect(mosaic).toMatchObject({
       type: 'mosaic',
       bounds: { x: 20, y: 10, width: 60, height: 60 },
+      blockSize: 8,
     });
     expect(hitTestElement([mosaic], { x: 40, y: 30 }, 2)?.id).toBe('element-1');
     expect(
@@ -105,9 +127,12 @@ describe('annotation element geometry', () => {
     });
 
     const mosaic = createDrawableElement('mosaic', { x: 10, y: 10 }, style, identity);
-    expect(updateElementStyle(mosaic, { color: '#00f' })).toMatchObject({
+    expect(
+      updateElementStyle(mosaic, { color: '#00f', mosaicStrength: 16 })
+    ).toMatchObject({
       color: '#f00',
       bounds: { x: 10, y: 10, width: 0, height: 0 },
+      blockSize: 16,
     });
   });
 
@@ -125,6 +150,29 @@ describe('annotation element geometry', () => {
         metrics: { width: 76, ascent: 16, descent: 4 },
       })
     ).toEqual({ x: 10, y: 24, width: 76, height: 46 });
+  });
+
+  it('includes fill padding in text bounds and updates the text preset', () => {
+    const text = {
+      id: 'text-fill',
+      type: 'text' as const,
+      zIndex: 0,
+      createdAt: 1,
+      color: '#ffffff',
+      position: { x: 10, y: 40 },
+      value: '填充',
+      fontSize: 20,
+      metrics: { width: 40, ascent: 16, descent: 4 },
+      textStyle: 'default' as const,
+    };
+
+    const filled = updateElementStyle(text, { textStyle: 'fill' });
+    expect(filled).toMatchObject({ textStyle: 'fill' });
+    const bounds = getElementBounds(filled);
+    expect(bounds.x).toBeCloseTo(4.4);
+    expect(bounds.y).toBeCloseTo(18.4);
+    expect(bounds.width).toBeCloseTo(51.2);
+    expect(bounds.height).toBeCloseTo(31.2);
   });
 
   it('measures full-width text with the same Canvas font used for rendering', () => {
@@ -189,14 +237,15 @@ describe('annotation element geometry', () => {
       ),
     };
 
-    expect(measureTextBaselineMetrics(context, 24)).toEqual({
+    expect(measureTextBaselineMetrics(context, 'Snapora', 24)).toEqual({
       ascent: 23,
       descent: 7,
     });
+    expect(context.measureText).toHaveBeenCalledWith('Snapora');
     expect(context.font).toBe('12px serif');
   });
 
-  it('keeps measured text bounds aligned after proportional resize', () => {
+  it('does not expose drag resize for text', () => {
     const text = {
       id: 'text-resize',
       type: 'text' as const,
@@ -209,22 +258,15 @@ describe('annotation element geometry', () => {
       metrics: { width: 76, ascent: 16, descent: 4 },
     };
 
-    const scaled = scaleElementToBounds(text, {
-      x: 20,
-      y: 30,
-      width: 152,
-      height: 92,
-    });
-    expect(scaled).toMatchObject({
-      position: { x: 20, y: 62 },
-      fontSize: 40,
-      metrics: { width: 152, ascent: 32, descent: 8 },
-    });
-    expect(getElementBounds(scaled)).toEqual({
-      x: 20,
-      y: 30,
-      width: 152,
-      height: 92,
-    });
+    expect(isElementResizable(text)).toBe(false);
+    expect(getResizeHandleAtPoint(text, { x: 10, y: 24 }, 8)).toBeUndefined();
+    expect(
+      scaleElementToBounds(text, {
+        x: 20,
+        y: 30,
+        width: 152,
+        height: 92,
+      })
+    ).toBe(text);
   });
 });

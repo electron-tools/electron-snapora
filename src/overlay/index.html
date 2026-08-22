@@ -58,6 +58,7 @@
             aria-hidden="true"
           ></span>
         </div>
+        <div class="window-snap-preview" aria-hidden="true" hidden></div>
         <div
           class="selection-toolbar"
           role="toolbar"
@@ -82,10 +83,6 @@
             class="toolbar-panel toolbar-group tool-group"
             aria-label="Annotation tools"
           >
-            <label class="color-control" data-tooltip="Color">
-              <span class="sr-only">Color</span>
-              <input class="color-input" type="color" value="#ff3b30" />
-            </label>
             <button
               class="tool-button icon-button"
               type="button"
@@ -158,6 +155,18 @@
                 <use href="#icon-mosaic"></use>
               </svg>
             </button>
+            <button
+              class="tool-button icon-button"
+              type="button"
+              data-tool="watermark"
+              data-tooltip="Watermark"
+              data-shortcut="W"
+              aria-label="Watermark"
+            >
+              <svg class="toolbar-icon" aria-hidden="true">
+                <use href="#icon-watermark"></use>
+              </svg>
+            </button>
           </div>
           <div class="toolbar-panel toolbar-group settings-panel">
             <div class="toolbar-group history-group" aria-label="History">
@@ -186,32 +195,21 @@
                 </svg>
               </button>
             </div>
-            <span class="toolbar-divider" aria-hidden="true"></span>
-            <div class="toolbar-group style-group" aria-label="Annotation style">
-              <label class="select-control line-control" data-tooltip="Line width">
-                <span class="sr-only">Line width</span>
-                <select class="line-width-select" aria-label="Line width">
-                  <option value="2">2</option>
-                  <option value="4" selected>4</option>
-                  <option value="6">6</option>
-                  <option value="10">10</option>
-                </select>
-              </label>
-              <label class="select-control font-control" data-tooltip="Font size">
-                <span class="sr-only">Font size</span>
-                <select class="font-size-select" aria-label="Font size">
-                  <option value="16">16</option>
-                  <option value="24" selected>24</option>
-                  <option value="32">32</option>
-                  <option value="48">48</option>
-                </select>
-              </label>
-            </div>
           </div>
           <div
             class="toolbar-panel toolbar-group action-group"
             aria-label="Output actions"
           >
+            <button
+              class="toolbar-button icon-button pin-button"
+              type="button"
+              data-tooltip="Pin to screen"
+              aria-label="Pin to screen"
+            >
+              <svg class="toolbar-icon" aria-hidden="true">
+                <use href="#icon-pin"></use>
+              </svg>
+            </button>
             <button
               class="toolbar-button icon-button save-button"
               type="button"
@@ -246,10 +244,206 @@
               </svg>
             </button>
           </div>
+          <div
+            class="toolbar-panel preset-panel"
+            role="group"
+            aria-label="Annotation style"
+            hidden
+          >
+            <div class="preset-options stroke-options" role="group">
+              <button
+                class="preset-option-button line-width-preset"
+                type="button"
+                data-line-width="2"
+                aria-label="Line width 2"
+              >
+                <span class="line-width-dot line-width-dot-small"></span>
+              </button>
+              <button
+                class="preset-option-button line-width-preset"
+                type="button"
+                data-line-width="4"
+                aria-label="Line width 4"
+              >
+                <span class="line-width-dot line-width-dot-medium"></span>
+              </button>
+              <button
+                class="preset-option-button line-width-preset"
+                type="button"
+                data-line-width="8"
+                aria-label="Line width 8"
+              >
+                <span class="line-width-dot line-width-dot-large"></span>
+              </button>
+            </div>
+            <div class="preset-options text-options">
+              <div class="text-style-presets" role="group">
+                <button
+                  class="preset-option-button text-style-preset text-style-default"
+                  type="button"
+                  data-text-style="default"
+                  aria-label="Default"
+                >
+                  <span class="text-style-glyph">T</span>
+                </button>
+                <button
+                  class="preset-option-button text-style-preset text-style-fill"
+                  type="button"
+                  data-text-style="fill"
+                  aria-label="Fill"
+                >
+                  <span class="text-style-glyph">T</span>
+                </button>
+                <button
+                  class="preset-option-button text-style-preset text-style-outline"
+                  type="button"
+                  data-text-style="outline"
+                  aria-label="Outline"
+                >
+                  <span class="text-style-glyph">T</span>
+                </button>
+              </div>
+              <label class="font-control">
+                <span class="sr-only">Font size</span>
+                <select class="font-size-select" aria-label="Font size">
+                  <option value="16">16 px</option>
+                  <option value="24" selected>24 px</option>
+                  <option value="32">32 px</option>
+                  <option value="48">48 px</option>
+                </select>
+              </label>
+            </div>
+            <div class="preset-options mosaic-options">
+              <span class="mosaic-mode" aria-hidden="true">
+                <svg class="toolbar-icon icon-mosaic">
+                  <use href="#icon-mosaic"></use>
+                </svg>
+              </span>
+              <span class="preset-divider" aria-hidden="true"></span>
+              <label class="range-control mosaic-strength-control">
+                <span class="range-label">Mosaic strength</span>
+                <input
+                  class="mosaic-strength-input"
+                  type="range"
+                  min="4"
+                  max="32"
+                  step="2"
+                  value="8"
+                />
+                <output class="mosaic-strength-output">25%</output>
+              </label>
+            </div>
+            <div class="preset-options watermark-options">
+              <input
+                class="watermark-text-input"
+                type="text"
+                maxlength="16"
+                placeholder="Up to 16 characters"
+                aria-label="Watermark"
+              />
+              <span class="preset-divider" aria-hidden="true"></span>
+              <label class="range-control watermark-opacity-control">
+                <span class="range-label">Opacity</span>
+                <input
+                  class="watermark-opacity-input"
+                  type="range"
+                  min="10"
+                  max="100"
+                  step="1"
+                  value="28"
+                />
+                <output class="watermark-opacity-output">28%</output>
+              </label>
+            </div>
+            <span class="preset-divider color-divider" aria-hidden="true"></span>
+            <div class="color-palette" role="group" aria-label="Color">
+              <button
+                class="preset-color-button"
+                type="button"
+                data-color="#ff3b30"
+                style="--preset-color: #ff3b30"
+              ></button>
+              <button
+                class="preset-color-button"
+                type="button"
+                data-color="#ffcc00"
+                style="--preset-color: #ffcc00"
+              ></button>
+              <button
+                class="preset-color-button"
+                type="button"
+                data-color="#34c759"
+                style="--preset-color: #34c759"
+              ></button>
+              <button
+                class="preset-color-button"
+                type="button"
+                data-color="#0a84ff"
+                style="--preset-color: #0a84ff"
+              ></button>
+              <button
+                class="preset-color-button"
+                type="button"
+                data-color="#1c1c1e"
+                style="--preset-color: #1c1c1e"
+              ></button>
+              <button
+                class="preset-color-button"
+                type="button"
+                data-color="#8e8e93"
+                style="--preset-color: #8e8e93"
+              ></button>
+              <button
+                class="preset-color-button preset-color-light"
+                type="button"
+                data-color="#ffffff"
+                style="--preset-color: #ffffff"
+              ></button>
+              <button
+                class="color-control"
+                type="button"
+                data-tooltip="Custom color"
+                aria-expanded="false"
+              >
+                <span class="sr-only">Custom color</span>
+                <span class="custom-color-icon" aria-hidden="true">
+                  <span class="color-check"></span>
+                </span>
+              </button>
+            </div>
+            <input class="color-input" type="hidden" value="#ff3b30" />
+          </div>
+        </div>
+        <div
+          class="color-picker-popover"
+          role="dialog"
+          aria-label="Custom color"
+          hidden
+        >
+          <div
+            class="color-picker-saturation"
+            role="slider"
+            tabindex="0"
+            aria-label="Saturation and brightness"
+            aria-valuemin="0"
+            aria-valuemax="100"
+          >
+            <span class="color-picker-selector" aria-hidden="true"></span>
+          </div>
+          <input
+            class="color-picker-hue"
+            type="range"
+            min="0"
+            max="360"
+            step="1"
+            value="0"
+            aria-label="Hue"
+          />
         </div>
         <textarea
           class="text-editor"
           rows="1"
+          wrap="soft"
           maxlength="500"
           aria-label="Annotation text"
           hidden
@@ -294,6 +488,9 @@
         <rect x="4" y="14" width="6" height="6" rx="1" />
         <rect x="14" y="14" width="6" height="6" rx="1" />
       </symbol>
+      <symbol id="icon-watermark" viewBox="0 0 24 24">
+        <path d="M4 14 14 4M5 20 20 5M11 20l9-9" />
+      </symbol>
       <symbol id="icon-undo" viewBox="0 0 24 24">
         <path d="m9 7-4 4 4 4M5 11h8.5a5.5 5.5 0 0 1 5.5 5.5" />
       </symbol>
@@ -302,6 +499,10 @@
       </symbol>
       <symbol id="icon-save" viewBox="0 0 24 24">
         <path d="M12 3v11m0 0 4-4m-4 4-4-4M5 16v3h14v-3" />
+      </symbol>
+      <symbol id="icon-pin" viewBox="0 0 24 24">
+        <path d="M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6Z" />
+        <path d="M12 14v7" />
       </symbol>
       <symbol id="icon-close" viewBox="0 0 24 24">
         <path d="m6 6 12 12M18 6 6 18" />

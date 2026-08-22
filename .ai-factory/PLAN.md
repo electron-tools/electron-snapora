@@ -1,22 +1,27 @@
-# Implementation Plan: npm release readiness
+# Implementation Plan: Pin screenshot to screen
 
 Branch: main
-Created: 2026-08-20
+Created: 2026-08-21
 
 ## Settings
 
-- Testing: yes
-- Logging: standard
+- Testing: yes, use existing checks and a retained Electron smoke script; do not create persistent `*.test.ts` files
+- Logging: existing structured output diagnostics
 - Docs: yes
 
 ## Tasks
 
-### Phase 1: Release contract
+### Phase 1: Pin output contract
 
-- [x] Task 1: Update `README.md`, `docs/plan.md`, and `CHANGELOG.md` with the verified package status, remaining owner decisions, and the alpha-before-latest policy. Logging: document the release commands and their success/failure output; no runtime logging changes. Dependencies: none.
-- [x] Task 2: Add `publishConfig`, npm lifecycle hooks, and a standard-library-only release metadata validator in `package.json` and `scripts/`. Logging: emit concise `[release]` pass/fail messages without credentials or tokens. Dependencies: Task 1.
+- [x] Task 1: Add `pin` as a validated screenshot output action and public result metadata, plus localized toolbar text and a vertical pin icon. Dependencies: none.
+- [x] Task 2: Export the annotated selection through the existing PNG pipeline when the pin button is clicked, then finish the screenshot session with a pinned result. Dependencies: Task 1.
 
-### Phase 2: Automation
+### Phase 2: Pinned window
 
-- [x] Task 3: Add a GitHub Actions CI baseline for Windows, macOS, and Linux quality checks, plus Windows package-consumer checks, without enabling automatic publication. Logging: retain command output as the CI diagnostic record; do not print secrets. Dependencies: Task 2.
-- [x] Task 4: Run lint, typecheck, tests, build, pack dry-run, consumer checks, and the intentionally blocking release metadata gate. Logging: capture failing gate reasons as owner decisions, not as hidden warnings. Dependencies: Tasks 1-3.
+- [x] Task 3: Add an internal isolated pinned-image window at the selected screen bounds with preserved aspect ratio, always-on-top behavior, whole-window dragging, click-to-front, and a circular close button. Dependencies: Task 2.
+- [x] Task 4: Add native right-click actions for copy, download, and close; keep independent window/image state so multiple pinned screenshots can coexist. Dependencies: Task 3.
+
+### Phase 3: Verification and documentation
+
+- [x] Task 5: Add Electron smoke coverage for the full screenshot-to-pin flow plus direct multiple-window rendering, drag, focus, circular close control, and cleanup; do not add or retain new `*.test.ts` files. Dependencies: Tasks 1-4.
+- [x] Task 6: Update README, changelog, internal plan, package resource baseline, then run format, lint, typecheck, existing tests, build, pin smoke, and package checks. Dependencies: Task 5.

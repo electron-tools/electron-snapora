@@ -8,6 +8,7 @@ export type {
   ScreenshotDocument,
   TextElement,
   TextLayoutMetrics,
+  TextStyle,
 } from './model/document.js';
 export {
   clampRect,

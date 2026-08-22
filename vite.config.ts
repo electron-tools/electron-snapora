@@ -12,7 +12,10 @@ export default defineConfig({
     emptyOutDir: false,
     sourcemap: true,
     rollupOptions: {
-      input: fileURLToPath(new URL('./src/overlay/index.html', import.meta.url)),
+      input: {
+        overlay: fileURLToPath(new URL('./src/overlay/index.html', import.meta.url)),
+        pinned: fileURLToPath(new URL('./src/overlay/pinned.html', import.meta.url)),
+      },
     },
   },
   resolve: {

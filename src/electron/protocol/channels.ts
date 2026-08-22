@@ -12,3 +12,14 @@ export const OVERLAY_CHANNELS = {
   error: 'electron-snapora:overlay:error',
   output: 'electron-snapora:overlay:output',
 } as const;
+
+export const PINNED_CHANNELS = {
+  initialize: 'electron-snapora:pinned:initialize',
+  copy: 'electron-snapora:pinned:copy',
+  copied: 'electron-snapora:pinned:copied',
+  save: 'electron-snapora:pinned:save',
+  close: 'electron-snapora:pinned:close',
+  dragStart: 'electron-snapora:pinned:drag-start',
+  dragMove: 'electron-snapora:pinned:drag-move',
+  dragEnd: 'electron-snapora:pinned:drag-end',
+} as const;

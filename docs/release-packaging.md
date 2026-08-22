@@ -103,16 +103,16 @@ pnpm run verify:release-metadata && pnpm version patch --no-git-tag-version && n
 
 ## 当前 tarball 基线
 
-2026-08-20 对 `electron-snapora@1.0.2` 在 Windows 开发环境执行 `npm pack --dry-run` 和临时 tarball 检查得到：
+2026-08-21 对固定到屏幕功能的待发布构建在 Windows 开发环境执行 `npm pack --dry-run` 和临时 tarball 检查得到：
 
 | 指标                 | 结果                  |
 | -------------------- | --------------------- |
-| tarball 条目         | 50                    |
-| tarball 压缩体积     | 165,943 bytes         |
-| `dist` 文件数        | 42                    |
-| `dist` 未压缩体积    | 640,036 bytes         |
-| Source Map           | 13 个 / 406,459 bytes |
-| Source Map 占 `dist` | 约 63.5%              |
+| tarball 条目         | 62                    |
+| tarball 压缩体积     | 179,435 bytes         |
+| `dist` 文件数        | 54                    |
+| `dist` 未压缩体积    | 702,699 bytes         |
+| Source Map           | 17 个 / 446,556 bytes |
+| Source Map 占 `dist` | 约 63.3%              |
 
 当前 tarball 已包含 MIT `LICENSE`，未包含源码、测试、Demo、CI、内部文档或发布脚本。
 

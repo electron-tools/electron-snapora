@@ -87,12 +87,18 @@ describe('ScreenshotManager', () => {
       onRendererGone: vi.fn(() => vi.fn()),
     };
     const createOverlay = vi.fn(() => overlay);
+    const windowSnapRegion = { x: 20, y: 30, width: 320, height: 180 };
+    const getWindowSnapRegions = vi.fn(() => [
+      windowSnapRegion,
+      { x: 0, y: 0, width: 0, height: 20 },
+    ]);
     const diagnostics: ScreenshotDiagnosticEvent[] = [];
     const manager = new ScreenshotManager({
       ipcMain,
       captureAdapter,
       outputAdapter,
       createOverlay,
+      getWindowSnapRegions,
       overlayReadyTimeoutMs: 1_000,
       resourceLimits: { maxOutputBytes: 3 },
       onDiagnostic: (event) => diagnostics.push(event),
@@ -104,6 +110,9 @@ describe('ScreenshotManager', () => {
     eventBus.emit(OVERLAY_CHANNELS.ready, overlayEvent, {
       protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
     });
+    expect(overlay.sendInitialize).toHaveBeenCalledWith(
+      expect.objectContaining({ windowSnapRegions: [windowSnapRegion] })
+    );
     eventBus.emit(OVERLAY_CHANNELS.prepared, overlayEvent, {
       protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
       jobId: manager.activeJobId,
@@ -149,6 +158,7 @@ describe('ScreenshotManager', () => {
     expect(createOverlay).toHaveBeenCalledWith(frame.display);
     expect(outputAdapter.execute).toHaveBeenCalledWith(outputPayload, {
       senderWebContentsId: 7,
+      captureOptions: { locale: 'zh-CN' },
     });
     expect(
       diagnostics

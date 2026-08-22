@@ -7,7 +7,9 @@ function createContext() {
     save: vi.fn(),
     restore: vi.fn(),
     beginPath: vi.fn(),
+    fill: vi.fn(),
     rect: vi.fn(),
+    roundRect: vi.fn(),
     clip: vi.fn(),
     strokeRect: vi.fn(),
     fillRect: vi.fn(),
@@ -15,8 +17,12 @@ function createContext() {
     stroke: vi.fn(),
     moveTo: vi.fn(),
     lineTo: vi.fn(),
+    translate: vi.fn(),
+    rotate: vi.fn(),
     arc: vi.fn(),
     fillText: vi.fn(),
+    strokeText: vi.fn(),
+    measureText: vi.fn(() => ({ width: 80 }) as TextMetrics),
     drawImage: vi.fn(),
     setLineDash: vi.fn(),
     strokeStyle: '',
@@ -24,7 +30,9 @@ function createContext() {
     lineCap: 'butt',
     lineJoin: 'miter',
     lineWidth: 1,
+    globalAlpha: 1,
     font: '',
+    textAlign: 'start',
     textBaseline: 'alphabetic',
     imageSmoothingEnabled: true,
     imageSmoothingQuality: 'low',
@@ -92,6 +100,52 @@ describe('annotation renderer', () => {
     expect(context.lineTo).toHaveBeenCalled();
     expect(context.fillText).toHaveBeenCalledWith('Snapora', 10, 50);
     expect(context.fillText).toHaveBeenCalledWith('Tools', 10, 81.2);
+  });
+
+  it('does not render an arrow until the drag establishes a direction', () => {
+    const context = createContext();
+    drawAnnotations(
+      context,
+      [
+        {
+          ...base,
+          id: 'arrow-draft',
+          type: 'arrow',
+          start: { x: 20, y: 20 },
+          end: { x: 20, y: 20 },
+          lineWidth: 4,
+        },
+      ],
+      { imageSize: { width: 100, height: 100 } }
+    );
+
+    expect(context.stroke).not.toHaveBeenCalled();
+    expect(context.lineTo).not.toHaveBeenCalled();
+  });
+
+  it('renders text fill and outline presets', () => {
+    const context = createContext();
+    const text = {
+      ...base,
+      position: { x: 10, y: 40 },
+      value: 'Snapora',
+      fontSize: 24,
+      metrics: { width: 90, ascent: 20, descent: 5 },
+    };
+
+    drawAnnotations(
+      context,
+      [
+        { ...text, id: 'fill', type: 'text', textStyle: 'fill' },
+        { ...text, id: 'outline', type: 'text', textStyle: 'outline', zIndex: 1 },
+      ],
+      { imageSize: { width: 120, height: 80 } }
+    );
+
+    expect(context.roundRect).toHaveBeenCalled();
+    expect(context.fill).toHaveBeenCalled();
+    expect(context.strokeText).toHaveBeenCalledWith('Snapora', 10, 40);
+    expect(context.fillText).toHaveBeenCalledTimes(2);
   });
 
   it('clips a pixelated source to a mosaic area and outlines drafts without handles', () => {
@@ -173,5 +227,48 @@ describe('annotation renderer', () => {
 
     expect(context.strokeRect).toHaveBeenCalledWith(20, 20, 30, 25);
     expect(context.fillRect).toHaveBeenCalledTimes(8);
+  });
+
+  it('outlines selected text without resize handles', () => {
+    const context = createContext();
+    const text: AnnotationElement = {
+      ...base,
+      id: 'text',
+      type: 'text',
+      position: { x: 10, y: 40 },
+      value: 'Snapora',
+      fontSize: 24,
+      metrics: { width: 90, ascent: 20, descent: 5 },
+    };
+
+    drawAnnotations(context, [text], {
+      imageSize: { width: 100, height: 80 },
+      selectedElementId: 'text',
+      selectionHandleSize: 8,
+    });
+
+    expect(context.strokeRect).toHaveBeenCalledOnce();
+    expect(context.strokeRect).toHaveBeenCalledWith(10, 20, 90, 25);
+    expect(context.fillRect).not.toHaveBeenCalled();
+  });
+
+  it('renders a tiled watermark across the clipped selection', () => {
+    const context = createContext();
+
+    drawAnnotations(context, [], {
+      imageSize: { width: 320, height: 180 },
+      clipBounds: { x: 20, y: 10, width: 240, height: 120 },
+      watermark: {
+        text: 'Snapora',
+        color: '#ffffff',
+        opacity: 0.35,
+        fontSize: 18,
+      },
+    });
+
+    expect(context.rotate).toHaveBeenCalledWith(-Math.PI / 7);
+    expect(context.translate).toHaveBeenCalledWith(140, 70);
+    expect(context.fillText).toHaveBeenCalled();
+    expect(context.globalAlpha).toBe(0.35);
   });
 });

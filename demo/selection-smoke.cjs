@@ -12,6 +12,7 @@ const { ScreenshotManager } = require('electron-snapora/main');
 
 const copyOutput = process.argv.includes('--copy');
 const doubleClickOutput = process.argv.includes('--double-click');
+const pinOutput = process.argv.includes('--pin');
 let captureWindow;
 
 app.disableHardwareAcceleration();
@@ -192,25 +193,25 @@ app.on('browser-window-created', (_event, window) => {
       throw new Error('Rectangle annotation was not rendered to the canvas.');
     }
 
-    if (copyOutput) {
-      const confirmButton = await window.webContents.executeJavaScript(`
+    if (copyOutput || pinOutput) {
+      const outputButton = await window.webContents.executeJavaScript(`
         (() => {
-          const bounds = document.querySelector('.confirm-button')?.getBoundingClientRect();
+          const bounds = document.querySelector('${pinOutput ? '.pin-button' : '.confirm-button'}')?.getBoundingClientRect();
           return bounds ? { x: Math.round(bounds.x + bounds.width / 2), y: Math.round(bounds.y + bounds.height / 2) } : null;
         })()
       `);
-      if (!confirmButton) {
-        throw new Error('Copy-and-done button was not rendered.');
+      if (!outputButton) {
+        throw new Error('Requested output button was not rendered.');
       }
       window.webContents.sendInputEvent({
         type: 'mouseDown',
-        ...confirmButton,
+        ...outputButton,
         button: 'left',
         clickCount: 1,
       });
       window.webContents.sendInputEvent({
         type: 'mouseUp',
-        ...confirmButton,
+        ...outputButton,
         button: 'left',
         clickCount: 1,
       });
@@ -230,7 +231,7 @@ app.whenReady().then(async () => {
     result.status !== 'completed' ||
     result.data.byteLength < 8 ||
     result.mimeType !== 'image/png' ||
-    result.output.action !== 'copy' ||
+    result.output.action !== (pinOutput ? 'pin' : 'copy') ||
     result.data[0] !== 0x89 ||
     result.data[1] !== 0x50
   ) {
@@ -294,8 +295,26 @@ app.whenReady().then(async () => {
     }
   }
 
+  if (pinOutput) {
+    const pinnedWindow = await waitForPinnedWindow();
+    if (!pinnedWindow) {
+      console.error('Electron Snapora pin output did not create a pinned window.');
+      process.exit(1);
+      return;
+    }
+    const pinnedState = await pinnedWindow.webContents.executeJavaScript(`({
+      image: document.querySelector('.pinned-image')?.src.startsWith('blob:'),
+      closeButton: Boolean(document.querySelector('.pinned-close'))
+    })`);
+    if (!pinnedState.image || !pinnedState.closeButton) {
+      console.error('Electron Snapora pinned window did not initialize:', pinnedState);
+      process.exit(1);
+      return;
+    }
+  }
+
   console.log(
-    `Electron Snapora ${doubleClickOutput ? 'double-click' : copyOutput ? 'clipboard' : 'selection'} smoke test passed (${result.data.byteLength} bytes).`
+    `Electron Snapora ${pinOutput ? 'pin' : doubleClickOutput ? 'double-click' : copyOutput ? 'clipboard' : 'selection'} smoke test passed (${result.data.byteLength} bytes).`
   );
   process.exit(0);
 });
@@ -311,6 +330,25 @@ async function waitForCopyFeedbackWindow() {
         `document.documentElement.dataset.snaporaFeedback === 'copy'`
       );
       if (isFeedback) {
+        return window;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  return undefined;
+}
+
+async function waitForPinnedWindow() {
+  const deadline = Date.now() + 1_000;
+  while (Date.now() < deadline) {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (window.isDestroyed() || window === captureWindow) {
+        continue;
+      }
+      const isPinned = await window.webContents.executeJavaScript(
+        `Boolean(document.querySelector('.pinned-surface'))`
+      );
+      if (isPinned) {
         return window;
       }
     }

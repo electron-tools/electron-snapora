@@ -7,6 +7,7 @@ import type {
   MosaicElement,
   RectangleElement,
   TextLayoutMetrics,
+  TextStyle,
 } from '../core/model/document.js';
 import type { ScreenshotTool } from '../types.js';
 import type { ResizeHandle } from './selection-geometry.js';
@@ -15,11 +16,16 @@ export interface AnnotationStyle {
   color: string;
   lineWidth: number;
   fontSize: number;
+  textStyle: TextStyle;
+  /** 马赛克块边长使用视口像素，创建元素时再换算为图片像素。 */
+  mosaicStrength: number;
 }
 
 export type AnnotationElementStyle = Partial<AnnotationStyle>;
 
 export const TEXT_LINE_HEIGHT = 1.3;
+const TEXT_FILL_PADDING_FACTOR = 0.28;
+const TEXT_OUTLINE_WIDTH_FACTOR = 0.1;
 
 type TextBaselineMetrics = Pick<TextLayoutMetrics, 'ascent' | 'descent'> &
   Partial<Pick<TextLayoutMetrics, 'width'>>;
@@ -43,17 +49,18 @@ export function calculateTextBaselinePosition(
 }
 
 /**
- * textarea 按字体框排版，而元素边界使用实际字形边界；提交时单独读取字体框指标，
- * 避免 Windows 等平台的字体上升部差异让 Canvas 文字相对输入位置上移。
+ * textarea 按实际输入命中的系统字体排版；基线测量必须使用同一行内容，
+ * 避免固定中英文样本在 Windows/macOS 触发不同的回退字体并产生偏移。
  */
 export function measureTextBaselineMetrics(
   context: Pick<CanvasRenderingContext2D, 'font' | 'measureText'>,
+  value: string,
   fontSize: number
 ): TextBaselineMetrics {
   const previousFont = context.font;
   context.font = getTextCanvasFont(fontSize);
   try {
-    const metrics = context.measureText('Mg国');
+    const metrics = context.measureText(splitTextLines(value)[0] || 'Mg');
     return {
       ascent: positiveMetric(
         metrics.fontBoundingBoxAscent,
@@ -81,6 +88,59 @@ export function splitTextLines(value: string): string[] {
 
 export function getTextCanvasFont(fontSize: number): string {
   return `600 ${fontSize}px system-ui, sans-serif`;
+}
+
+/** 按 Canvas 实际测量宽度插入换行，确保最终文字不会超出选区。 */
+export function wrapTextToWidth(
+  context: Pick<CanvasRenderingContext2D, 'font' | 'measureText'>,
+  value: string,
+  fontSize: number,
+  maximumWidth: number
+): string {
+  if (maximumWidth <= 0) {
+    return value;
+  }
+  const previousFont = context.font;
+  context.font = getTextCanvasFont(fontSize);
+  try {
+    return splitTextLines(value)
+      .flatMap((line) => {
+        if (!line) {
+          return [''];
+        }
+        const wrapped: string[] = [];
+        let current = '';
+        // ponytail: 输入上限为 500 字符；逐字测量优先保证中英文混排宽度准确。
+        for (const character of line) {
+          const candidate = current + character;
+          if (current && context.measureText(candidate).width > maximumWidth) {
+            wrapped.push(current);
+            current = character;
+          } else {
+            current = candidate;
+          }
+        }
+        wrapped.push(current);
+        return wrapped;
+      })
+      .join('\n');
+  } finally {
+    context.font = previousFont;
+  }
+}
+
+/** 根据所选文字颜色返回清晰可读的黑色或白色对比色。 */
+export function getTextContrastColor(color: string): '#111111' | '#ffffff' {
+  const normalized = color.trim();
+  const match = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(normalized);
+  if (!match) {
+    return '#ffffff';
+  }
+  const red = Number.parseInt(match[1] ?? '00', 16);
+  const green = Number.parseInt(match[2] ?? '00', 16);
+  const blue = Number.parseInt(match[3] ?? '00', 16);
+  const brightness = (red * 299 + green * 587 + blue * 114) / 255000;
+  return brightness > 0.62 ? '#111111' : '#ffffff';
 }
 
 /** 使用与 Canvas 渲染一致的字体测量文字，避免中文等全角字符被固定比例低估。 */
@@ -119,7 +179,7 @@ interface ElementIdentity {
 }
 
 export function createDrawableElement(
-  tool: Exclude<ScreenshotTool, 'text'>,
+  tool: Exclude<ScreenshotTool, 'text' | 'watermark'>,
   point: Point,
   style: AnnotationStyle,
   identity: ElementIdentity
@@ -164,6 +224,7 @@ export function createDrawableElement(
         ...base,
         type: 'mosaic',
         bounds: { ...point, width: 0, height: 0 },
+        blockSize: style.mosaicStrength,
       } satisfies MosaicElement;
   }
 }
@@ -214,14 +275,22 @@ export function getElementBounds(element: AnnotationElement): Rect {
       return paddedBounds(element.points, element.lineWidth);
     case 'text': {
       const lines = splitTextLines(element.value);
+      const textStyle = element.textStyle ?? 'default';
+      const decorationPadding =
+        textStyle === 'fill'
+          ? element.fontSize * TEXT_FILL_PADDING_FACTOR
+          : textStyle === 'outline'
+            ? Math.max(2, element.fontSize * TEXT_OUTLINE_WIDTH_FACTOR)
+            : 0;
       return {
-        x: element.position.x,
-        y: element.position.y - element.metrics.ascent,
-        width: element.metrics.width,
+        x: element.position.x - decorationPadding,
+        y: element.position.y - element.metrics.ascent - decorationPadding,
+        width: element.metrics.width + decorationPadding * 2,
         height:
           element.metrics.ascent +
           element.metrics.descent +
-          element.fontSize * TEXT_LINE_HEIGHT * Math.max(0, lines.length - 1),
+          element.fontSize * TEXT_LINE_HEIGHT * Math.max(0, lines.length - 1) +
+          decorationPadding * 2,
       };
     }
   }
@@ -246,18 +315,29 @@ export function updateElementStyle(
     }
     case 'text': {
       const fontSize = style.fontSize ?? element.fontSize;
+      const currentTextStyle = element.textStyle ?? 'default';
+      const textStyle = style.textStyle ?? currentTextStyle;
       const scale = fontSize / element.fontSize;
-      return color === element.color && fontSize === element.fontSize
+      return color === element.color &&
+        fontSize === element.fontSize &&
+        textStyle === currentTextStyle
         ? element
         : {
             ...element,
             color,
             fontSize,
+            textStyle,
             metrics: scaleTextMetrics(element.metrics, scale),
           };
     }
-    case 'mosaic':
-      return element;
+    case 'mosaic': {
+      if (style.mosaicStrength === undefined) {
+        return element;
+      }
+      return style.mosaicStrength === element.blockSize
+        ? element
+        : { ...element, blockSize: style.mosaicStrength };
+    }
   }
 }
 
@@ -276,10 +356,18 @@ export function getResizeHandleAtPoint(
   point: Point,
   tolerance: number
 ): ResizeHandle | undefined {
+  if (!isElementResizable(element)) {
+    return undefined;
+  }
   const handles = getResizeHandlePoints(getElementBounds(element));
   return (Object.entries(handles) as Array<[ResizeHandle, Point]>).find(
     ([, handlePoint]) => distance(handlePoint, point) <= tolerance
   )?.[0];
+}
+
+/** 文字通过字号控件调整大小，不提供容易造成比例失真的拖拽 resize。 */
+export function isElementResizable(element: AnnotationElement): boolean {
+  return element.type !== 'text';
 }
 
 export function getResizeHandlePoints(bounds: Rect): Record<ResizeHandle, Point> {
@@ -368,17 +456,8 @@ export function scaleElementToBounds(
       return { ...element, start: mapPoint(element.start), end: mapPoint(element.end) };
     case 'brush':
       return { ...element, points: element.points.map(mapPoint) };
-    case 'text': {
-      const scale = nextBounds.height / Math.max(previousBounds.height, 1);
-      const fontSize = Math.max(8, element.fontSize * scale);
-      const actualScale = fontSize / element.fontSize;
-      return {
-        ...element,
-        position: mapPoint(element.position),
-        fontSize,
-        metrics: scaleTextMetrics(element.metrics, actualScale),
-      };
-    }
+    case 'text':
+      return element;
   }
 }
 
