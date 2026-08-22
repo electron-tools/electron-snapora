@@ -847,7 +847,7 @@ declare global {
 - Windows 11 x64 使用独立 tgz 消费项目分别在 Electron 42.8.0、43.3.0 完成真实捕获、Overlay 加载和取消回归。
 - `display: 'cursor'` 在任务开始时只解析一次鼠标所在显示器，并把锁定的 display ID 传给采集适配器；若采集期间显示器 ID、边界或缩放发生变化，任务返回 `DISPLAY_NOT_FOUND` 并要求重试，不显示错位窗口。
 - Windows 截图层禁用圆角和厚边框，避免无边框窗口阴影、动画及边缘缩放；macOS 截图层使用简易全屏、允许超屏幕尺寸并显示在全部 Space/全屏窗口上方。
-- macOS 在首次采集请求失败后重新读取屏幕录制权限；系统状态从 `not-determined` 变为 `denied`/`restricted` 时返回 `PERMISSION_DENIED`。
+- macOS 在 `not-determined` 时由首次真实采集触发系统授权弹窗；已拒绝时打开屏幕录制隐私设置并返回 `PERMISSION_DENIED`，受系统策略限制时只返回错误。
 - Windows ARM64、macOS Retina/权限/签名和 Linux 各显示协议仍是发布前待验收项；未完成前 README 必须明确标记，不推断支持。
 
 ### 14.2 数据规模保护

@@ -2,11 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## [1.0.3] - 2026-08-22
 
 ### Added
 
-- Pin annotated screenshots to independent always-on-top draggable windows with close, copy, download, and multi-window support.
+- Pin annotated screenshots to independent always-on-top draggable windows with close, copy, save, and multi-window support.
 - Contextual annotation preset panels, adjustable mosaic strength, and tiled text watermarks with opacity and color controls.
 - Compact text input that grows with its longest line and hover-to-snap window selection.
 - Hover-only pinned-window close control and localized in-window copy success feedback.
@@ -14,7 +14,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - Replace text-size shortcuts with default, fill, and outline text style presets.
-- Match the custom color preset to the fixed swatch size, remove its inner dot, reuse the standard selected checkmark, and add color-coded pinned-window context-menu icons.
+- Match the custom color preset to the fixed swatch size, reuse the standard selected checkmark, and unify pinned-window context-menu icons.
 - Replace the system color dialog with a themed HSV picker whose saturation area and hue bar share one width.
 
 ### Fixed
@@ -22,7 +22,8 @@ All notable changes to this project will be documented in this file.
 - Hide zero-length arrow drafts until dragging establishes a direction.
 - Keep pinned-window dimensions stable during long drags on high-DPI Windows displays.
 - Keep the text editor and automatically wrapped Canvas text inside the screenshot selection.
-- Keep the text editor and automatically wrapped Canvas text inside the screenshot selection.
+- Prevent the pinned-window context menu from showing an initial item selection or browser focus outline.
+- Trigger the macOS Screen Recording prompt on first capture and open System Settings after denial.
 
 ## [1.0.2] - 2026-08-20
 

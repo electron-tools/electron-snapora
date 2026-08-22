@@ -1,4 +1,4 @@
-import { desktopCapturer, screen, systemPreferences } from 'electron';
+import { desktopCapturer, screen, shell, systemPreferences } from 'electron';
 
 import type { ScreenshotOptions } from '../../types.js';
 import type {
@@ -52,11 +52,16 @@ interface DesktopCapturerApi {
 type ScreenPermissionStatus =
   'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown';
 
+/** macOS 已拒绝屏幕录制后不会再次弹授权框，只能进入隐私设置手动开启。 */
+const MAC_SCREEN_CAPTURE_SETTINGS_URL =
+  'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture';
+
 export interface ElectronCaptureAdapterOptions {
   desktopCapturer?: DesktopCapturerApi;
   screen?: ScreenApi;
   platform?: NodeJS.Platform;
   getScreenPermissionStatus?: () => ScreenPermissionStatus;
+  openScreenCaptureSettings?: () => Promise<void> | void;
   resourceLimits?: ScreenshotResourceLimitOptions;
 }
 
@@ -69,6 +74,7 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
   readonly #screen: ScreenApi;
   readonly #platform: NodeJS.Platform;
   readonly #getScreenPermissionStatus: () => ScreenPermissionStatus;
+  readonly #openScreenCaptureSettings: () => Promise<void> | void;
   readonly #resourceLimits: ScreenshotResourceLimits;
 
   constructor(options: ElectronCaptureAdapterOptions = {}) {
@@ -78,11 +84,13 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
     this.#getScreenPermissionStatus =
       options.getScreenPermissionStatus ??
       (() => systemPreferences.getMediaAccessStatus('screen'));
+    this.#openScreenCaptureSettings =
+      options.openScreenCaptureSettings ??
+      (() => shell.openExternal(MAC_SCREEN_CAPTURE_SETTINGS_URL));
     this.#resourceLimits = resolveScreenshotResourceLimits(options.resourceLimits);
   }
 
   resolveTargetDisplay(options: ScreenshotOptions = {}): CaptureDisplay {
-    this.#assertPermission();
     return this.#toCaptureDisplay(this.#resolveDisplay(options.display ?? 'cursor'));
   }
 
@@ -90,7 +98,7 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
     options: ScreenshotOptions = {},
     targetDisplay?: CaptureDisplay
   ): Promise<CapturedFrame[]> {
-    this.#assertPermission();
+    await this.#ensurePermission();
 
     // Session 预加载 Overlay 后必须继续使用同一个显示器，不能再次按鼠标位置解析。
     const display = targetDisplay
@@ -111,7 +119,7 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
       });
     } catch (error) {
       // macOS 首次请求可能先显示系统授权弹窗，失败后状态才变为 denied。
-      this.#assertPermission();
+      await this.#ensurePermission();
       throw new ScreenshotError(
         'CAPTURE_FAILED',
         'Electron failed to capture the screen.',
@@ -120,12 +128,13 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
         }
       );
     }
+    await this.#ensurePermission();
 
     const source = sources.find(
       (candidate) => candidate.display_id === String(display.id)
     );
     if (!source) {
-      this.#assertPermission();
+      await this.#ensurePermission();
       throw new ScreenshotError(
         'DISPLAY_NOT_FOUND',
         `No desktop capture source matched display ${display.id}.`
@@ -133,7 +142,7 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
     }
 
     if (source.thumbnail.isEmpty()) {
-      this.#assertPermission();
+      await this.#ensurePermission();
       throw new ScreenshotError(
         'CAPTURE_FAILED',
         'Electron returned an empty screen image.'
@@ -169,13 +178,20 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
     }
   }
 
-  #assertPermission(): void {
+  async #ensurePermission(): Promise<void> {
     if (this.#platform !== 'darwin') {
       return;
     }
 
     const status = this.#getScreenPermissionStatus();
     if (status === 'denied' || status === 'restricted') {
+      if (status === 'denied') {
+        try {
+          await this.#openScreenCaptureSettings();
+        } catch {
+          // 打开系统设置失败不能掩盖真正的权限错误。
+        }
+      }
       throw new ScreenshotError(
         'PERMISSION_DENIED',
         'Screen recording permission is required to capture the display.'

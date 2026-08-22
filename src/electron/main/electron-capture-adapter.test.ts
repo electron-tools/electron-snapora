@@ -118,17 +118,52 @@ describe('ElectronCaptureAdapter', () => {
 
   it('rejects denied macOS screen recording permission before capture', async () => {
     const desktopCapturer = createDesktopCapturer();
+    const openScreenCaptureSettings = vi.fn(async () => undefined);
     const adapter = new ElectronCaptureAdapter({
       screen: createScreen(),
       desktopCapturer,
       platform: 'darwin',
       getScreenPermissionStatus: () => 'denied',
+      openScreenCaptureSettings,
     });
 
     await expect(adapter.capture()).rejects.toMatchObject({
       code: 'PERMISSION_DENIED',
     });
     expect(desktopCapturer.getSources).not.toHaveBeenCalled();
+    expect(openScreenCaptureSettings).toHaveBeenCalledOnce();
+  });
+
+  it('lets first-run macOS capture trigger the native permission prompt', async () => {
+    const desktopCapturer = createDesktopCapturer();
+    const openScreenCaptureSettings = vi.fn(async () => undefined);
+    const adapter = new ElectronCaptureAdapter({
+      screen: createScreen(),
+      desktopCapturer,
+      platform: 'darwin',
+      getScreenPermissionStatus: () => 'not-determined',
+      openScreenCaptureSettings,
+    });
+
+    await expect(adapter.capture()).resolves.toHaveLength(1);
+    expect(desktopCapturer.getSources).toHaveBeenCalledOnce();
+    expect(openScreenCaptureSettings).not.toHaveBeenCalled();
+  });
+
+  it('does not open settings for restricted macOS permission', async () => {
+    const openScreenCaptureSettings = vi.fn(async () => undefined);
+    const adapter = new ElectronCaptureAdapter({
+      screen: createScreen(),
+      desktopCapturer: createDesktopCapturer(),
+      platform: 'darwin',
+      getScreenPermissionStatus: () => 'restricted',
+      openScreenCaptureSettings,
+    });
+
+    await expect(adapter.capture()).rejects.toMatchObject({
+      code: 'PERMISSION_DENIED',
+    });
+    expect(openScreenCaptureSettings).not.toHaveBeenCalled();
   });
 
   it('maps a macOS first-run capture rejection to permission denied', async () => {
@@ -136,6 +171,7 @@ describe('ElectronCaptureAdapter', () => {
       .fn<() => 'not-determined' | 'denied'>()
       .mockReturnValueOnce('not-determined')
       .mockReturnValueOnce('denied');
+    const openScreenCaptureSettings = vi.fn(async () => undefined);
     const adapter = new ElectronCaptureAdapter({
       screen: createScreen(),
       desktopCapturer: {
@@ -145,11 +181,13 @@ describe('ElectronCaptureAdapter', () => {
       },
       platform: 'darwin',
       getScreenPermissionStatus,
+      openScreenCaptureSettings,
     });
 
     await expect(adapter.capture()).rejects.toMatchObject({
       code: 'PERMISSION_DENIED',
     });
+    expect(openScreenCaptureSettings).toHaveBeenCalledOnce();
   });
 
   it('does not guess when Electron cannot map a source to the display', async () => {

@@ -319,9 +319,11 @@ Screen API.
 ### macOS permission
 
 macOS 10.15 and later requires Screen Recording consent. When the operating system reports
-`denied` or `restricted`, capture returns `PERMISSION_DENIED`; the user must enable the signed host
-application under System Settings → Privacy & Security → Screen Recording and restart it. Test the
-permission using the signed application identity, not only Electron launched from a terminal.
+`not-determined`, the first real capture request triggers the native macOS permission prompt. If
+access was already denied, Snapora opens System Settings → Privacy & Security → Screen Recording
+and returns `PERMISSION_DENIED`; the user must enable the signed host application and restart it.
+Restricted devices return the same error without opening settings. Test permission using the signed
+application identity, not only Electron launched from a terminal.
 
 Add a screen-capture purpose string to the packaged host. For electron-builder:
 

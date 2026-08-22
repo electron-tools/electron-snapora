@@ -17,6 +17,10 @@ export const systemPreferences = {
   getMediaAccessStatus: unavailable,
 };
 
+export const shell = {
+  openExternal: unavailable,
+};
+
 export const ipcMain = {
   on: unavailable,
   removeListener: unavailable,
