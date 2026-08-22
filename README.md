@@ -1,5 +1,9 @@
 # electron-snapora — Electron screenshot plugin with annotations
 
+[![npm version](https://img.shields.io/npm/v/electron-snapora?style=flat-square)](https://www.npmjs.com/package/electron-snapora) 
+[![npm downloads](https://img.shields.io/npm/dm/electron-snapora?style=flat-square)](https://www.npmjs.com/package/electron-snapora) 
+[![License](https://img.shields.io/npm/l/electron-snapora?style=flat-square)](https://github.com/xxx/electron-snapora/blob/main/LICENSE)
+
 [English](https://github.com/electron-tools/electron-snapora/blob/main/README.md) | [简体中文](https://github.com/electron-tools/electron-snapora/blob/main/README.zh-CN.md) | [日本語](https://github.com/electron-tools/electron-snapora/blob/main/README.ja.md) | [한국어](https://github.com/electron-tools/electron-snapora/blob/main/README.ko.md) | [Español](https://github.com/electron-tools/electron-snapora/blob/main/README.es.md)
 
 An easy-to-integrate Electron screenshot plugin with one-call setup and secure Preload IPC for region capture, annotation editing, clipboard copy, PNG export, and pin-to-screen windows.
