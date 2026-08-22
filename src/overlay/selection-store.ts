@@ -31,6 +31,7 @@ export interface OverlayState {
 
 export type OverlayAction =
   | { type: 'initialize'; payload: ScreenshotInitializePayload }
+  | { type: 'reset' }
   | { type: 'image-ready' }
   | { type: 'begin-create'; pointerId: number; point: Point; bounds: Rect }
   | { type: 'begin-move'; pointerId: number; point: Point }
@@ -89,6 +90,8 @@ export function reduceOverlayState(
         selection: null,
         interaction: null,
       };
+    case 'reset':
+      return initialOverlayState;
     case 'image-ready':
       return state.payload ? { ...state, phase: 'ready' } : state;
     case 'begin-create':

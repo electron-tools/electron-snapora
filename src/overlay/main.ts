@@ -39,6 +39,7 @@ import { drawAnnotations, type WatermarkOptions } from './annotation-renderer.js
 import {
   createAnnotationStore,
   getRenderableElements,
+  type AnnotationState,
   type AnnotationTool,
 } from './annotation-store.js';
 import { exportSelectionPng } from './export-selection.js';
@@ -185,10 +186,21 @@ let outputFeedback: string | null = null;
 let exportProgressVisible = false;
 let exportProgressTimer: number | undefined;
 let currentMessages: ScreenshotMessages = resolveScreenshotMessages();
+let annotationCanvasRenderCache: AnnotationCanvasRenderCache | undefined;
+let toolbarPositionCacheKey: string | null = null;
 
 const EXPORT_PROGRESS_DELAY_MS = 180;
 /** 水印字号固定为紧凑预设，避免给面板再增加一个低价值控件。 */
 const WATERMARK_FONT_SIZE = 18;
+
+interface AnnotationCanvasRenderCache {
+  frame: ScreenshotInitializePayload['frames'][number] | undefined;
+  document: AnnotationState['document'];
+  draft: AnnotationState['draft'];
+  preview: AnnotationState['preview'];
+  selectedElementId: AnnotationState['selectedElementId'];
+  watermarkKey: string;
+}
 
 /** 捕获帧加载完成后才开放选区和标注，确保三套坐标使用同一实际图片尺寸。 */
 function initializeOverlay(payload: ScreenshotInitializePayload): void {
@@ -214,6 +226,9 @@ function initializeOverlay(payload: ScreenshotInitializePayload): void {
     annotationCanvas.width = frame.pixelSize.width;
     annotationCanvas.height = frame.pixelSize.height;
     selectionStore.dispatch({ type: 'image-ready' });
+    // 缓存窗口可能仍保留上一帧合成结果；仅在新图和空画布都准备好后才解除渲染层隐藏。
+    screenFrame.hidden = false;
+    annotationCanvas.hidden = false;
     // 图片解码后保留两次合成机会，但共享一个截止时间，避免透明窗口被节流时串行等待。
     screenFrame.getBoundingClientRect();
     await waitForCompositeFrames();
@@ -240,6 +255,11 @@ function resetOverlaySession(): void {
   pendingTextPoint = null;
   pendingTextViewportPoint = null;
   outputFeedback = null;
+  // 隐藏实际图像层，防止复用窗口在下一帧解码前短暂展示旧的合成内容。
+  screenFrame.hidden = true;
+  annotationCanvas.hidden = true;
+  // 缓存窗口在本次会话结束后不会重载；同步清空选区和帧引用，避免下次显示旧 Canvas。
+  selectionStore.dispatch({ type: 'reset' });
   annotationStore.reset(configuredDefaultTool);
   colorInput.value = colorInput.defaultValue;
   customColorSelected = false;
@@ -1004,6 +1024,7 @@ function parseCssPixels(value: string): number {
 function cancelCapture(): void {
   const jobId = selectionStore.getState().payload?.jobId;
   if (jobId) {
+    resetOverlaySession();
     window.snaporaOverlay.cancel(jobId);
   }
 }
@@ -1070,6 +1091,7 @@ async function confirmCapture(
           ? { action: 'pin' as const }
           : { action: 'copy' as const };
     clearExportProgress();
+    resetOverlaySession();
     window.snaporaOverlay.confirm({
       jobId: state.payload.jobId,
       result: { ...result, output },
@@ -1161,8 +1183,22 @@ function render(): void {
       : selection;
     sizeHint.value = `${imageRect.width} × ${imageRect.height}`;
     if (!toolbar.hidden) {
-      positionToolbar(selection);
+      const positionKey = [
+        selection.x,
+        selection.y,
+        selection.width,
+        selection.height,
+        presetKind ?? '',
+        surface.clientWidth,
+        surface.clientHeight,
+      ].join(':');
+      if (toolbarPositionCacheKey !== positionKey) {
+        positionToolbar(selection);
+        toolbarPositionCacheKey = positionKey;
+      }
     }
+  } else {
+    toolbarPositionCacheKey = null;
   }
 
   for (const button of toolButtons) {
@@ -1176,13 +1212,37 @@ function render(): void {
 }
 
 function renderAnnotationCanvas(): void {
-  annotationContext.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
   const frame = selectionStore.getState().payload?.frames[0];
   const state = annotationStore.getState();
+  const watermark = getWatermarkOptions();
+  const nextCache: AnnotationCanvasRenderCache = {
+    frame,
+    document: state.document,
+    draft: state.draft,
+    preview: state.preview,
+    selectedElementId: state.selectedElementId,
+    watermarkKey: watermark
+      ? `${watermark.text}\u0000${watermark.color}\u0000${watermark.opacity}\u0000${watermark.fontSize}`
+      : '',
+  };
+  const previousCache = annotationCanvasRenderCache;
+  if (
+    previousCache &&
+    previousCache.frame === nextCache.frame &&
+    previousCache.document === nextCache.document &&
+    previousCache.draft === nextCache.draft &&
+    previousCache.preview === nextCache.preview &&
+    previousCache.selectedElementId === nextCache.selectedElementId &&
+    previousCache.watermarkKey === nextCache.watermarkKey
+  ) {
+    return;
+  }
+
+  annotationCanvasRenderCache = nextCache;
+  annotationContext.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
   if (!frame || !state.document) {
     return;
   }
-  const watermark = getWatermarkOptions();
   drawAnnotations(annotationContext, getRenderableElements(state), {
     clipBounds: state.document.selection,
     imageSize: frame.pixelSize,

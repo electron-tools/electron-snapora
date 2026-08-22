@@ -115,4 +115,32 @@ describe('overlay selection store', () => {
     store.dispatch({ type: 'begin-export' });
     expect(store.getState().phase).toBe('exporting');
   });
+
+  it('clears cached session data after completion or cancellation', () => {
+    const store = createOverlayStore();
+    store.dispatch({ type: 'initialize', payload });
+    store.dispatch({ type: 'image-ready' });
+    store.dispatch({
+      type: 'begin-create',
+      pointerId: 1,
+      point: { x: 10, y: 10 },
+      bounds,
+    });
+    store.dispatch({
+      type: 'pointer-move',
+      pointerId: 1,
+      point: { x: 20, y: 20 },
+      bounds,
+    });
+    store.dispatch({ type: 'end-interaction', pointerId: 1 });
+
+    store.dispatch({ type: 'reset' });
+
+    expect(store.getState()).toEqual({
+      phase: 'waiting',
+      payload: null,
+      selection: null,
+      interaction: null,
+    });
+  });
 });
