@@ -203,6 +203,7 @@ function initializeOverlay(payload: ScreenshotInitializePayload): void {
   }
 
   configuredDefaultTool = payload.options.defaultTool ?? 'select';
+  resetOverlaySession();
   windowSnapRegions = resolveWindowSnapRegions(payload, frame.display.bounds);
   hoveredWindowSnap = null;
   selectionStore.dispatch({ type: 'initialize', payload });
@@ -228,6 +229,38 @@ function initializeOverlay(payload: ScreenshotInitializePayload): void {
   screenFrame.src = frame.dataUrl;
 }
 
+/** 复用 renderer 时恢复到新建窗口的初始状态，避免上一次选区和控件值残留。 */
+function resetOverlaySession(): void {
+  clearExportProgress();
+  closeTextEditor(false);
+  closeColorPicker();
+  pointerInteraction = null;
+  resetAnnotationsAfterSelection = true;
+  hoveredWindowSnap = null;
+  pendingTextPoint = null;
+  pendingTextViewportPoint = null;
+  outputFeedback = null;
+  annotationStore.reset(configuredDefaultTool);
+  colorInput.value = colorInput.defaultValue;
+  customColorSelected = false;
+  customColor = colorInput.value.toLowerCase();
+  customColorHsv = hexToHsv(customColor);
+  const defaultFontOption = [...fontSizeSelect.options].find(
+    (option) => option.defaultSelected
+  );
+  if (defaultFontOption) {
+    fontSizeSelect.value = defaultFontOption.value;
+  }
+  mosaicStrengthInput.value = mosaicStrengthInput.defaultValue;
+  mosaicStrengthOutput.value = formatMosaicStrength(Number(mosaicStrengthInput.value));
+  watermarkTextInput.value = watermarkTextInput.defaultValue;
+  watermarkOpacityInput.value = watermarkOpacityInput.defaultValue;
+  watermarkOpacityOutput.value = `${watermarkOpacityInput.value}%`;
+  copyFeedback.hidden = true;
+  delete document.documentElement.dataset.snaporaFeedback;
+  delete document.documentElement.dataset.tooltipPointer;
+}
+
 window.snaporaOverlay.onInitialize(initializeOverlay);
 window.snaporaOverlay.onFeedback((payload) => {
   if (payload.kind !== 'copy') {
@@ -245,6 +278,33 @@ window.snaporaOverlay.onFeedback((payload) => {
 });
 selectionStore.subscribe(render);
 annotationStore.subscribe(render);
+
+/** 鼠标按压拖离时隐藏所有气泡；键盘焦点仍由 :focus-visible 提供提示。 */
+function setTooltipPointerState(active: boolean): void {
+  if (active) {
+    document.documentElement.dataset.tooltipPointer = 'down';
+  } else {
+    delete document.documentElement.dataset.tooltipPointer;
+  }
+}
+
+window.addEventListener(
+  'pointerdown',
+  (event) => {
+    if (event.button === 0) {
+      setTooltipPointerState(true);
+    }
+  },
+  true
+);
+window.addEventListener('pointerup', () => setTooltipPointerState(false), true);
+window.addEventListener('pointercancel', () => setTooltipPointerState(false), true);
+window.addEventListener('pointermove', (event) => {
+  if (event.buttons === 0) {
+    setTooltipPointerState(false);
+  }
+});
+window.addEventListener('blur', () => setTooltipPointerState(false));
 
 annotationCanvas.addEventListener('pointerdown', handleCanvasPointerDown);
 annotationCanvas.addEventListener('pointermove', handleCanvasPointerMove);

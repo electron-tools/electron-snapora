@@ -215,6 +215,10 @@ export class ScreenshotSession {
     this.#startReadyTimeout();
     this.#startDiagnosticStage('overlay-load');
     this.#startDiagnosticStage('overlay-ready');
+    if (this.#overlay.rendererReady) {
+      this.#rendererReady = true;
+      this.#finishDiagnosticStage('overlay-ready', 'complete', { reused: true });
+    }
     void this.#loadOverlay();
   }
 
@@ -470,6 +474,8 @@ export class ScreenshotSession {
       this.#overlay?.showCopyFeedback
     ) {
       this.#overlay.showCopyFeedback(3_000, this.#options.captureOptions);
+    } else if (result.status !== 'failed' && this.#overlay?.hide) {
+      this.#overlay.hide();
     } else {
       this.#overlay?.destroy();
     }

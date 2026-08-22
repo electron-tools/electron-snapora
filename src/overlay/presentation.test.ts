@@ -9,7 +9,7 @@ import {
 describe('overlay presentation', () => {
   it('uses a deterministic English default and applies host message overrides last', () => {
     expect(DEFAULT_SCREENSHOT_LOCALE).toBe('en-US');
-    expect(resolveScreenshotMessages().confirm).toBe('Copy & Done');
+    expect(resolveScreenshotMessages().confirm).toBe('Done');
     expect(resolveScreenshotMessages('zh-CN').copied).toBe('已复制到剪贴板');
     expect(resolveScreenshotMessages('zh-CN').watermark).toBe('水印');
     expect(resolveScreenshotMessages('zh-CN')).toMatchObject({

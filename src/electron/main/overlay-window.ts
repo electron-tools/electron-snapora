@@ -18,6 +18,7 @@ export type OverlayBrowserWindow = Pick<
   BrowserWindow,
   | 'destroy'
   | 'focus'
+  | 'hide'
   | 'isDestroyed'
   | 'loadFile'
   | 'moveTop'
@@ -48,10 +49,12 @@ export interface OverlayWindowOptions {
 
 export interface ScreenshotOverlayWindow {
   readonly webContentsId: number;
+  readonly rendererReady?: boolean;
   load(): Promise<void>;
   sendInitialize(payload: ScreenshotInitializePayload): void;
   prime(): void;
   reveal(): void;
+  hide?(): void;
   showCopyFeedback?(durationMs: number, options: ScreenshotOptions): void;
   destroy(): void;
   onClosed(listener: () => void): () => void;
@@ -63,10 +66,13 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
   readonly #resources: OverlayResources;
   readonly #window: OverlayBrowserWindow;
   readonly #createWindow: OverlayBrowserWindowFactory;
+  readonly #display: CaptureDisplay;
   readonly #bounds: CaptureDisplay['bounds'];
   readonly #platform: NodeJS.Platform;
   readonly #supportsInvisiblePriming: boolean;
   #primed = false;
+  #rendererReady = false;
+  #loadPromise: Promise<void> | undefined;
   #feedbackWindow: OverlayBrowserWindow | undefined;
   #feedbackTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -76,7 +82,8 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
     assertOverlayResources(this.#resources, options.resourceExists);
     this.#createWindow =
       options.createWindow ?? ((windowOptions) => new BrowserWindow(windowOptions));
-    const { bounds } = options.display;
+    this.#display = options.display;
+    const { bounds } = this.#display;
     this.#bounds = bounds;
     this.#platform = options.platform ?? process.platform;
     this.#supportsInvisiblePriming = ['win32', 'darwin'].includes(this.#platform);
@@ -121,6 +128,11 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
         zoomFactor: 1,
       },
     });
+    this.#window.webContents.on('ipc-message', (_event, channel) => {
+      if (channel === OVERLAY_CHANNELS.ready) {
+        this.#rendererReady = true;
+      }
+    });
     this.#configureMacWorkspaceVisibility(this.#window);
   }
 
@@ -128,8 +140,27 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
     return this.#window.webContents.id;
   }
 
-  async load(): Promise<void> {
-    await this.#window.loadFile(this.#resources.htmlPath);
+  get rendererReady(): boolean {
+    return this.#rendererReady;
+  }
+
+  load(): Promise<void> {
+    this.#loadPromise ??= this.#window.loadFile(this.#resources.htmlPath);
+    return this.#loadPromise;
+  }
+
+  /** 只复用同一块、几何信息未变化的屏幕，避免跨 Space 或缩放变化造成偏移。 */
+  matchesDisplay(display: CaptureDisplay): boolean {
+    const bounds = display.bounds;
+    return (
+      !this.#window.isDestroyed() &&
+      display.id === this.#display.id &&
+      display.scaleFactor === this.#display.scaleFactor &&
+      bounds.x === this.#bounds.x &&
+      bounds.y === this.#bounds.y &&
+      bounds.width === this.#bounds.width &&
+      bounds.height === this.#bounds.height
+    );
   }
 
   sendInitialize(payload: ScreenshotInitializePayload): void {
@@ -164,12 +195,22 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
     this.#window.moveTop();
   }
 
-  /** 复制完成后销毁全屏截图层，改用独立的小窗口显示鼠标穿透提示。 */
-  showCopyFeedback(durationMs: number, options: ScreenshotOptions): void {
-    if (!this.#window.isDestroyed()) {
-      this.#window.destroy();
-    }
+  /** 保留已加载的 renderer，但立即退出桌面合成和截图画面。 */
+  hide(): void {
     this.#destroyFeedbackWindow();
+    if (this.#window.isDestroyed()) {
+      return;
+    }
+    if (this.#supportsInvisiblePriming) {
+      this.#window.setOpacity(0);
+    }
+    this.#window.hide();
+    this.#primed = false;
+  }
+
+  /** 复制完成后隐藏全屏截图层，改用独立的小窗口显示鼠标穿透提示。 */
+  showCopyFeedback(durationMs: number, options: ScreenshotOptions): void {
+    this.hide();
 
     const width = Math.min(360, this.#bounds.width);
     const height = Math.min(72, this.#bounds.height);

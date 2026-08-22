@@ -84,24 +84,67 @@ interface QueuedCapture {
 
 const DEFAULT_MAX_QUEUED_CAPTURES = 8;
 
+interface DefaultScreenshotRunner {
+  run: ScreenshotRunner;
+  dispose(): void;
+}
+
 function createDefaultRunner(
   managerOptions: ScreenshotManagerOptions
-): ScreenshotRunner {
+): DefaultScreenshotRunner {
   const ipcMain = managerOptions.ipcMain ?? electronIpcMain;
   const resourceLimits = resolveScreenshotResourceLimits(managerOptions.resourceLimits);
   const captureAdapter =
     managerOptions.captureAdapter ?? new ElectronCaptureAdapter({ resourceLimits });
   const outputAdapter = managerOptions.outputAdapter ?? new ElectronOutputAdapter();
   const outputRouter = getScreenshotOutputRouter(ipcMain);
+  const createCustomOverlay = managerOptions.createOverlay;
   const createOverlayWindow =
-    managerOptions.createOverlay ??
+    createCustomOverlay ??
     ((display) => new OverlayWindow({ ...managerOptions.overlayOptions, display }));
   let previousOverlay: ReturnType<ScreenshotOverlayFactory> | undefined;
+  let reusableOverlay: OverlayWindow | undefined;
+  let removeReusableOverlayOwner: (() => void) | undefined;
 
-  return (jobId, captureOptions, context) => {
-    // 连续截图前清理仍在展示的复制提示，避免 Toast 被下一次屏幕采集写入图片。
-    previousOverlay?.destroy();
+  const disposeOverlays = (): void => {
+    removeReusableOverlayOwner?.();
+    removeReusableOverlayOwner = undefined;
+    reusableOverlay?.destroy();
+    if (previousOverlay !== reusableOverlay) {
+      previousOverlay?.destroy();
+    }
+    reusableOverlay = undefined;
     previousOverlay = undefined;
+  };
+
+  /** 宿主页面关闭时同步释放隐藏缓存，避免它影响 Electron 的窗口退出策略。 */
+  const trackReusableOverlayOwner = (senderWebContentsId?: number): void => {
+    removeReusableOverlayOwner?.();
+    removeReusableOverlayOwner = undefined;
+    if (senderWebContentsId === undefined) {
+      return;
+    }
+    const owner = webContents.fromId(senderWebContentsId);
+    if (!owner || owner.isDestroyed()) {
+      return;
+    }
+    const handleDestroyed = (): void => disposeOverlays();
+    owner.once('destroyed', handleDestroyed);
+    removeReusableOverlayOwner = () => {
+      if (!owner.isDestroyed()) {
+        owner.removeListener('destroyed', handleDestroyed);
+      }
+    };
+  };
+
+  const run: ScreenshotRunner = (jobId, captureOptions, context) => {
+    // 连续截图前先隐藏缓存窗口和复制提示，避免它们被下一帧屏幕采集写入图片。
+    if (reusableOverlay) {
+      reusableOverlay.hide();
+    } else {
+      previousOverlay?.destroy();
+      previousOverlay = undefined;
+    }
     const windowSnapRegions = resolveWindowSnapRegions(
       managerOptions.getWindowSnapRegions ?? getVisibleBrowserWindowBounds
     );
@@ -120,8 +163,18 @@ function createDefaultRunner(
       ipcMain,
       windowSnapRegions,
       createOverlay: (display) => {
+        if (reusableOverlay?.matchesDisplay(display)) {
+          previousOverlay = reusableOverlay;
+          trackReusableOverlayOwner(context.senderWebContentsId);
+          return reusableOverlay;
+        }
+        reusableOverlay?.destroy();
         const overlay = createOverlayWindow(display);
         previousOverlay = overlay;
+        if (!createCustomOverlay) {
+          reusableOverlay = overlay as OverlayWindow;
+          trackReusableOverlayOwner(context.senderWebContentsId);
+        }
         return overlay;
       },
       ...(managerOptions.overlayReadyTimeoutMs === undefined
@@ -215,6 +268,11 @@ function createDefaultRunner(
       cancel: () => session.cancel(),
     };
   };
+
+  return {
+    run,
+    dispose: disposeOverlays,
+  };
 }
 
 /** 窗口嗅探属于辅助体验，提供器失败时退回普通自由框选。 */
@@ -255,6 +313,7 @@ export class ScreenshotManager {
   readonly #maxQueuedCaptures: number;
   readonly #queue: QueuedCapture[] = [];
   readonly #onDiagnostic: ScreenshotDiagnosticListener | undefined;
+  readonly #disposeRunner: (() => void) | undefined;
   #activeJobId: string | undefined;
   #activeSenderWebContentsId: number | undefined;
   #cancelActive: (() => boolean) | undefined;
@@ -275,7 +334,9 @@ export class ScreenshotManager {
     ) {
       throw new TypeError('maxQueuedCaptures must be an integer between 1 and 100.');
     }
-    this.#runner = options.runner ?? createDefaultRunner(options);
+    const defaultRunner = options.runner ? undefined : createDefaultRunner(options);
+    this.#runner = options.runner ?? defaultRunner!.run;
+    this.#disposeRunner = defaultRunner?.dispose;
     this.#onDiagnostic = options.onDiagnostic;
   }
 
@@ -285,6 +346,11 @@ export class ScreenshotManager {
 
   get queuedCaptureCount(): number {
     return this.#queue.length;
+  }
+
+  /** 释放默认 runner 缓存的隐藏窗口；setupElectronSnapora.unregister() 会自动调用。 */
+  dispose(): void {
+    this.#disposeRunner?.();
   }
 
   /** 不传 sender ID 时供主进程直接取消；传入时只允许取消该页面创建的任务。 */

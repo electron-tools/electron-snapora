@@ -382,6 +382,81 @@ app.on('browser-window-created', (_event, window) => {
       throw new Error('Selection toolbar did not become ready.');
     }
 
+    const tooltipButtonCenter = await getToolCenter(window, 'rectangle');
+    if (!tooltipButtonCenter) {
+      throw new Error('Rectangle tooltip target was not rendered.');
+    }
+    window.webContents.sendInputEvent({
+      type: 'mouseMove',
+      ...tooltipButtonCenter,
+      movementX: 1,
+      movementY: 1,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const tooltipVisible = await window.webContents.executeJavaScript(`
+      getComputedStyle(
+        document.querySelector('button[data-tool="rectangle"]'),
+        '::after'
+      ).opacity
+    `);
+    await window.webContents.executeJavaScript(`
+      (() => {
+        const button = document.querySelector('button[data-tool="rectangle"]');
+        const canvas = document.querySelector('.annotation-canvas');
+        button?.dispatchEvent(
+          new PointerEvent('pointerdown', {
+            bubbles: true,
+            pointerId: 71,
+            pointerType: 'mouse',
+            button: 0,
+            buttons: 1,
+          })
+        );
+        canvas?.dispatchEvent(
+          new PointerEvent('pointermove', {
+            bubbles: true,
+            pointerId: 71,
+            pointerType: 'mouse',
+            buttons: 1,
+          })
+        );
+      })()
+    `);
+    const tooltipDraggedAway = await window.webContents.executeJavaScript(`
+      (() => ({
+        opacity: getComputedStyle(
+          document.querySelector('button[data-tool="rectangle"]'),
+          '::after'
+        ).opacity,
+        pointerState: document.documentElement.dataset.tooltipPointer,
+        confirm: document.querySelector('.confirm-button')?.dataset.tooltip,
+      }))()
+    `);
+    await window.webContents.executeJavaScript(`
+      document.querySelector('.annotation-canvas')?.dispatchEvent(
+        new PointerEvent('pointerup', {
+          bubbles: true,
+          pointerId: 71,
+          pointerType: 'mouse',
+          button: 0,
+          buttons: 0,
+        })
+      )
+    `);
+    const tooltipReleased = await window.webContents.executeJavaScript(
+      `document.documentElement.dataset.tooltipPointer ?? null`
+    );
+    if (
+      tooltipDraggedAway.opacity !== '0' ||
+      tooltipDraggedAway.pointerState !== 'down' ||
+      tooltipDraggedAway.confirm !== 'Done' ||
+      tooltipReleased !== null
+    ) {
+      throw new Error(
+        `Toolbar tooltip pointer state was invalid: ${JSON.stringify({ tooltipVisible, tooltipDraggedAway, tooltipReleased })}`
+      );
+    }
+
     await activateTool(window, 'rectangle');
     const colorPlacement = await window.webContents.executeJavaScript(`
       (() => {
@@ -1038,17 +1113,13 @@ app.whenReady().then(async () => {
   const diagnostics = [];
   const manager = new ScreenshotManager({
     onDiagnostic: (event) => diagnostics.push(event),
-    getWindowSnapRegions: () => {
-      const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-      return [
-        {
-          x: display.bounds.x + Math.round(display.bounds.width * 0.15),
-          y: display.bounds.y + Math.round(display.bounds.height * 0.15),
-          width: Math.round(display.bounds.width * 0.7),
-          height: Math.round(display.bounds.height * 0.7),
-        },
-      ];
-    },
+    getWindowSnapRegions: () =>
+      screen.getAllDisplays().map((display) => ({
+        x: display.bounds.x + Math.round(display.bounds.width * 0.15),
+        y: display.bounds.y + Math.round(display.bounds.height * 0.15),
+        width: Math.round(display.bounds.width * 0.7),
+        height: Math.round(display.bounds.height * 0.7),
+      })),
   });
   const result = await manager.capture({ display: 'cursor' });
   clearTimeout(smokeTimeout);

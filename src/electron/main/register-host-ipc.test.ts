@@ -182,7 +182,9 @@ describe('setupElectronSnapora', () => {
     expect(handlers.has(DEFAULT_HOST_CAPTURE_CHANNEL)).toBe(true);
     expect(handlers.has(DEFAULT_HOST_CANCEL_CHANNEL)).toBe(true);
 
+    const dispose = vi.spyOn(snapora.manager, 'dispose');
     snapora.unregister();
+    expect(dispose).toHaveBeenCalledOnce();
     expect(removeHandler).toHaveBeenCalledWith(DEFAULT_HOST_CAPTURE_CHANNEL);
     expect(removeHandler).toHaveBeenCalledWith(DEFAULT_HOST_CANCEL_CHANNEL);
   });

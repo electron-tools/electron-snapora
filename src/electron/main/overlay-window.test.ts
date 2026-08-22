@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import type { BrowserWindowConstructorOptions } from 'electron';
 import { describe, expect, it, vi } from 'vitest';
 
+import { OVERLAY_CHANNELS } from '../protocol/channels.js';
 import { OverlayWindow, type OverlayBrowserWindow } from './overlay-window.js';
 
 describe('OverlayWindow', () => {
@@ -30,11 +31,23 @@ describe('OverlayWindow', () => {
     });
 
     await overlay.load();
+    await overlay.load();
+    const capture = windows[0];
+    expect(capture).toBeDefined();
+    expect(capture?.loadFile).toHaveBeenCalledOnce();
+    expect(overlay.rendererReady).toBe(false);
+    capture?.webContentsEvents.emit('ipc-message', {}, OVERLAY_CHANNELS.ready);
+    expect(overlay.rendererReady).toBe(true);
+    expect(
+      overlay.matchesDisplay({
+        id: '10',
+        bounds: { x: -800, y: 0, width: 800, height: 600 },
+        scaleFactor: 1,
+      })
+    ).toBe(true);
     overlay.prime();
     overlay.reveal();
 
-    const capture = windows[0];
-    expect(capture).toBeDefined();
     expect(receivedOptions[0]).toMatchObject({
       x: -800,
       y: 0,
@@ -82,7 +95,9 @@ describe('OverlayWindow', () => {
 
     const feedback = windows[1];
     expect(feedback).toBeDefined();
-    expect(capture?.destroy).toHaveBeenCalledOnce();
+    expect(capture?.destroy).not.toHaveBeenCalled();
+    expect(capture?.hide).toHaveBeenCalledOnce();
+    expect(capture?.setOpacity).toHaveBeenLastCalledWith(0);
     expect(receivedOptions[1]).toMatchObject({
       x: -580,
       y: 24,
@@ -167,6 +182,7 @@ describe('OverlayWindow', () => {
         send: vi.fn(),
       },
       destroy: vi.fn(),
+      hide: vi.fn(),
       isDestroyed: vi.fn(() => destroyed),
       loadFile: vi.fn(async () => undefined),
       on: vi.fn(),
@@ -208,6 +224,7 @@ function createFakeWindow(id: number) {
     destroyed = true;
   });
   const loadFile = vi.fn(async () => undefined);
+  const hide = vi.fn();
   const show = vi.fn();
   const showInactive = vi.fn();
   const setOpacity = vi.fn();
@@ -225,6 +242,7 @@ function createFakeWindow(id: number) {
       send,
     },
     destroy,
+    hide,
     isDestroyed: vi.fn(() => destroyed),
     loadFile,
     on: windowEvents.on.bind(windowEvents),
@@ -246,6 +264,7 @@ function createFakeWindow(id: number) {
     webContentsEvents,
     send,
     destroy,
+    hide,
     loadFile,
     show,
     showInactive,

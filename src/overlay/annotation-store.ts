@@ -24,6 +24,7 @@ export interface AnnotationState {
 
 export interface AnnotationStore {
   getState(): AnnotationState;
+  reset(activeTool?: AnnotationTool): void;
   initialize(selection: Rect, activeTool?: AnnotationTool): void;
   setSelection(selection: Rect): void;
   setTool(tool: AnnotationTool): void;
@@ -56,7 +57,7 @@ export function createAnnotationStore(): AnnotationStore {
     selectedElementId: null,
     draft: null,
     preview: null,
-    style: defaultStyle,
+    style: { ...defaultStyle },
     canUndo: false,
     canRedo: false,
   };
@@ -71,6 +72,19 @@ export function createAnnotationStore(): AnnotationStore {
 
   return {
     getState: () => state,
+    reset(activeTool = 'select') {
+      history.clear();
+      update({
+        document: null,
+        activeTool,
+        selectedElementId: null,
+        draft: null,
+        preview: null,
+        style: { ...defaultStyle },
+        canUndo: false,
+        canRedo: false,
+      });
+    },
     initialize(selection, activeTool = 'select') {
       history.clear();
       update({

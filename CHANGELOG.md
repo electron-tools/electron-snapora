@@ -22,6 +22,7 @@ All notable changes to this project will be documented in this file.
 - Hide zero-length arrow drafts until dragging establishes a direction.
 - Keep pinned-window dimensions stable during long drags on high-DPI Windows displays.
 - Keep the text editor and automatically wrapped Canvas text inside the screenshot selection.
+- Dismiss toolbar tooltips while pointer actions are held and dragged away.
 - Prevent the pinned-window context menu from showing an initial item selection or browser focus outline.
 - Trigger the macOS Screen Recording prompt on first capture and open System Settings after denial.
 

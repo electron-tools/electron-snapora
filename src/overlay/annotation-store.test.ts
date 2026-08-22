@@ -91,4 +91,31 @@ describe('annotation store', () => {
     store.undo();
     expect(store.getState().document?.elements).toEqual([moved]);
   });
+
+  it('resets annotations, history and style before reusing the overlay', () => {
+    const store = createAnnotationStore();
+    store.initialize({ x: 0, y: 0, width: 200, height: 100 }, 'rectangle');
+    store.setStyle({ color: '#ffffff', lineWidth: 8 });
+    store.setDraft(
+      createDrawableElement('rectangle', { x: 10, y: 10 }, store.getState().style, {
+        id: 'rect-1',
+        zIndex: 0,
+        createdAt: 1,
+      })
+    );
+    store.commitDraft();
+
+    store.reset('text');
+
+    expect(store.getState()).toMatchObject({
+      document: null,
+      activeTool: 'text',
+      selectedElementId: null,
+      draft: null,
+      preview: null,
+      style: { color: '#ff3b30', lineWidth: 4 },
+      canUndo: false,
+      canRedo: false,
+    });
+  });
 });

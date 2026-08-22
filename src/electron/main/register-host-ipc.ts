@@ -44,11 +44,15 @@ export function setupElectronSnapora(
 ): SetupElectronSnaporaResult {
   const { managerOptions, ...ipcOptions } = options;
   const manager = new ScreenshotManager(managerOptions);
+  const unregisterIpc = registerScreenshotIpc({ ...ipcOptions, manager });
 
   return {
     manager,
     preloadPath: resolveHostPreloadPath(),
-    unregister: registerScreenshotIpc({ ...ipcOptions, manager }),
+    unregister() {
+      unregisterIpc();
+      manager.dispose();
+    },
   };
 }
 

@@ -280,6 +280,41 @@ describe('ScreenshotSession', () => {
     }
   });
 
+  it('reuses an already-ready overlay without waiting for another ready event', async () => {
+    const ipc = new EventEmitter();
+    const { overlay: baseOverlay } = createOverlay();
+    const hide = vi.fn();
+    const overlay: ScreenshotOverlayWindow = {
+      ...baseOverlay,
+      rendererReady: true,
+      hide,
+    };
+    const diagnostics: ScreenshotDiagnosticEvent[] = [];
+    const session = createSession(ipc, overlay, (event) => diagnostics.push(event));
+    const resultPromise = session.run();
+
+    await vi.waitFor(() => expect(overlay.sendInitialize).toHaveBeenCalledOnce());
+    emitOverlayMessage(ipc, OVERLAY_CHANNELS.prepared, {
+      protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
+      jobId: 'job-1',
+    });
+    emitOverlayMessage(ipc, OVERLAY_CHANNELS.cancel, {
+      protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
+      jobId: 'job-1',
+    });
+
+    await expect(resultPromise).resolves.toEqual({ status: 'cancelled' });
+    expect(hide).toHaveBeenCalledOnce();
+    expect(overlay.destroy).not.toHaveBeenCalled();
+    expect(diagnostics).toContainEqual(
+      expect.objectContaining({
+        stage: 'overlay-ready',
+        phase: 'complete',
+        context: { reused: true },
+      })
+    );
+  });
+
   it('reports structured missing-resource context without leaking Electron objects', async () => {
     const ipc = new EventEmitter();
     const diagnostics: ScreenshotDiagnosticEvent[] = [];

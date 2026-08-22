@@ -7,7 +7,7 @@ process.on('unhandledRejection', (error) => {
   process.exit(4);
 });
 
-const { app } = require('electron');
+const { app, BrowserWindow } = require('electron');
 const { ScreenshotManager } = require('electron-snapora/main');
 
 app.disableHardwareAcceleration();
@@ -15,7 +15,21 @@ app.disableHardwareAcceleration();
 const smokeTimeout = setTimeout(() => {
   console.error('Electron Snapora smoke test timed out.');
   process.exit(2);
-}, 15_000);
+}, 20_000);
+
+async function waitUntilOverlayVisible(window) {
+  const deadline = Date.now() + 3_000;
+  while (!window.isDestroyed() && Date.now() < deadline) {
+    const ready = await window.webContents.executeJavaScript(
+      "document.querySelector('.capture-surface')?.dataset.state === 'ready'"
+    );
+    if (ready && window.getOpacity() === 1) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('Reused overlay did not become visible in time.');
+}
 
 app.on('browser-window-created', (_event, window) => {
   // 等待透明预热之后的 Renderer 初始化完成，避免把预热 show 事件误当成可交互状态。
@@ -114,6 +128,45 @@ app.whenReady().then(async () => {
     }
   }
 
+  const [firstOverlay] = BrowserWindow.getAllWindows().filter(
+    (window) => !window.isDestroyed()
+  );
+  if (!firstOverlay) {
+    console.error('Electron Snapora reusable overlay was not retained.');
+    process.exit(1);
+    return;
+  }
+
+  const secondResultPromise = manager.capture({ display: 'cursor' });
+  await waitUntilOverlayVisible(firstOverlay);
+  firstOverlay.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+  firstOverlay.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+  const secondResult = await secondResultPromise;
+  const remainingWindows = BrowserWindow.getAllWindows().filter(
+    (window) => !window.isDestroyed()
+  );
+  const reusedRenderer = diagnostics.some(
+    (event) =>
+      event.stage === 'overlay-ready' &&
+      event.phase === 'complete' &&
+      event.context?.reused === true
+  );
+  if (
+    secondResult.status !== 'cancelled' ||
+    remainingWindows.length !== 1 ||
+    remainingWindows[0] !== firstOverlay ||
+    !reusedRenderer
+  ) {
+    console.error('Electron Snapora overlay reuse smoke test failed.', {
+      secondResult,
+      windowCount: remainingWindows.length,
+      reusedRenderer,
+    });
+    process.exit(1);
+    return;
+  }
+
+  manager.dispose();
   console.log('Electron Snapora smoke test passed.');
   process.exit(0);
 });
