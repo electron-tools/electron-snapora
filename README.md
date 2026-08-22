@@ -14,6 +14,8 @@ Add region screenshot capture, a snipping overlay, annotations, clipboard copy, 
 
 Repository: [github.com/electron-tools/electron-snapora](https://github.com/electron-tools/electron-snapora)
 
+Contact: [@novratools on X](https://x.com/novratools)
+
 ## Quick start
 
 **Minimum Electron version:** Electron 42. Node.js 20 or newer is also required.

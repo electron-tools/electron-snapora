@@ -12,6 +12,8 @@
 - 支持 TypeScript、ESM 和 CommonJS。
 - 默认不依赖原生扩展，也不需要安装后编译。
 
+联系与更新：[@novratools on X](https://x.com/novratools)
+
 ## 快速开始
 
 **Electron 最低版本：** Electron 42。同时需要 Node.js 20 或更高版本。

@@ -3,6 +3,10 @@
   "version": "1.0.3",
   "description": "Electron screenshot and annotation toolkit for region capture, editing, clipboard copy, and PNG export.",
   "license": "MIT",
+  "author": {
+    "name": "Novra Tools",
+    "url": "https://x.com/novratools"
+  },
   "keywords": [
     "electron",
     "electron-screenshot",
