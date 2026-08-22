@@ -83,6 +83,9 @@ async function run() {
         visible: {
           opacity: visibleStyle.opacity,
           pointerEvents: visibleStyle.pointerEvents,
+          backgroundColor: visibleStyle.backgroundColor,
+          color: visibleStyle.color,
+          borderColor: visibleStyle.borderTopColor,
         },
       };
     })()
@@ -91,7 +94,10 @@ async function run() {
     closeVisibility.hidden.opacity !== '0' ||
     closeVisibility.hidden.pointerEvents !== 'none' ||
     Number(closeVisibility.visible.opacity) <= 0 ||
-    closeVisibility.visible.pointerEvents !== 'auto'
+    closeVisibility.visible.pointerEvents !== 'auto' ||
+    closeVisibility.visible.backgroundColor !== 'rgba(17, 18, 21, 0.68)' ||
+    closeVisibility.visible.color !== 'rgba(255, 255, 255, 0.88)' ||
+    closeVisibility.visible.borderColor !== 'rgba(255, 255, 255, 0.28)'
   ) {
     throw new Error(
       `Pinned close hover state was invalid: ${JSON.stringify(closeVisibility)}`
