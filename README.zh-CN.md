@@ -1,8 +1,8 @@
-# electron-snapora — Electron 截图与标注工具
+# electron-snapora — Electron 截图插件与标注工具
 
 [English](https://github.com/electron-tools/electron-snapora/blob/main/README.md) | 简体中文 | [日本語](https://github.com/electron-tools/electron-snapora/blob/main/README.ja.md) | [한국어](https://github.com/electron-tools/electron-snapora/blob/main/README.ko.md) | [Español](https://github.com/electron-tools/electron-snapora/blob/main/README.es.md)
 
-为 Electron 应用增加区域截图、交互式选区、图片标注、剪贴板复制和 PNG 保存能力。
+一个易于接入的 Electron 截图插件，通过一步初始化和安全 Preload IPC 提供区域截图、交互式选区、图片标注、剪贴板复制、PNG 导出和固定到屏幕能力。
 
 ## 功能
 

@@ -1,8 +1,8 @@
-# electron-snapora — Electron screenshot and annotation toolkit
+# electron-snapora — Electron screenshot plugin with annotations
 
 [English](https://github.com/electron-tools/electron-snapora/blob/main/README.md) | [简体中文](https://github.com/electron-tools/electron-snapora/blob/main/README.zh-CN.md) | [日本語](https://github.com/electron-tools/electron-snapora/blob/main/README.ja.md) | [한국어](https://github.com/electron-tools/electron-snapora/blob/main/README.ko.md) | [Español](https://github.com/electron-tools/electron-snapora/blob/main/README.es.md)
 
-Add region screenshot capture, a snipping overlay, annotations, clipboard copy, and PNG export to Electron applications.
+An easy-to-integrate Electron screenshot plugin with one-call setup and secure Preload IPC for region capture, annotation editing, clipboard copy, PNG export, and pin-to-screen windows.
 
 ## Features
 

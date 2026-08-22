@@ -192,6 +192,7 @@ M4 按照“先关闭发布阻塞，再完善公共能力，最后发布”的�
 - [x] M4.15 发布正式版 1.0.1 到 npm `latest`，并在发布后完成 registry 元数据与真实安装验证。
 - [x] M4.15.1 发布修订版 1.0.2，开放 Electron 42 以上 peer 范围并强化最低版本安装说明。
 - [x] M4.15.2 发布修订版 1.0.4，并为 v1.0.1～v1.0.4 建立带 CHANGELOG 内容的 GitHub Releases。
+- [-] M4.15.3 强化 npm 搜索元数据和 README 首屏，让搜索结果明确显示为 Electron screenshot plugin；等待下一个补丁版本发布。
 
 ### P3：发布后增强
 

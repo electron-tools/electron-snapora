@@ -1,7 +1,7 @@
 {
   "name": "electron-snapora",
   "version": "1.0.4",
-  "description": "Electron screenshot and annotation toolkit for region capture, editing, clipboard copy, and PNG export.",
+  "description": "Easy-to-integrate Electron screenshot plugin with one-call setup, secure Preload IPC, region capture, annotation editing, clipboard copy, PNG export, and pin-to-screen windows.",
   "license": "MIT",
   "author": {
     "name": "Novra Tools",
@@ -10,17 +10,24 @@
   "keywords": [
     "electron",
     "electron-screenshot",
+    "electron-screenshot-plugin",
+    "electron-screen-capture",
     "electron-plugin",
     "screenshot",
+    "screenshot-plugin",
     "screenshot-tool",
     "screenshot-editor",
     "screen-capture",
+    "screen-capture-tool",
+    "desktop-screenshot",
     "desktop-capture",
+    "region-screenshot",
     "region-capture",
     "snipping-tool",
-    "annotation",
+    "screenshot-annotation",
     "image-annotation",
-    "png"
+    "pin-to-screen",
+    "pinned-screenshot"
   ],
   "repository": {
     "type": "git",

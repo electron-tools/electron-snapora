@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Changed
+
+- Strengthen npm discovery metadata with an explicit Electron screenshot plugin description and focused screenshot, capture, annotation, and pin-to-screen keywords.
+
 ## [1.0.4] - 2026-08-22
 
 ### Changed
