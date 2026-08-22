@@ -90,7 +90,7 @@ try {
   rmSync(temporaryRoot, {
     recursive: true,
     force: true,
-    maxRetries: 5,
-    retryDelay: 200,
+    maxRetries: 20,
+    retryDelay: 250,
   });
 }

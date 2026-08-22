@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
 - Dispose cached Overlay resources when the host unregisters or its owning WebContents is destroyed.
 - Dismiss toolbar tooltips while pointer actions are held and dragged away.
 - Tighten copy-feedback spacing and checkmark alignment.
+- Make release verification cleanup tolerate transient Windows file locks.
 
 ## [1.0.3] - 2026-08-22
 
