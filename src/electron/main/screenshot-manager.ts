@@ -275,23 +275,11 @@ function createDefaultRunner(
   };
 }
 
-/** 窗口嗅探属于辅助体验，提供器失败时退回普通自由框选。 */
+/** 窗口吸附功能已关闭，保持自由框选模式，不再尝试识别或吸附浏览器窗口。 */
 function resolveWindowSnapRegions(
-  provider: () => ScreenshotBounds[]
+  _provider: () => ScreenshotBounds[]
 ): ScreenshotBounds[] {
-  try {
-    return provider().filter(
-      (bounds) =>
-        Number.isFinite(bounds.x) &&
-        Number.isFinite(bounds.y) &&
-        Number.isFinite(bounds.width) &&
-        Number.isFinite(bounds.height) &&
-        bounds.width >= 4 &&
-        bounds.height >= 4
-    );
-  } catch {
-    return [];
-  }
+  return [];
 }
 
 /** Electron 默认只能可靠获取本进程 BrowserWindow 的屏幕边界。 */

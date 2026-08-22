@@ -1038,7 +1038,8 @@ input {
   transform: translateX(-50%);
 }
 
-.capture-surface[data-state='waiting'] .status {
+.capture-surface[data-state='waiting'] .status,
+.capture-surface[data-state='ready'] .status {
   top: 50%;
   transform: translate(-50%, -50%);
 }

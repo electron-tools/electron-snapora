@@ -255,8 +255,12 @@ function resetOverlaySession(): void {
   pendingTextPoint = null;
   pendingTextViewportPoint = null;
   outputFeedback = null;
-  // 隐藏实际图像层，防止复用窗口在下一帧解码前短暂展示旧的合成内容。
+  // 彻底抹掉可复用窗口缓存的上一帧图像和标注内容，避免下一次截图时出现“前一帧残留”。
+  screenFrame.removeAttribute('src');
   screenFrame.hidden = true;
+  annotationContext.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
+  annotationCanvas.width = 0;
+  annotationCanvas.height = 0;
   annotationCanvas.hidden = true;
   // 缓存窗口在本次会话结束后不会重载；同步清空选区和帧引用，避免下次显示旧 Canvas。
   selectionStore.dispatch({ type: 'reset' });
@@ -1091,10 +1095,12 @@ async function confirmCapture(
           ? { action: 'pin' as const }
           : { action: 'copy' as const };
     clearExportProgress();
-    resetOverlaySession();
     window.snaporaOverlay.confirm({
       jobId: state.payload.jobId,
       result: { ...result, output },
+    });
+    void waitForCompositeFrames().then(() => {
+      resetOverlaySession();
     });
   } catch (error) {
     clearExportProgress();
@@ -1161,13 +1167,10 @@ function render(): void {
   toolbar.hidden = selectionState.phase !== 'selected';
 
   const showPhaseStatus =
-    selectionState.phase === 'waiting' ||
     selectionState.phase === 'ready' ||
     (selectionState.phase === 'exporting' && exportProgressVisible);
   status.hidden = !showPhaseStatus && !outputFeedback;
-  if (selectionState.phase === 'waiting') {
-    status.textContent = localize('preparing');
-  } else if (selectionState.phase === 'ready') {
+  if (selectionState.phase === 'ready') {
     status.textContent = localize('instruction');
   } else if (selectionState.phase === 'exporting') {
     status.textContent = localize('exporting');
