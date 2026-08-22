@@ -87,9 +87,8 @@ describe('ScreenshotManager', () => {
       onRendererGone: vi.fn(() => vi.fn()),
     };
     const createOverlay = vi.fn(() => overlay);
-    const windowSnapRegion = { x: 20, y: 30, width: 320, height: 180 };
     const getWindowSnapRegions = vi.fn(() => [
-      windowSnapRegion,
+      { x: 20, y: 30, width: 320, height: 180 },
       { x: 0, y: 0, width: 0, height: 20 },
     ]);
     const diagnostics: ScreenshotDiagnosticEvent[] = [];
@@ -111,8 +110,15 @@ describe('ScreenshotManager', () => {
       protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
     });
     expect(overlay.sendInitialize).toHaveBeenCalledWith(
-      expect.objectContaining({ windowSnapRegions: [windowSnapRegion] })
+      expect.objectContaining({
+        jobId: manager.activeJobId,
+        options: { locale: 'zh-CN' },
+        frames: [frame],
+      })
     );
+    const initializePayload = vi.mocked(overlay.sendInitialize).mock.calls[0]?.[0];
+    expect(initializePayload).toBeDefined();
+    expect(initializePayload).not.toHaveProperty('windowSnapRegions');
     eventBus.emit(OVERLAY_CHANNELS.prepared, overlayEvent, {
       protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
       jobId: manager.activeJobId,

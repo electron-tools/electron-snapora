@@ -277,8 +277,9 @@ function createDefaultRunner(
 
 /** 窗口吸附功能已关闭，保持自由框选模式，不再尝试识别或吸附浏览器窗口。 */
 function resolveWindowSnapRegions(
-  _provider: () => ScreenshotBounds[]
+  provider?: () => ScreenshotBounds[]
 ): ScreenshotBounds[] {
+  void provider;
   return [];
 }
 

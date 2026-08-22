@@ -76,6 +76,31 @@ function packagedExecutable(outputDirectory) {
     return join(outputDirectory, 'win-unpacked', 'snapora-package-check.exe');
   }
   if (process.platform === 'darwin') {
+    const appBundleCandidates = [];
+    const queue = [outputDirectory];
+
+    while (queue.length > 0) {
+      const currentDirectory = queue.pop();
+      for (const entry of readdirSync(currentDirectory, { withFileTypes: true })) {
+        const entryPath = join(currentDirectory, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name.endsWith('.app')) {
+            appBundleCandidates.push(entryPath);
+          } else {
+            queue.push(entryPath);
+          }
+        }
+      }
+    }
+
+    for (const appBundle of appBundleCandidates) {
+      const appName = appBundle.replace(/\.app$/i, '');
+      const binaryPath = join(appBundle, 'Contents', 'MacOS', appName.split('/').at(-1));
+      if (existsSync(binaryPath)) {
+        return binaryPath;
+      }
+    }
+
     return join(
       outputDirectory,
       'mac',

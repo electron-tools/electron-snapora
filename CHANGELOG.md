@@ -2,11 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## [1.0.5] - 2026-08-22
 
 ### Changed
 
 - Strengthen npm discovery metadata with an explicit Electron screenshot plugin description and focused screenshot, capture, annotation, and pin-to-screen keywords.
+- Keep the overlay interaction model freeform by disabling window snapping/attach behavior while preserving normal region selection.
+
+### Fixed
+
+- Center the capture instruction prompt so it appears in the viewport instead of floating at the screen edge during the ready state.
+- Delay overlay reset until the screenshot window is actually hidden, avoiding visible flashes and stale previous-frame remnants when reusing the capture layer.
+- Clear cached frame and canvas data between sessions so a new capture does not briefly reveal the previous screenshot.
+- Remove the initial "Preparing screenshot…" prompt before selection begins so the overlay stays clean and unobtrusive.
+- Restore valid CSS typing for the overlay stylesheet in TypeScript/Vite editors so the project stays build-clean in the editor environment.
 
 ## [1.0.4] - 2026-08-22
 
