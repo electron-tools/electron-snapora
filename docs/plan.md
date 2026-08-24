@@ -193,7 +193,7 @@ M4 按照“先关闭发布阻塞，再完善公共能力，最后发布”的�
 - [x] M4.15.1 发布修订版 1.0.2，开放 Electron 42 以上 peer 范围并强化最低版本安装说明。
 - [x] M4.15.2 发布修订版 1.0.4，并为 v1.0.1～v1.0.4 建立带 CHANGELOG 内容的 GitHub Releases。
 - [x] M4.15.3 强化 npm 搜索元数据和 README 首屏，让搜索结果明确显示为 Electron screenshot plugin；已随 1.0.5 发布。
-- [-] M4.15.4 发布修订版 1.0.6，补齐 v1.0.5 tag/Release，并为 1.0.6 创建英文 GitHub Release Notes。
+- [x] M4.15.4 发布修订版 1.0.6，补齐 v1.0.5 tag/Release，并为 1.0.6 创建英文 GitHub Release Notes。
 
 ### P3：发布后增强
 
@@ -219,7 +219,7 @@ M3 功能与视觉阶段已完成，当前进入 M4 发布准备阶段，严格�
 7. M4.7～M4.11 使用者体验、维护性和包体积完善。
 8. M4.12～M4.15 alpha/beta、CI 和正式 npm 发布。
 
-当前任务：正在发布修订版 1.0.6，并补齐 v1.0.5 tag/Release；M4.17 固定到屏幕基础能力已完成；M4.14 等待配置 Trusted Publishing；M4.4 剩余 ARM64、签名 Mac 与 Linux 验收。
+当前任务：修订版 1.0.6 已发布，v1.0.5 和 v1.0.6 英文 GitHub Release Notes 已公开；M4.17 固定到屏幕基础能力已完成；M4.14 等待配置 Trusted Publishing；M4.4 剩余 ARM64、签名 Mac 与 Linux 验收。
 
 ## 风险与约束
 
@@ -285,3 +285,4 @@ M3 功能与视觉阶段已完成，当前进入 M4 发布准备阶段，严格�
 | 2026-08-20 | M4.15 | `electron-snapora@1.0.2` 已发布到 npm `latest`，Electron peer 最低版本与标签验证完成      |
 | 2026-08-21 | M4.17 | 固定到屏幕、多窗口、拖拽置前、圆形关闭与右键输出完成；真实截图和成品消费验证通过          |
 | 2026-08-22 | M4.15 | `electron-snapora@1.0.4` 已发布到 npm `latest`；v1.0.1～v1.0.4 英文 Releases 已公开       |
+| 2026-08-24 | M4.15 | `electron-snapora@1.0.6` 已发布到 npm `latest`；v1.0.5～v1.0.6 英文 Releases 已公开       |
