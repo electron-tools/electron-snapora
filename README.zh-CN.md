@@ -12,7 +12,22 @@
 - 支持 TypeScript、ESM 和 CommonJS。
 - 默认不依赖原生扩展，也不需要安装后编译。
 
-联系与更新：[@novratools on X](https://x.com/novratools)
+支持与反馈：[GitHub Issues](https://github.com/electron-tools/electron-snapora/issues) · [@novratools on X](https://x.com/novratools)
+
+商标政策：[TRADEMARKS.md](https://github.com/electron-tools/electron-snapora/blob/main/TRADEMARKS.md)
+
+## 问题反馈
+
+如果说明不清晰或功能与预期不符，请先搜索[现有 Issues](https://github.com/electron-tools/electron-snapora/issues)。没有相同问题时，可以创建[新的 GitHub Issue](https://github.com/electron-tools/electron-snapora/issues/new)，也可以通过 [@novratools on X](https://x.com/novratools) 联系项目。
+
+建议在 Bug 报告中提供：
+
+- `electron-snapora`、Electron、Node.js 和操作系统版本；
+- 最小复现步骤，以及尽可能精简的复现项目；
+- 预期行为和实际行为；
+- 相关错误、日志、截图或录屏，并提前移除 Token、账号和其他隐私数据。
+
+涉及安全或隐私的问题时，不要在公开 Issue 中粘贴凭证、私密截图、Token 或机密日志。请先通过 X 联系，再使用双方确认的私密渠道提供细节。
 
 ## 快速开始
 
@@ -90,4 +105,6 @@ exposeScreenshotApi({ contextBridge, ipcRenderer });
 
 仓库：[github.com/electron-tools/electron-snapora](https://github.com/electron-tools/electron-snapora)
 
-许可证：[MIT](https://github.com/electron-tools/electron-snapora/blob/main/LICENSE)
+## 许可证与商标
+
+源码使用 [MIT License](https://github.com/electron-tools/electron-snapora/blob/main/LICENSE)。`electron-snapora` 名称和官方项目品牌另受[商标政策](https://github.com/electron-tools/electron-snapora/blob/main/TRADEMARKS.md)约束。MIT 仍允许修改和分发代码，但修改版本不得冒充官方发布，也不得以容易混淆的方式使用官方名称或品牌。

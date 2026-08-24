@@ -50,6 +50,7 @@
     "dist",
     "CHANGELOG.md",
     "LICENSE",
+    "TRADEMARKS.md",
     "README*.md"
   ],
   "exports": {

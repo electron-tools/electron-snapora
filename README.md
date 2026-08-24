@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/electron-snapora?style=flat-square)](https://www.npmjs.com/package/electron-snapora)
 [![npm downloads](https://img.shields.io/npm/dm/electron-snapora?style=flat-square)](https://www.npmjs.com/package/electron-snapora)
-[![License](https://img.shields.io/npm/l/electron-snapora?style=flat-square)](https://github.com/xxx/electron-snapora/blob/main/LICENSE)
+[![License](https://img.shields.io/npm/l/electron-snapora?style=flat-square)](https://github.com/electron-tools/electron-snapora/blob/main/LICENSE)
 
 [English](https://github.com/electron-tools/electron-snapora/blob/main/README.md) | [简体中文](https://github.com/electron-tools/electron-snapora/blob/main/README.zh-CN.md) | [日本語](https://github.com/electron-tools/electron-snapora/blob/main/README.ja.md) | [한국어](https://github.com/electron-tools/electron-snapora/blob/main/README.ko.md) | [Español](https://github.com/electron-tools/electron-snapora/blob/main/README.es.md)
 
@@ -18,7 +18,22 @@ An easy-to-integrate Electron screenshot plugin with one-call setup and secure P
 
 Repository: [github.com/electron-tools/electron-snapora](https://github.com/electron-tools/electron-snapora)
 
-Contact: [@novratools on X](https://x.com/novratools)
+Support: [GitHub Issues](https://github.com/electron-tools/electron-snapora/issues) · [@novratools on X](https://x.com/novratools)
+
+Trademark policy: [TRADEMARKS.md](https://github.com/electron-tools/electron-snapora/blob/main/TRADEMARKS.md)
+
+## Support and bug reports
+
+If something is unclear or does not work as expected, first search the [existing issues](https://github.com/electron-tools/electron-snapora/issues). If no issue matches, open a [new GitHub Issue](https://github.com/electron-tools/electron-snapora/issues/new) or contact [@novratools on X](https://x.com/novratools).
+
+A useful bug report should include:
+
+- the `electron-snapora`, Electron, Node.js, and operating system versions;
+- minimal reproduction steps and the smallest reproducible project when possible;
+- expected behavior and actual behavior;
+- relevant error messages, logs, screenshots, or recordings with secrets and private data removed.
+
+For security or privacy-sensitive problems, do not post credentials, private screenshots, tokens, or confidential logs in a public issue. Contact the project through X first and share sensitive details only through an agreed private channel.
 
 ## Quick start
 
@@ -435,3 +450,7 @@ thrown by the application's logger are isolated and never change the screenshot 
 | `EXPORT_FAILED`           | Clipboard, save dialog, PNG encoding, or file output failed.     |
 | `INVALID_RESULT`          | The Overlay returned an invalid result or lifecycle message.     |
 | `UNSUPPORTED_PLATFORM`    | The current OS/display protocol is explicitly unsupported.       |
+
+## License and trademarks
+
+The source code is licensed under the [MIT License](https://github.com/electron-tools/electron-snapora/blob/main/LICENSE). The `electron-snapora` name and official project branding are governed separately by the [Trademark Policy](https://github.com/electron-tools/electron-snapora/blob/main/TRADEMARKS.md). Modified versions remain permitted under MIT, but they must not impersonate an official release or use project branding in a confusing way.

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Changed
+
+- Add a trademark policy while keeping the source code under MIT, and clarify GitHub Issue and X support channels in the English and Chinese README files.
+
 ## [1.0.6] - 2026-08-24
 
 ### Changed
