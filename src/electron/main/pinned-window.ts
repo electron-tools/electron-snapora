@@ -33,6 +33,9 @@ interface DragState {
   height: number;
 }
 
+/** 右键菜单约 143px，额外保留双侧 16px 余量吸收高 DPI 和无边框外框取整。 */
+const PINNED_WINDOW_MIN_SIZE = 176;
+
 export class PinnedWindowManager {
   readonly #resources: PinnedResources;
   readonly #createWindow: NonNullable<PinnedWindowManagerOptions['createWindow']>;
@@ -54,18 +57,32 @@ export class PinnedWindowManager {
     result: ScreenshotImageResult,
     options: ScreenshotOptions = {}
   ): Promise<void> {
-    const bounds = {
+    const sourceBounds = {
       x: Math.round(result.bounds.x),
       y: Math.round(result.bounds.y),
       width: Math.max(1, Math.round(result.bounds.width)),
       height: Math.max(1, Math.round(result.bounds.height)),
+    };
+    const aspectRatio = sourceBounds.width / sourceBounds.height;
+    const initialScale = Math.max(
+      1,
+      PINNED_WINDOW_MIN_SIZE / sourceBounds.width,
+      PINNED_WINDOW_MIN_SIZE / sourceBounds.height
+    );
+    const bounds = {
+      x: sourceBounds.x,
+      y: sourceBounds.y,
+      width: Math.round(sourceBounds.width * initialScale),
+      height: Math.round(sourceBounds.height * initialScale),
     };
     const window = this.#createWindow({
       ...bounds,
       // 固定截图直接使用外框尺寸，避免 Windows 阴影反复换算内容尺寸并放大窗口。
       frame: false,
       hasShadow: true,
-      resizable: false,
+      resizable: true,
+      minWidth: PINNED_WINDOW_MIN_SIZE,
+      minHeight: PINNED_WINDOW_MIN_SIZE,
       movable: true,
       minimizable: false,
       maximizable: false,
@@ -83,12 +100,29 @@ export class PinnedWindowManager {
         zoomFactor: 1,
       },
     });
+    window.setAspectRatio(aspectRatio);
+    if (process.platform === 'darwin') {
+      window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    }
+    /** 固定截图在关闭前始终保持最高标准置顶层级。 */
+    const keepOnTop = (): void => {
+      if (window.isDestroyed()) {
+        return;
+      }
+      if (process.platform === 'win32' || process.platform === 'darwin') {
+        window.setAlwaysOnTop(true, 'screen-saver');
+      } else {
+        window.setAlwaysOnTop(true);
+      }
+      window.moveTop();
+    };
+    keepOnTop();
     const data = Uint8Array.from(result.data);
     let dragState: DragState | undefined;
 
     this.#windows.add(window);
     window.on('closed', () => this.#windows.delete(window));
-    window.on('focus', () => window.moveTop());
+    window.on('focus', keepOnTop);
     window.webContents.on('ipc-message', (_event, channel, ...args) => {
       const point = args[0];
       if (channel === PINNED_CHANNELS.copy) {
@@ -108,18 +142,17 @@ export class PinnedWindowManager {
         dragState = {
           offsetX: point.x - current.x,
           offsetY: point.y - current.y,
-          // 始终使用截图原始尺寸，不能把高 DPI 回读后的向上取整值再次写回。
-          width: bounds.width,
-          height: bounds.height,
+          width: current.width,
+          height: current.height,
         };
         window.focus();
-        window.moveTop();
+        keepOnTop();
       } else if (
         channel === PINNED_CHANNELS.dragMove &&
         dragState &&
         isPinnedPoint(point)
       ) {
-        // Windows 长按拖动时显式锁定初始尺寸，避免高 DPI 坐标换算累积放大窗口。
+        // 每帧写回拖动开始时的当前尺寸，阻止宽高比和高 DPI 取整产生累积放大。
         window.setBounds(
           {
             x: Math.round(point.x - dragState.offsetX),
@@ -148,7 +181,7 @@ export class PinnedWindowManager {
       window.show();
       // 窗口可见后再锁回截图外框，吸收 Windows 阴影初始化产生的尺寸结算。
       window.setBounds(bounds, false);
-      window.moveTop();
+      keepOnTop();
       window.focus();
     } catch (error) {
       this.#windows.delete(window);

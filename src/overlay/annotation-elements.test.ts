@@ -65,6 +65,7 @@ describe('annotation element geometry', () => {
     };
 
     expect(hitTestElement([lower, upper], { x: 25, y: 20 }, 2)?.id).toBe('element-2');
+    expect(hitTestElement([lower], { x: 25, y: 20 }, 2, 'outline')).toBeUndefined();
     expect(
       translateElement(
         upper,
@@ -72,6 +73,67 @@ describe('annotation element geometry', () => {
         { x: 0, y: 0, width: 100, height: 80 }
       )
     ).toMatchObject({ bounds: { x: 70, y: 0, width: 30, height: 20 } });
+  });
+
+  it('hits visible shape outlines but leaves their empty centers drawable', () => {
+    const rectangle = {
+      ...createDrawableElement('rectangle', { x: 10, y: 10 }, style, identity),
+      bounds: { x: 10, y: 10, width: 80, height: 60 },
+    };
+    const ellipse = {
+      ...createDrawableElement('ellipse', { x: 110, y: 10 }, style, {
+        ...identity,
+        id: 'ellipse-1',
+        zIndex: 1,
+      }),
+      bounds: { x: 110, y: 10, width: 80, height: 60 },
+    };
+
+    expect(hitTestElement([rectangle], { x: 50, y: 10 }, 3, 'outline')).toBe(rectangle);
+    expect(hitTestElement([rectangle], { x: 50, y: 40 }, 3, 'outline')).toBeUndefined();
+    expect(hitTestElement([ellipse], { x: 190, y: 40 }, 3, 'outline')).toBe(ellipse);
+    expect(hitTestElement([ellipse], { x: 150, y: 40 }, 3, 'outline')).toBeUndefined();
+  });
+
+  it('hit-tests arrow, brush, text and mosaic drawing areas', () => {
+    const arrow = updateDrawableElement(
+      createDrawableElement('arrow', { x: 10, y: 10 }, style, identity),
+      { x: 10, y: 10 },
+      { x: 70, y: 40 }
+    );
+    const brush = updateDrawableElement(
+      createDrawableElement('brush', { x: 10, y: 70 }, style, {
+        ...identity,
+        id: 'brush-1',
+        zIndex: 1,
+      }),
+      { x: 10, y: 70 },
+      { x: 70, y: 90 }
+    );
+    const text = {
+      id: 'text-1',
+      type: 'text' as const,
+      zIndex: 2,
+      createdAt: 1,
+      color: '#f00',
+      position: { x: 90, y: 40 },
+      value: 'Text',
+      fontSize: 20,
+      metrics: { width: 50, ascent: 16, descent: 4 },
+    };
+    const mosaic = {
+      ...createDrawableElement('mosaic', { x: 90, y: 60 }, style, {
+        ...identity,
+        id: 'mosaic-1',
+        zIndex: 3,
+      }),
+      bounds: { x: 90, y: 60, width: 50, height: 40 },
+    };
+
+    expect(hitTestElement([arrow], { x: 40, y: 25 }, 3)).toBe(arrow);
+    expect(hitTestElement([brush], { x: 40, y: 80 }, 3)).toBe(brush);
+    expect(hitTestElement([text], { x: 110, y: 30 }, 3)).toBe(text);
+    expect(hitTestElement([mosaic], { x: 110, y: 80 }, 3)).toBe(mosaic);
   });
 
   it('scales brush points into adjusted bounds', () => {

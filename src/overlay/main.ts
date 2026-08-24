@@ -72,6 +72,8 @@ type PointerInteraction =
       pointerId: number;
       origin: Point;
       before: AnnotationElement;
+      started: boolean;
+      temporary: boolean;
     }
   | {
       kind: 'resize-element';
@@ -190,8 +192,10 @@ let currentMessages: ScreenshotMessages = resolveScreenshotMessages();
 let annotationCanvasRenderCache: AnnotationCanvasRenderCache | undefined;
 let toolbarPositionCacheKey: string | null = null;
 let frameLoadController: AbortController | undefined;
+let directMovingElementId: string | null = null;
 
 const EXPORT_PROGRESS_DELAY_MS = 180;
+const DIRECT_MOVE_THRESHOLD = 4;
 /** 水印字号固定为紧凑预设，避免给面板再增加一个低价值控件。 */
 const WATERMARK_FONT_SIZE = 18;
 
@@ -201,6 +205,7 @@ interface AnnotationCanvasRenderCache {
   document: AnnotationState['document'];
   draft: AnnotationState['draft'];
   preview: AnnotationState['preview'];
+  movingElementId: string | null;
   selectedElementId: AnnotationState['selectedElementId'];
   watermarkKey: string;
 }
@@ -295,6 +300,7 @@ function resetOverlaySession(): void {
   closeTextEditor(false);
   closeColorPicker();
   pointerInteraction = null;
+  directMovingElementId = null;
   resetAnnotationsAfterSelection = true;
   hoveredWindowSnap = null;
   pendingTextPoint = null;
@@ -327,6 +333,7 @@ function resetOverlaySession(): void {
   watermarkOpacityInput.value = watermarkOpacityInput.defaultValue;
   watermarkOpacityOutput.value = `${watermarkOpacityInput.value}%`;
   copyFeedback.hidden = true;
+  delete annotationCanvas.dataset.canMove;
   delete document.documentElement.dataset.snaporaFeedback;
   delete document.documentElement.dataset.tooltipPointer;
 }
@@ -387,6 +394,7 @@ annotationCanvas.addEventListener('dblclick', handleCanvasDoubleClick);
 annotationCanvas.addEventListener('pointerleave', () => {
   if (!pointerInteraction) {
     updateWindowSnapPreview(null);
+    updateDirectMoveHover(null);
   }
 });
 
@@ -424,6 +432,7 @@ for (const button of toolButtons) {
   button.addEventListener('click', () => {
     closeColorPicker();
     const tool = button.dataset.tool as AnnotationTool;
+    delete annotationCanvas.dataset.canMove;
     annotationStore.setTool(tool);
     if (tool === 'watermark') {
       watermarkTextInput.focus();
@@ -636,6 +645,7 @@ function handleCanvasPointerDown(event: PointerEvent): void {
     closeTextEditor(true);
   }
   event.stopPropagation();
+  delete annotationCanvas.dataset.canMove;
   if (event.isTrusted) {
     annotationCanvas.setPointerCapture(event.pointerId);
   }
@@ -666,6 +676,9 @@ function handleCanvasPointerDown(event: PointerEvent): void {
   if (annotationState.activeTool === 'select') {
     beginSelectInteraction(event.pointerId, imagePoint, viewportPoint);
   } else if (annotationState.activeTool === 'text') {
+    if (beginDirectElementMove(event.pointerId, imagePoint)) {
+      return;
+    }
     // Canvas 的默认聚焦发生在 pointerdown 处理之后，会让刚打开的文字编辑框立即 blur。
     event.preventDefault();
     annotationCanvas.releasePointerCapture(event.pointerId);
@@ -674,14 +687,18 @@ function handleCanvasPointerDown(event: PointerEvent): void {
     event.preventDefault();
     annotationCanvas.releasePointerCapture(event.pointerId);
   } else {
-    beginDrawInteraction(event.pointerId, imagePoint, annotationState.activeTool);
+    if (!beginDirectElementMove(event.pointerId, imagePoint)) {
+      beginDrawInteraction(event.pointerId, imagePoint, annotationState.activeTool);
+    }
   }
 }
 
 function handleCanvasPointerMove(event: PointerEvent): void {
   const interaction = pointerInteraction;
   if (!interaction) {
-    updateWindowSnapPreview(toSurfacePoint(event));
+    const viewportPoint = toSurfacePoint(event);
+    updateWindowSnapPreview(viewportPoint);
+    updateDirectMoveHover(viewportPoint);
     return;
   }
   if (interaction.pointerId !== event.pointerId) {
@@ -737,6 +754,22 @@ function handleCanvasPointerMove(event: PointerEvent): void {
       )
     );
   } else if (interaction.kind === 'move-element') {
+    if (
+      !interaction.started &&
+      Math.hypot(
+        imagePoint.x - interaction.origin.x,
+        imagePoint.y - interaction.origin.y
+      ) <
+        getImageScale() * DIRECT_MOVE_THRESHOLD
+    ) {
+      return;
+    }
+    interaction.started = true;
+    directMovingElementId =
+      interaction.temporary &&
+      (interaction.before.type === 'text' || interaction.before.type === 'mosaic')
+        ? interaction.before.id
+        : null;
     annotationStore.preview(
       translateElement(
         interaction.before,
@@ -781,6 +814,17 @@ function handleCanvasPointerEnd(event: PointerEvent): void {
     } else {
       annotationStore.setDraft(null);
     }
+  } else if (interaction.kind === 'move-element') {
+    const preview = annotationStore.getState().preview;
+    directMovingElementId = null;
+    if (preview && event.type !== 'pointercancel') {
+      annotationStore.commitUpdate(interaction.before, preview);
+    } else if (event.type === 'pointercancel') {
+      annotationStore.preview(null);
+    }
+    if (interaction.temporary) {
+      annotationStore.select(null);
+    }
   } else {
     const preview = annotationStore.getState().preview;
     if (preview) {
@@ -788,6 +832,7 @@ function handleCanvasPointerEnd(event: PointerEvent): void {
     }
   }
   pointerInteraction = null;
+  updateDirectMoveHover(event.type === 'pointercancel' ? null : toSurfacePoint(event));
   if (annotationCanvas.hasPointerCapture(event.pointerId)) {
     annotationCanvas.releasePointerCapture(event.pointerId);
   }
@@ -875,6 +920,8 @@ function beginSelectInteraction(
       pointerId,
       origin: imagePoint,
       before: hit,
+      started: true,
+      temporary: false,
     };
     return;
   }
@@ -883,6 +930,56 @@ function beginSelectInteraction(
   selectionStore.dispatch({ type: 'begin-move', pointerId, point: viewportPoint });
   pointerInteraction = { kind: 'selection', pointerId };
   resetAnnotationsAfterSelection = false;
+}
+
+/** 绘图工具保持激活时，命中已有标注则临时进入拖动，而不是创建新元素。 */
+function beginDirectElementMove(pointerId: number, imagePoint: Point): boolean {
+  const state = annotationStore.getState();
+  const hit = hitTestElement(
+    getRenderableElements(state),
+    imagePoint,
+    getImageScale() * 8,
+    'outline'
+  );
+  if (!hit) {
+    return false;
+  }
+  annotationCanvas.dataset.canMove = 'true';
+  annotationStore.select(null);
+  pointerInteraction = {
+    kind: 'move-element',
+    pointerId,
+    origin: imagePoint,
+    before: hit,
+    started: false,
+    temporary: true,
+  };
+  return true;
+}
+
+/** 只在绘图态命中可见标注时显示移动光标，空白区域继续保留当前工具光标。 */
+function updateDirectMoveHover(viewportPoint: Point | null): void {
+  const selectionState = selectionStore.getState();
+  const annotationState = annotationStore.getState();
+  const selection = selectionState.selection;
+  const canMove =
+    viewportPoint !== null &&
+    selectionState.phase === 'selected' &&
+    selection !== null &&
+    containsPoint(selection, viewportPoint) &&
+    annotationState.activeTool !== 'select' &&
+    annotationState.activeTool !== 'watermark' &&
+    hitTestElement(
+      getRenderableElements(annotationState),
+      toImagePoint(viewportPoint),
+      getImageScale() * 8,
+      'outline'
+    ) !== undefined;
+  if (canMove) {
+    annotationCanvas.dataset.canMove = 'true';
+  } else {
+    delete annotationCanvas.dataset.canMove;
+  }
 }
 
 function beginDrawInteraction(
@@ -1278,6 +1375,7 @@ function renderAnnotationCanvas(): void {
     document: state.document,
     draft: state.draft,
     preview: state.preview,
+    movingElementId: directMovingElementId,
     selectedElementId: state.selectedElementId,
     watermarkKey: watermark
       ? `${watermark.text}\u0000${watermark.color}\u0000${watermark.opacity}\u0000${watermark.fontSize}`
@@ -1291,6 +1389,7 @@ function renderAnnotationCanvas(): void {
     previousCache.document === nextCache.document &&
     previousCache.draft === nextCache.draft &&
     previousCache.preview === nextCache.preview &&
+    previousCache.movingElementId === nextCache.movingElementId &&
     previousCache.selectedElementId === nextCache.selectedElementId &&
     previousCache.watermarkKey === nextCache.watermarkKey
   ) {
@@ -1310,6 +1409,11 @@ function renderAnnotationCanvas(): void {
     imageSize: frame.pixelSize,
     mosaicSource: screenFrame,
     draftElementId: state.draft?.id ?? null,
+    movingElementId: directMovingElementId,
+    movingOutlineColor:
+      getComputedStyle(document.documentElement)
+        .getPropertyValue('--snapora-accent')
+        .trim() || '#0a84ff',
     selectedElementId: state.selectedElementId,
     selectionHandleSize: getImageScale() * 8,
     ...(watermark ? { watermark } : {}),

@@ -252,6 +252,50 @@ describe('annotation renderer', () => {
     expect(context.fillRect).not.toHaveBeenCalled();
   });
 
+  it('outlines directly moving text and mosaic with the requested color', () => {
+    const textContext = createContext();
+    const text: AnnotationElement = {
+      ...base,
+      id: 'text-moving',
+      type: 'text',
+      position: { x: 10, y: 40 },
+      value: 'Snapora',
+      fontSize: 24,
+      metrics: { width: 90, ascent: 20, descent: 5 },
+    };
+    drawAnnotations(textContext, [text], {
+      imageSize: { width: 160, height: 100 },
+      clipBounds: { x: 0, y: 0, width: 160, height: 100 },
+      movingElementId: text.id,
+      movingOutlineColor: '#6750a4',
+      selectionHandleSize: 8,
+    });
+
+    expect(textContext.strokeRect).toHaveBeenCalledTimes(2);
+    expect(textContext.strokeRect).toHaveBeenCalledWith(10, 20, 90, 25);
+    expect(textContext.strokeStyle).toBe('#6750a4');
+    expect(textContext.fillRect).not.toHaveBeenCalled();
+
+    const mosaicContext = createContext();
+    const mosaic: AnnotationElement = {
+      ...base,
+      id: 'mosaic-moving',
+      type: 'mosaic',
+      bounds: { x: 20, y: 20, width: 40, height: 30 },
+      blockSize: 8,
+    };
+    drawAnnotations(mosaicContext, [mosaic], {
+      imageSize: { width: 160, height: 100 },
+      movingElementId: mosaic.id,
+      movingOutlineColor: '#6750a4',
+      selectionHandleSize: 8,
+    });
+
+    expect(mosaicContext.strokeRect).toHaveBeenCalledTimes(2);
+    expect(mosaicContext.strokeRect).toHaveBeenCalledWith(20, 20, 40, 30);
+    expect(mosaicContext.fillRect).not.toHaveBeenCalled();
+  });
+
   it('renders a tiled watermark across the clipped selection', () => {
     const context = createContext();
 

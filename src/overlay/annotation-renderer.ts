@@ -32,6 +32,8 @@ export interface DrawAnnotationsOptions {
   imageSize: Size;
   mosaicSource?: CanvasImageSource;
   draftElementId?: string | null;
+  movingElementId?: string | null;
+  movingOutlineColor?: string;
   selectedElementId?: string | null;
   selectionHandleSize?: number;
   watermark?: WatermarkOptions;
@@ -64,6 +66,15 @@ export function drawAnnotations(
       context,
       options.watermark,
       options.clipBounds ?? { x: 0, y: 0, ...options.imageSize }
+    );
+  }
+  const moving = elements.find((element) => element.id === options.movingElementId);
+  if (moving) {
+    drawMovingOutline(
+      context,
+      getElementBounds(moving),
+      options.selectionHandleSize ?? 8,
+      options.movingOutlineColor ?? '#0a84ff'
     );
   }
   context.restore();
@@ -358,6 +369,24 @@ function drawDraftOutline(
   context.setLineDash([handleSize * 0.75, handleSize * 0.5]);
   context.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
   context.setLineDash([]);
+  context.restore();
+}
+
+/** 文字和马赛克直接拖动时用主题强调色标明真实边界，不显示缩放控制点。 */
+function drawMovingOutline(
+  context: AnnotationDrawingContext,
+  bounds: Rect,
+  handleSize: number,
+  color: string
+): void {
+  context.save();
+  context.strokeStyle = 'rgba(0, 0, 0, 0.68)';
+  context.lineWidth = Math.max(3, handleSize / 2);
+  context.setLineDash([]);
+  context.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
+  context.strokeStyle = color;
+  context.lineWidth = Math.max(1.5, handleSize / 5);
+  context.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
   context.restore();
 }
 

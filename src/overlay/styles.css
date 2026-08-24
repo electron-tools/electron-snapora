@@ -135,6 +135,11 @@ input {
   cursor: text;
 }
 
+.capture-surface:not([data-tool='select']):not([data-tool='watermark'])
+  .annotation-canvas[data-can-move='true'] {
+  cursor: move;
+}
+
 .capture-surface[data-state='ready'] .annotation-canvas,
 .capture-surface[data-state='creating'] .annotation-canvas {
   cursor:

@@ -344,11 +344,19 @@ export function updateElementStyle(
 export function hitTestElement(
   elements: AnnotationElement[],
   point: Point,
-  tolerance: number
+  tolerance: number,
+  shapeHitMode: 'bounds' | 'outline' = 'bounds'
 ): AnnotationElement | undefined {
-  return [...elements]
-    .sort((left, right) => right.zIndex - left.zIndex)
-    .find((element) => isPointNearElement(element, point, tolerance));
+  let hit: AnnotationElement | undefined;
+  for (const element of elements) {
+    if (
+      (!hit || element.zIndex > hit.zIndex) &&
+      isPointNearElement(element, point, tolerance, shapeHitMode)
+    ) {
+      hit = element;
+    }
+  }
+  return hit;
 }
 
 export function getResizeHandleAtPoint(
@@ -475,26 +483,86 @@ function scaleTextMetrics(
 function isPointNearElement(
   element: AnnotationElement,
   point: Point,
-  tolerance: number
+  tolerance: number,
+  shapeHitMode: 'bounds' | 'outline'
 ): boolean {
+  const bounds = getElementBounds(element);
+  if (!isPointInsideExpandedBounds(point, bounds, tolerance)) {
+    return false;
+  }
+
   if (element.type === 'arrow' || element.type === 'brush') {
     const points =
       element.type === 'arrow' ? [element.start, element.end] : element.points;
+    const lineTolerance = Math.max(tolerance, element.lineWidth / 2 + 2);
     return points.some((current, index) => {
       const next = points[index + 1];
       return next
-        ? distanceToSegment(point, current, next) <= tolerance
-        : distance(point, current) <= tolerance;
+        ? distanceToSegment(point, current, next) <= lineTolerance
+        : distance(point, current) <= lineTolerance;
     });
   }
 
-  const bounds = getElementBounds(element);
+  if (element.type === 'rectangle' && shapeHitMode === 'outline') {
+    const lineTolerance = Math.max(tolerance, element.lineWidth / 2 + 2);
+    const right = bounds.x + bounds.width;
+    const bottom = bounds.y + bounds.height;
+    return (
+      Math.abs(point.x - bounds.x) <= lineTolerance ||
+      Math.abs(point.x - right) <= lineTolerance ||
+      Math.abs(point.y - bounds.y) <= lineTolerance ||
+      Math.abs(point.y - bottom) <= lineTolerance
+    );
+  }
+
+  if (element.type === 'ellipse' && shapeHitMode === 'outline') {
+    return isPointNearEllipseOutline(
+      point,
+      bounds,
+      Math.max(tolerance, element.lineWidth / 2 + 2)
+    );
+  }
+
+  return true;
+}
+
+function isPointInsideExpandedBounds(
+  point: Point,
+  bounds: Rect,
+  tolerance: number
+): boolean {
   return (
     point.x >= bounds.x - tolerance &&
     point.x <= bounds.x + bounds.width + tolerance &&
     point.y >= bounds.y - tolerance &&
     point.y <= bounds.y + bounds.height + tolerance
   );
+}
+
+function isPointNearEllipseOutline(
+  point: Point,
+  bounds: Rect,
+  tolerance: number
+): boolean {
+  const radiusX = bounds.width / 2;
+  const radiusY = bounds.height / 2;
+  if (radiusX <= 0 || radiusY <= 0) {
+    return false;
+  }
+  const deltaX = point.x - (bounds.x + radiusX);
+  const deltaY = point.y - (bounds.y + radiusY);
+  const radialDistance = Math.hypot(deltaX, deltaY);
+  if (radialDistance === 0) {
+    return Math.min(radiusX, radiusY) <= tolerance;
+  }
+  const cosine = deltaX / radialDistance;
+  const sine = deltaY / radialDistance;
+  const outlineDistance =
+    1 /
+    Math.sqrt(
+      (cosine * cosine) / (radiusX * radiusX) + (sine * sine) / (radiusY * radiusY)
+    );
+  return Math.abs(radialDistance - outlineDistance) <= tolerance;
 }
 
 function paddedBounds(points: Point[], padding: number): Rect {

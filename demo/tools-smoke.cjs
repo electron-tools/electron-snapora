@@ -306,50 +306,9 @@ app.on('browser-window-created', (_event, window) => {
         };
       })()
     `);
-    if (
-      !snapPreview.visible ||
-      !snapPreview.maskHidden ||
-      snapPreview.bounds.width <= 0 ||
-      snapPreview.bounds.height <= 0
-    ) {
+    if (snapPreview.visible || snapPreview.maskHidden) {
       throw new Error(
-        `Window snap hover preview was invalid: ${JSON.stringify({ snapPoint, snapPreview })}`
-      );
-    }
-    await window.webContents.executeJavaScript(`
-      (() => {
-        const canvas = document.querySelector('.annotation-canvas');
-        const options = {
-          bubbles: true,
-          pointerId: 42,
-          pointerType: 'mouse',
-          isPrimary: true,
-          button: 0,
-          clientX: ${snapPoint.x},
-          clientY: ${snapPoint.y}
-        };
-        canvas?.dispatchEvent(new PointerEvent('pointerdown', options));
-        canvas?.dispatchEvent(new PointerEvent('pointerup', options));
-      })()
-    `);
-    await nextFrame(window);
-    const snappedSelection = await window.webContents.executeJavaScript(`
-      (() => {
-        const surface = document.querySelector('.capture-surface');
-        const selection = document.querySelector('.selection');
-        return {
-          phase: surface?.dataset.state,
-          bounds: selection?.getBoundingClientRect().toJSON(),
-        };
-      })()
-    `);
-    if (
-      snappedSelection.phase !== 'selected' ||
-      Math.abs(snappedSelection.bounds.width - snapPreview.bounds.width) > 1 ||
-      Math.abs(snappedSelection.bounds.height - snapPreview.bounds.height) > 1
-    ) {
-      throw new Error(
-        `Window snap click did not create the expected selection: ${JSON.stringify(snappedSelection)}`
+        `Disabled window snap unexpectedly showed a preview: ${JSON.stringify({ snapPoint, snapPreview })}`
       );
     }
     const selectionStart = {
@@ -697,6 +656,74 @@ app.on('browser-window-created', (_event, window) => {
       { x: left, y: top },
       { x: left + 130, y: top + 80 }
     );
+    const rectangleMove = { x: 40, y: 36 };
+    const rectangleEdge = { x: left + 65, y: top };
+    const originalEdgeRegion = {
+      x: left + 20,
+      y: top - 5,
+      width: 90,
+      height: 10,
+    };
+    const movedEdgeRegion = {
+      ...originalEdgeRegion,
+      x: originalEdgeRegion.x + rectangleMove.x,
+      y: originalEdgeRegion.y + rectangleMove.y,
+    };
+    const originalEdgeBeforeMove = await countRegionPixels(window, originalEdgeRegion);
+    const movedEdgeBeforeMove = await countRegionPixels(window, movedEdgeRegion);
+    window.webContents.sendInputEvent({ type: 'mouseMove', ...rectangleEdge });
+    await nextFrame(window);
+    const directMoveCursor = await window.webContents.executeJavaScript(
+      `getComputedStyle(document.querySelector('.annotation-canvas')).cursor`
+    );
+    if (directMoveCursor !== 'move') {
+      throw new Error(
+        `Drawing tool did not expose the direct-move cursor: ${directMoveCursor}`
+      );
+    }
+    sendDrag(window, rectangleEdge, {
+      x: rectangleEdge.x + rectangleMove.x,
+      y: rectangleEdge.y + rectangleMove.y,
+    });
+    await nextFrame(window);
+    const originalEdgeAfterMove = await countRegionPixels(window, originalEdgeRegion);
+    const movedEdgeAfterMove = await countRegionPixels(window, movedEdgeRegion);
+    const directMoveState = await window.webContents.executeJavaScript(`
+      (() => {
+        const surface = document.querySelector('.capture-surface');
+        return {
+          tool: surface?.dataset.tool,
+          selectedType: surface?.dataset.selectedType ?? null,
+        };
+      })()
+    `);
+    if (
+      originalEdgeAfterMove >= originalEdgeBeforeMove ||
+      movedEdgeAfterMove <= movedEdgeBeforeMove ||
+      directMoveState.tool !== 'rectangle' ||
+      directMoveState.selectedType !== null
+    ) {
+      throw new Error(
+        `Rectangle direct move was invalid: ${JSON.stringify({ originalEdgeBeforeMove, originalEdgeAfterMove, movedEdgeBeforeMove, movedEdgeAfterMove, directMoveState })}`
+      );
+    }
+    window.webContents.sendInputEvent({
+      type: 'keyDown',
+      keyCode: 'Z',
+      modifiers: ['control'],
+    });
+    window.webContents.sendInputEvent({
+      type: 'keyUp',
+      keyCode: 'Z',
+      modifiers: ['control'],
+    });
+    await nextFrame(window);
+    const originalEdgeAfterUndo = await countRegionPixels(window, originalEdgeRegion);
+    if (originalEdgeAfterUndo < originalEdgeBeforeMove) {
+      throw new Error(
+        `Undo did not restore the directly moved rectangle (${originalEdgeAfterMove} -> ${originalEdgeAfterUndo}).`
+      );
+    }
     await assertToolDraws(
       window,
       'ellipse',

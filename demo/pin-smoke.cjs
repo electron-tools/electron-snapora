@@ -14,11 +14,11 @@ async function run() {
     .createFromDataURL(PIXEL)
     .resize({ width: 320, height: 180 })
     .toPNG();
-  const createResult = (x) => ({
+  const createResult = (x, width = 320, height = 180) => ({
     status: 'completed',
     data: Uint8Array.from(png),
     mimeType: 'image/png',
-    bounds: { x, y: 80, width: 320, height: 180 },
+    bounds: { x, y: 80, width, height },
     displayId: 'smoke',
   });
 
@@ -44,6 +44,18 @@ async function run() {
   }
   const initialBounds = first.getBounds();
   const second = windows[1];
+  if (!second) {
+    throw new Error('Pinned smoke windows were incomplete.');
+  }
+  if (!first.isAlwaysOnTop() || !second.isAlwaysOnTop()) {
+    throw new Error('Pinned windows did not remain always on top.');
+  }
+  const minimumSize = first.getMinimumSize();
+  if (!first.isResizable() || minimumSize[0] !== 176 || minimumSize[1] !== 176) {
+    throw new Error(
+      `Pinned resize constraints were invalid: ${JSON.stringify({ resizable: first.isResizable(), minimumSize })}`
+    );
+  }
   const view = await first.webContents.executeJavaScript(`({
     image: document.querySelector('.pinned-image')?.src.startsWith('blob:'),
     closeRadius: getComputedStyle(document.querySelector('.pinned-close')).borderRadius,
@@ -138,6 +150,9 @@ async function run() {
     return {
       visible: Boolean(menu && !menu.hidden),
       width: menuBounds?.width,
+      height: menuBounds?.height,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
       minWidth: menuStyle?.minWidth,
       paddingLeft: menuStyle?.paddingLeft,
       rowGap: menuStyle?.rowGap,
@@ -172,58 +187,142 @@ async function run() {
       `Pinned context menu layout was invalid: ${JSON.stringify(menuState)}`
     );
   }
-  if (menuOnly) {
-    for (const window of BrowserWindow.getAllWindows()) {
-      window.destroy();
+  const assertResizedDrag = async () => {
+    first.setBounds(
+      {
+        ...initialBounds,
+        width: 480,
+        height: 270,
+      },
+      false
+    );
+    const resizedBounds = first.getBounds();
+    await first.webContents.executeJavaScript(`
+      window.snaporaPinned.startDrag({ x: 100, y: 100 });
+      for (let index = 1; index <= 40; index += 1) {
+        window.snaporaPinned.moveDrag({ x: 100 + index, y: 100 + index });
+      }
+      window.snaporaPinned.endDrag();
+    `);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const moved = first.getBounds();
+    if (
+      moved.x !== resizedBounds.x + 40 ||
+      moved.y !== resizedBounds.y + 40 ||
+      Math.abs(moved.width - resizedBounds.width) > 1 ||
+      Math.abs(moved.height - resizedBounds.height) > 1
+    ) {
+      throw new Error(
+        `Pinned window drag changed its resized dimensions: ${JSON.stringify({ resizedBounds, moved })}`
+      );
     }
-    console.log('Electron Snapora pinned context-menu smoke passed.');
-    return;
+  };
+  if (!menuOnly) {
+    first.webContents.sendInputEvent({
+      type: 'mouseDown',
+      x: 20,
+      y: 20,
+      button: 'right',
+      clickCount: 1,
+    });
+    first.webContents.sendInputEvent({
+      type: 'mouseUp',
+      x: 20,
+      y: 20,
+      button: 'right',
+      clickCount: 1,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await first.webContents.executeJavaScript(
+      `document.querySelector('.pinned-copy').click()`
+    );
+    const copyFeedback = await first.webContents.executeJavaScript(`
+    new Promise((resolve) => {
+      const deadline = performance.now() + 1_000;
+      const read = () => {
+        const feedback = document.querySelector('.pinned-copy-feedback');
+        const icon = document.querySelector('.pinned-copy-feedback-icon');
+        const state = {
+          visible: Boolean(feedback && !feedback.hidden),
+          text: document.querySelector('.pinned-copy-feedback-label')?.textContent,
+          menuHidden: document.querySelector('.pinned-context-menu')?.hidden,
+          iconStroke: icon ? getComputedStyle(icon).stroke : null,
+        };
+        if (state.visible || performance.now() >= deadline) {
+          resolve(state);
+          return;
+        }
+        setTimeout(read, 20);
+      };
+      read();
+    })
+  `);
+    copyFeedback.clipboardEmpty = clipboard.readImage().isEmpty();
+    if (
+      !copyFeedback.visible ||
+      copyFeedback.text !== '已复制到剪贴板' ||
+      !copyFeedback.menuHidden ||
+      copyFeedback.iconStroke !== 'rgb(52, 199, 89)' ||
+      copyFeedback.clipboardEmpty
+    ) {
+      throw new Error(
+        `Pinned copy feedback was invalid: ${JSON.stringify(copyFeedback)}`
+      );
+    }
   }
-  await first.webContents.executeJavaScript(
-    `document.querySelector('.pinned-copy').click()`
+  await pin(createResult(800, 160, 90), { locale: 'zh-CN' });
+  const minimumWindow = BrowserWindow.getAllWindows().find(
+    (window) => window.getBounds().x >= 800
   );
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  const copyFeedback = await first.webContents.executeJavaScript(`(() => {
-    const feedback = document.querySelector('.pinned-copy-feedback');
-    const icon = document.querySelector('.pinned-copy-feedback-icon');
+  if (!minimumWindow) {
+    throw new Error('Menu-safe minimum pinned window was not created.');
+  }
+  const minimumBounds = minimumWindow.getBounds();
+  if (
+    minimumBounds.width < 176 ||
+    minimumBounds.height < 176 ||
+    Math.abs(minimumBounds.width / minimumBounds.height - 16 / 9) > 0.02
+  ) {
+    throw new Error(
+      `Pinned initial bounds did not scale proportionally to the menu-safe minimum: ${JSON.stringify(minimumBounds)}`
+    );
+  }
+  minimumWindow.webContents.sendInputEvent({
+    type: 'mouseDown',
+    x: 20,
+    y: 20,
+    button: 'right',
+    clickCount: 1,
+  });
+  minimumWindow.webContents.sendInputEvent({
+    type: 'mouseUp',
+    x: 20,
+    y: 20,
+    button: 'right',
+    clickCount: 1,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const minimumMenu = await minimumWindow.webContents.executeJavaScript(`(() => {
+    const menu = document.querySelector('.pinned-context-menu');
+    const bounds = menu?.getBoundingClientRect();
     return {
-      visible: Boolean(feedback && !feedback.hidden),
-      text: document.querySelector('.pinned-copy-feedback-label')?.textContent,
-      menuHidden: document.querySelector('.pinned-context-menu')?.hidden,
-      iconStroke: icon ? getComputedStyle(icon).stroke : null,
+      visible: Boolean(menu && !menu.hidden),
+      width: bounds?.width,
+      height: bounds?.height,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
     };
   })()`);
   if (
-    !copyFeedback.visible ||
-    copyFeedback.text !== '已复制到剪贴板' ||
-    !copyFeedback.menuHidden ||
-    copyFeedback.iconStroke !== 'rgb(52, 199, 89)' ||
-    clipboard.readImage().isEmpty()
+    !minimumMenu.visible ||
+    minimumMenu.width + 32 > minimumMenu.viewportWidth ||
+    minimumMenu.height + 32 > minimumMenu.viewportHeight
   ) {
     throw new Error(
-      `Pinned copy feedback was invalid: ${JSON.stringify(copyFeedback)}`
+      `Pinned minimum window did not preserve menu safety margins: ${JSON.stringify(minimumMenu)}`
     );
   }
-
-  await first.webContents.executeJavaScript(`
-    window.snaporaPinned.startDrag({ x: 100, y: 100 });
-    for (let index = 1; index <= 40; index += 1) {
-      window.snaporaPinned.moveDrag({ x: 100 + index, y: 100 + index });
-    }
-    window.snaporaPinned.endDrag();
-  `);
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  const moved = first.getBounds();
-  if (
-    moved.x !== initialBounds.x + 40 ||
-    moved.y !== initialBounds.y + 40 ||
-    moved.width !== initialBounds.width ||
-    moved.height !== initialBounds.height
-  ) {
-    throw new Error(
-      `Pinned window long drag changed its size: ${JSON.stringify({ initialBounds, moved })}`
-    );
-  }
+  await assertResizedDrag();
 
   for (const window of BrowserWindow.getAllWindows()) {
     window.destroy();
@@ -231,7 +330,9 @@ async function run() {
   if (BrowserWindow.getAllWindows().length !== 0) {
     throw new Error('Pinned windows were not cleaned up.');
   }
-  console.log('Electron Snapora pinned-window smoke passed.');
+  console.log(
+    `Electron Snapora ${menuOnly ? 'pinned context-menu' : 'pinned-window'} smoke passed.`
+  );
 }
 
 app
