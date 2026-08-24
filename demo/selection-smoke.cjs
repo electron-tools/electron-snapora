@@ -233,7 +233,10 @@ app.on('browser-window-created', (_event, window) => {
 
 app.whenReady().then(async () => {
   const manager = new ScreenshotManager();
-  const result = await manager.capture({ display: 'cursor' });
+  const result = await manager.capture({
+    display: 'cursor',
+    showCopyFeedback: doubleClickOutput,
+  });
   clearTimeout(smokeTimeout);
 
   if (
@@ -255,7 +258,16 @@ app.whenReady().then(async () => {
     return;
   }
 
-  if (doubleClickOutput) {
+  if (copyOutput) {
+    const feedbackWindow = await waitForCopyFeedbackWindow();
+    if (feedbackWindow) {
+      console.error(
+        'Electron Snapora copy feedback was visible without explicit opt-in.'
+      );
+      process.exit(1);
+      return;
+    }
+  } else if (doubleClickOutput) {
     const feedbackWindow = await waitForCopyFeedbackWindow();
     if (!feedbackWindow || feedbackWindow.isDestroyed()) {
       console.error('Electron Snapora copy feedback window closed too early.');

@@ -181,6 +181,16 @@ The default package has no native addon and no post-install compilation.
 Pass manager settings through `setupElectronSnapora()` so the simple integration shape stays the
 same as requirements grow.
 
+The post-capture clipboard confirmation is disabled by default. Enable it per capture when the
+host wants the standalone copy feedback window:
+
+```ts
+await window.electronSnapora.capture({
+  display: 'cursor',
+  showCopyFeedback: true,
+});
+```
+
 ### Theme and localization
 
 The overlay defaults to English (`en-US`) and a dark toolbar. A capture can select the built-in

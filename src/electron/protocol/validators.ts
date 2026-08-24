@@ -48,6 +48,7 @@ const SCREENSHOT_OPTION_KEYS = new Set([
   'display',
   'tools',
   'defaultTool',
+  'showCopyFeedback',
   'locale',
   'messages',
   'theme',
@@ -195,6 +196,16 @@ export function parseScreenshotOptions(value: unknown): ScreenshotOptionsParseRe
       };
     }
     parsed.defaultTool = value.defaultTool as 'select' | ScreenshotTool;
+  }
+
+  if (value.showCopyFeedback !== undefined) {
+    if (typeof value.showCopyFeedback !== 'boolean') {
+      return {
+        success: false,
+        message: 'Screenshot showCopyFeedback must be a boolean.',
+      };
+    }
+    parsed.showCopyFeedback = value.showCopyFeedback;
   }
 
   if (value.locale !== undefined) {

@@ -46,6 +46,7 @@ describe('OverlayWindow', () => {
       })
     ).toBe(true);
     overlay.prime();
+    expect(capture?.setOpacity).toHaveBeenCalledWith(1);
     overlay.reveal();
 
     expect(receivedOptions[0]).toMatchObject({
@@ -58,11 +59,11 @@ describe('OverlayWindow', () => {
       hasShadow: false,
       fullscreenable: false,
       alwaysOnTop: true,
-      transparent: false,
+      transparent: true,
       show: false,
       opacity: 0,
       paintWhenInitiallyHidden: true,
-      backgroundColor: '#000000',
+      backgroundColor: '#00000000',
       roundedCorners: false,
       thickFrame: false,
       webPreferences: {
@@ -164,6 +165,7 @@ describe('OverlayWindow', () => {
     });
     expect(fake.setVisibleOnAllWorkspaces).toHaveBeenCalledWith(true, {
       visibleOnFullScreen: true,
+      skipTransformProcessType: true,
     });
     expect(fake.setBounds).not.toHaveBeenCalled();
     expect(fake.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver');

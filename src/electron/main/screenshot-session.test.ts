@@ -80,7 +80,7 @@ function createSession(
 ) {
   return new ScreenshotSession({
     jobId: 'job-1',
-    captureOptions: { display: 'cursor' },
+    captureOptions: { display: 'cursor', showCopyFeedback: true },
     captureAdapter: {
       capture: vi.fn(async () => [frame]),
     },
@@ -311,7 +311,7 @@ describe('ScreenshotSession', () => {
     expect(overlay.sendInitialize).toHaveBeenCalledWith({
       protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
       jobId: 'job-1',
-      options: { display: 'cursor' },
+      options: { display: 'cursor', showCopyFeedback: true },
       frames: [frame],
     });
     expect(session.state).toBe('preparing-overlay');
@@ -343,6 +343,7 @@ describe('ScreenshotSession', () => {
     expect(session.state).toBe('completed');
     expect(overlay.showCopyFeedback).toHaveBeenCalledWith(3_000, {
       display: 'cursor',
+      showCopyFeedback: true,
     });
     expect(overlay.destroy).not.toHaveBeenCalled();
     expect(ipc.listenerCount(OVERLAY_CHANNELS.confirm)).toBe(0);

@@ -82,6 +82,7 @@ describe('ScreenshotManager', () => {
       sendInitialize: vi.fn(),
       prime: vi.fn(),
       reveal: vi.fn(),
+      hide: vi.fn(),
       showCopyFeedback: vi.fn(),
       destroy: vi.fn(),
       onClosed: vi.fn(() => vi.fn()),
@@ -164,6 +165,8 @@ describe('ScreenshotManager', () => {
     });
     expect(captureAdapter.capture).toHaveBeenCalledWith({ locale: 'zh-CN' });
     expect(createOverlay).toHaveBeenCalledWith(frame.display);
+    expect(overlay.showCopyFeedback).not.toHaveBeenCalled();
+    expect(overlay.hide).toHaveBeenCalledOnce();
     expect(outputAdapter.execute).toHaveBeenCalledWith(outputPayload, {
       senderWebContentsId: 7,
       captureOptions: { locale: 'zh-CN' },

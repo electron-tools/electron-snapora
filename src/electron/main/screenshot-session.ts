@@ -543,6 +543,7 @@ export class ScreenshotSession {
     if (
       result.status === 'completed' &&
       result.output.action === 'copy' &&
+      this.#options.captureOptions.showCopyFeedback === true &&
       this.#overlay?.showCopyFeedback
     ) {
       this.#overlay.showCopyFeedback(3_000, this.#options.captureOptions);

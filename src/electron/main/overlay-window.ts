@@ -104,12 +104,12 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
       fullscreenable: this.#platform === 'darwin',
       skipTaskbar: true,
       alwaysOnTop: true,
-      transparent: false,
+      transparent: this.#platform === 'win32',
       show: false,
       opacity: this.#supportsInvisiblePriming ? 0 : 1,
       paintWhenInitiallyHidden: true,
       autoHideMenuBar: true,
-      backgroundColor: '#000000',
+      backgroundColor: this.#platform === 'win32' ? '#00000000' : '#000000',
       ...(this.#platform === 'win32'
         ? { roundedCorners: false, thickFrame: false }
         : {}),
@@ -175,6 +175,8 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
       if (this.#platform !== 'darwin') {
         // Windows 会在首次显示时把无边框窗口压到 workArea；显示后重设 bounds 才能覆盖任务栏。
         this.#window.setBounds(this.#bounds, false);
+        // 窗口保持输入有效但内容透明，确保 cursor:none 能在首帧前接管系统光标。
+        this.#window.setOpacity(1);
       }
       this.#window.moveTop();
       this.#primed = true;
@@ -299,7 +301,10 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
   /** 让截图层和复制提示在 macOS 全屏 Space 中也保持可见。 */
   #configureMacWorkspaceVisibility(window: OverlayBrowserWindow): void {
     if (this.#platform === 'darwin') {
-      window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      window.setVisibleOnAllWorkspaces(true, {
+        visibleOnFullScreen: true,
+        skipTransformProcessType: true,
+      });
     }
   }
 

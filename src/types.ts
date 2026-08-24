@@ -75,6 +75,8 @@ export interface ScreenshotOptions {
   display?: 'cursor' | 'primary' | string;
   tools?: ScreenshotTool[];
   defaultTool?: 'select' | ScreenshotTool;
+  /** 复制成功后是否显示提示，默认关闭。 */
+  showCopyFeedback?: boolean;
   locale?: ScreenshotLocale;
   messages?: ScreenshotMessageOverrides;
   theme?: ScreenshotTheme;

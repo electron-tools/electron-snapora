@@ -154,6 +154,7 @@ describe('screenshot protocol validators', () => {
       display: 'primary',
       tools: ['text', 'rectangle', 'watermark', 'text'],
       defaultTool: 'text',
+      showCopyFeedback: true,
       locale: 'zh-CN',
       messages: {
         confirm: '复制到输入框',
@@ -174,6 +175,7 @@ describe('screenshot protocol validators', () => {
         display: 'primary',
         tools: ['text', 'rectangle', 'watermark'],
         defaultTool: 'text',
+        showCopyFeedback: true,
         locale: 'zh-CN',
         messages: {
           confirm: '复制到输入框',
@@ -197,6 +199,7 @@ describe('screenshot protocol validators', () => {
     { tools: ['crop'] },
     { tools: Array.from({ length: 8 }, () => 'text') },
     { tools: ['rectangle'], defaultTool: 'text' },
+    { showCopyFeedback: 'yes' },
     { locale: 'fr-FR' },
     { messages: { unknown: 'value' } },
     { messages: { confirm: '' } },

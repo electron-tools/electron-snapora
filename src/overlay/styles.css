@@ -79,7 +79,7 @@ body,
 }
 
 body {
-  background: #000;
+  background: transparent;
   user-select: none;
 }
 
@@ -101,6 +101,10 @@ input {
 .capture-surface[data-state='waiting'],
 .capture-surface[data-state='waiting'] * {
   cursor: none !important;
+}
+
+.capture-surface[data-state='waiting'] {
+  opacity: 0;
 }
 
 .screen-frame {
