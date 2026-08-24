@@ -117,16 +117,16 @@ GitHub CLI 未登录时，在仓库的 Releases 页面选择对应 tag，标题�
 
 ## 当前 tarball 基线
 
-2026-08-22 对 `electron-snapora@1.0.4` 在 Windows 开发环境执行 `npm pack --dry-run` 和临时 tarball 检查得到：
+2026-08-24 对 `electron-snapora@1.0.6` 在 Windows 开发环境执行 `npm pack --dry-run` 和临时 tarball 检查得到：
 
 | 指标                 | 结果                  |
 | -------------------- | --------------------- |
 | tarball 条目         | 62                    |
-| tarball 压缩体积     | 220,140 bytes         |
+| tarball 压缩体积     | 221,758 bytes         |
 | `dist` 文件数        | 54                    |
-| `dist` 未压缩体积    | 848,587 bytes         |
-| Source Map           | 17 个 / 540,158 bytes |
-| Source Map 占 `dist` | 约 63.7%              |
+| `dist` 未压缩体积    | 851,714 bytes         |
+| Source Map           | 17 个 / 543,105 bytes |
+| Source Map 占 `dist` | 约 63.9%              |
 
 当前 tarball 已包含 MIT `LICENSE`，未包含源码、测试、Demo、CI、内部文档或发布脚本。
 

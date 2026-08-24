@@ -800,18 +800,23 @@ app.on('browser-window-created', (_event, window) => {
     const fillEditorStyle = await window.webContents.executeJavaScript(`
       (() => {
         const editor = document.querySelector('.text-editor');
+        const selection = document.querySelector('.selection');
         const style = editor ? getComputedStyle(editor) : null;
+        const selectionStyle = selection ? getComputedStyle(selection) : null;
         return {
           visible: Boolean(editor && !editor.hidden),
           backgroundColor: style?.backgroundColor,
           color: style?.color,
+          borderColor: style?.borderTopColor,
+          selectionBorderColor: selectionStyle?.borderTopColor,
         };
       })()
     `);
     if (
       !fillEditorStyle.visible ||
       fillEditorStyle.backgroundColor !== 'rgb(255, 59, 48)' ||
-      fillEditorStyle.color !== 'rgb(255, 255, 255)'
+      fillEditorStyle.color !== 'rgb(255, 255, 255)' ||
+      fillEditorStyle.borderColor !== fillEditorStyle.selectionBorderColor
     ) {
       throw new Error(
         `Text fill preset was not previewed: ${JSON.stringify(fillEditorStyle)}`
@@ -902,8 +907,10 @@ app.on('browser-window-created', (_event, window) => {
     const editorOverflow = await window.webContents.executeJavaScript(`
       (() => {
         const editor = document.querySelector('.text-editor');
+        const selection = document.querySelector('.selection');
         if (!editor) return null;
         const style = getComputedStyle(editor);
+        const selectionStyle = selection ? getComputedStyle(selection) : null;
         return {
           overflowY: style.overflowY,
           clientWidth: editor.clientWidth,
@@ -911,6 +918,7 @@ app.on('browser-window-created', (_event, window) => {
           scrollHeight: editor.scrollHeight,
           backgroundColor: style.backgroundColor,
           borderTopColor: style.borderTopColor,
+          selectionBorderColor: selectionStyle?.borderTopColor,
           borderTopWidth: style.borderTopWidth,
           boxShadow: style.boxShadow,
         };
@@ -928,14 +936,12 @@ app.on('browser-window-created', (_event, window) => {
     }
     if (
       editorOverflow.backgroundColor !== 'rgba(0, 0, 0, 0)' ||
-      !['rgb(255, 255, 255)', 'rgba(255, 255, 255, 0.9)'].includes(
-        editorOverflow.borderTopColor
-      ) ||
+      editorOverflow.borderTopColor !== editorOverflow.selectionBorderColor ||
       editorOverflow.borderTopWidth === '0px' ||
       editorOverflow.boxShadow !== 'none'
     ) {
       throw new Error(
-        `Text editor did not use a transparent background and white border: ${JSON.stringify(editorOverflow)}`
+        `Text editor did not share the screenshot selection border: ${JSON.stringify(editorOverflow)}`
       );
     }
     const editingTextBounds = await getRedPixelBounds(window, textRegion);

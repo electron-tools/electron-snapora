@@ -9,7 +9,7 @@ export const DEFAULT_SCREENSHOT_LOCALE: ScreenshotLocale = 'en-US';
 
 const ENGLISH_MESSAGES: ScreenshotMessages = {
   preparing: 'Preparing screenshot…',
-  instruction: 'Hover a window or drag to select · Esc to cancel',
+  instruction: 'Drag to select · Esc to cancel',
   exporting: 'Exporting screenshot…',
   copied: 'Copied to clipboard',
   saveCancelled: 'Save cancelled',
@@ -53,7 +53,7 @@ const LOCALE_MESSAGES: Record<ScreenshotLocale, Partial<ScreenshotMessages>> = {
   'en-US': ENGLISH_MESSAGES,
   'zh-CN': {
     preparing: '正在准备截图…',
-    instruction: '悬停窗口或拖动选择区域 · Esc 取消',
+    instruction: '拖动选择区域 · Esc 取消',
     exporting: '正在生成截图…',
     copied: '已复制到剪贴板',
     saveCancelled: '已取消保存',

@@ -95,7 +95,12 @@ function packagedExecutable(outputDirectory) {
 
     for (const appBundle of appBundleCandidates) {
       const appName = appBundle.replace(/\.app$/i, '');
-      const binaryPath = join(appBundle, 'Contents', 'MacOS', appName.split('/').at(-1));
+      const binaryPath = join(
+        appBundle,
+        'Contents',
+        'MacOS',
+        appName.split('/').at(-1)
+      );
       if (existsSync(binaryPath)) {
         return binaryPath;
       }

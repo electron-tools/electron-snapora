@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.6] - 2026-08-24
+
+### Changed
+
+- Simplify the capture instruction to describe the current drag-to-select interaction in English and Chinese.
+
+### Fixed
+
+- Clip annotations to the live selection bounds while the screenshot region is moved or resized.
+- Match the active text editor border to the screenshot selection accent color.
+
 ## [1.0.5] - 2026-08-22
 
 ### Changed

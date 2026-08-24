@@ -171,7 +171,7 @@ M4 按照“先关闭发布阻塞，再完善公共能力，最后发布”的�
   - 验收：成功、取消、输出超限、队列等待、资源缺失和日志钩子抛错均有自动化覆盖。
 - [ ] M4.10 Overlay 结构拆分：将 900 行以上入口拆为初始化、选择交互、标注交互、输出、本地化和视图渲染模块。
 - [-] M4.11 发布包精简：评估 Source Map、内部未导出 ESM Preload 和辅助声明文件，控制包体积并保留必要调试能力。
-  - [x] 更新 1.0.4 的 tarball 基线为 62 个条目、220,140 bytes，并确认源码、测试、Demo、CI、内部文档和发布脚本均未进入 npm 包。
+  - [x] 更新 1.0.6 的 tarball 基线为 62 个条目、221,758 bytes，并确认源码、测试、Demo、CI、内部文档和发布脚本均未进入 npm 包。
   - [x] 识别 Source Map、内部 Overlay ESM Preload/声明及默认宿主 ESM Preload 为候选精简项。
   - [x] 正式版 1.0.1 保留 Source Map 供真实宿主排错；后续版本根据诊断收益决定是否裁剪，并重新执行完整消费验证。
 
@@ -192,7 +192,8 @@ M4 按照“先关闭发布阻塞，再完善公共能力，最后发布”的�
 - [x] M4.15 发布正式版 1.0.1 到 npm `latest`，并在发布后完成 registry 元数据与真实安装验证。
 - [x] M4.15.1 发布修订版 1.0.2，开放 Electron 42 以上 peer 范围并强化最低版本安装说明。
 - [x] M4.15.2 发布修订版 1.0.4，并为 v1.0.1～v1.0.4 建立带 CHANGELOG 内容的 GitHub Releases。
-- [-] M4.15.3 强化 npm 搜索元数据和 README 首屏，让搜索结果明确显示为 Electron screenshot plugin；等待下一个补丁版本发布。
+- [x] M4.15.3 强化 npm 搜索元数据和 README 首屏，让搜索结果明确显示为 Electron screenshot plugin；已随 1.0.5 发布。
+- [-] M4.15.4 发布修订版 1.0.6，补齐 v1.0.5 tag/Release，并为 1.0.6 创建英文 GitHub Release Notes。
 
 ### P3：发布后增强
 
@@ -218,7 +219,7 @@ M3 功能与视觉阶段已完成，当前进入 M4 发布准备阶段，严格�
 7. M4.7～M4.11 使用者体验、维护性和包体积完善。
 8. M4.12～M4.15 alpha/beta、CI 和正式 npm 发布。
 
-当前任务：修订版 1.0.4 已发布，v1.0.1～v1.0.4 的英文 GitHub Release Notes 已补齐；M4.17 固定到屏幕基础能力已完成；M4.14 等待配置 Trusted Publishing；M4.4 剩余 ARM64、签名 Mac 与 Linux 验收。
+当前任务：正在发布修订版 1.0.6，并补齐 v1.0.5 tag/Release；M4.17 固定到屏幕基础能力已完成；M4.14 等待配置 Trusted Publishing；M4.4 剩余 ARM64、签名 Mac 与 Linux 验收。
 
 ## 风险与约束
 

@@ -195,6 +195,7 @@ const WATERMARK_FONT_SIZE = 18;
 
 interface AnnotationCanvasRenderCache {
   frame: ScreenshotInitializePayload['frames'][number] | undefined;
+  clipSelection: Rect | null;
   document: AnnotationState['document'];
   draft: AnnotationState['draft'];
   preview: AnnotationState['preview'];
@@ -1215,11 +1216,17 @@ function render(): void {
 }
 
 function renderAnnotationCanvas(): void {
-  const frame = selectionStore.getState().payload?.frames[0];
+  const selectionState = selectionStore.getState();
+  const frame = selectionState.payload?.frames[0];
   const state = annotationStore.getState();
   const watermark = getWatermarkOptions();
+  const clipSelection =
+    selectionState.phase === 'moving' || selectionState.phase === 'resizing'
+      ? selectionState.selection
+      : null;
   const nextCache: AnnotationCanvasRenderCache = {
     frame,
+    clipSelection,
     document: state.document,
     draft: state.draft,
     preview: state.preview,
@@ -1232,6 +1239,7 @@ function renderAnnotationCanvas(): void {
   if (
     previousCache &&
     previousCache.frame === nextCache.frame &&
+    previousCache.clipSelection === nextCache.clipSelection &&
     previousCache.document === nextCache.document &&
     previousCache.draft === nextCache.draft &&
     previousCache.preview === nextCache.preview &&
@@ -1246,8 +1254,11 @@ function renderAnnotationCanvas(): void {
   if (!frame || !state.document) {
     return;
   }
+  const clipBounds = clipSelection
+    ? viewportRectToImageRect(clipSelection, getSurfaceSize(), frame.pixelSize)
+    : state.document.selection;
   drawAnnotations(annotationContext, getRenderableElements(state), {
-    clipBounds: state.document.selection,
+    clipBounds,
     imageSize: frame.pixelSize,
     mosaicSource: screenFrame,
     draftElementId: state.draft?.id ?? null,
@@ -1694,8 +1705,7 @@ function applyTextEditorPreset(textStyle: TextStyle, color: string): void {
   textEditor.dataset.textStyle = textStyle;
   textEditor.style.color = textStyle === 'fill' ? contrastColor : color;
   textEditor.style.backgroundColor = textStyle === 'fill' ? color : 'transparent';
-  textEditor.style.borderColor =
-    textStyle === 'fill' ? 'transparent' : 'rgb(255 255 255 / 90%)';
+  textEditor.style.borderColor = 'var(--snapora-accent)';
   textEditor.style.setProperty(
     '-webkit-text-stroke',
     textStyle === 'outline' ? `1px ${contrastColor}` : '0 transparent'

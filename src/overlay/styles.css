@@ -1001,7 +1001,7 @@ input {
   appearance: none;
   overflow: hidden;
   resize: none;
-  border: 1px solid rgb(255 255 255 / 90%);
+  border: 1px solid var(--snapora-accent);
   border-radius: 6px;
   outline: none;
   color: #fff;
