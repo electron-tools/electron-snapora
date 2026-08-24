@@ -95,10 +95,10 @@ Git tag 只记录版本名指向哪个 Git 提交，annotated tag 的短消息�
 已登录 GitHub CLI 时，可在 npm 发布和 tag 推送成功后执行：
 
 ```powershell
-gh release create v1.0.4 --repo electron-tools/electron-snapora --title "electron-snapora v1.0.4" --notes "<复制 CHANGELOG.md 中 1.0.4 的正文>"
+gh release create v1.0.4 --repo electron-tools/electron-snapora --title "v1.0.4" --notes "<复制 CHANGELOG.md 中 1.0.4 的正文>"
 ```
 
-GitHub CLI 未登录时，在仓库的 Releases 页面选择对应 tag，标题使用 `electron-snapora vX.Y.Z`，正文复制对应 CHANGELOG 小节。创建后通过 GitHub 公共 API 或 Releases 页面确认 `draft=false`、`prerelease=false`。
+GitHub CLI 未登录时，在仓库的 Releases 页面选择对应 tag。Release 标题必须与 tag 完全一致，例如 tag 为 `v1.0.7` 时标题也使用 `v1.0.7`，不添加包名或其他前后缀；正文复制对应 CHANGELOG 小节。创建后通过 GitHub 公共 API 或 Releases 页面确认 `draft=false`、`prerelease=false`。
 
 ### 常用维护命令
 
