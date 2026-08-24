@@ -102,7 +102,10 @@ export class PinnedWindowManager {
     });
     window.setAspectRatio(aspectRatio);
     if (process.platform === 'darwin') {
-      window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      window.setVisibleOnAllWorkspaces(true, {
+        visibleOnFullScreen: true,
+        skipTransformProcessType: true,
+      });
     }
     /** 固定截图在关闭前始终保持最高标准置顶层级。 */
     const keepOnTop = (): void => {
