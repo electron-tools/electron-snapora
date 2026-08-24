@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.8] - 2026-08-24
+
+### Added
+
+- Allow rectangle, ellipse, arrow, brush, text, and mosaic tools to drag the topmost existing annotation directly while keeping the active drawing tool selected.
+- Add an opt-in `showCopyFeedback` capture option; the standalone post-copy confirmation window remains disabled by default.
+- Make pinned screenshots proportionally resizable with a menu-safe 176 px minimum width and height.
+
+### Changed
+
+- Use outline-aware hit testing and a 4 px drag threshold for direct annotation movement while preserving the selection tool's full-bounds behavior.
+- Keep pinned screenshots at the highest standard always-on-top level until closed without stealing focus from the host window.
+- Keep the Windows capture Overlay transparent while it takes control of the cursor before direct desktop-stream capture.
+
+### Fixed
+
+- Show a theme-accent boundary while text or mosaic annotations are directly dragged, without exposing resize handles.
+- Preserve the current resized pinned-window dimensions during long high-DPI drags and keep the custom context menu fully visible at the minimum size.
+- Prevent macOS pinned screenshots from hiding the host window or Dock by avoiding cross-Space process-type changes and initial focus stealing.
+- Align the README with the current freeform-selection behavior after window snapping was disabled.
+
 ## [1.0.7] - 2026-08-24
 
 ### Added

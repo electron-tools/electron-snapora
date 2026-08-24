@@ -195,6 +195,7 @@ M4 按照“先关闭发布阻塞，再完善公共能力，最后发布”的�
 - [x] M4.15.3 强化 npm 搜索元数据和 README 首屏，让搜索结果明确显示为 Electron screenshot plugin；已随 1.0.5 发布。
 - [x] M4.15.4 发布修订版 1.0.6，补齐 v1.0.5 tag/Release，并为 1.0.6 创建英文 GitHub Release Notes。
 - [x] M4.15.5 发布修订版 1.0.7，优化 Windows 直接桌面源捕获与回退链路，并创建标题与 tag 一致的英文 GitHub Release Notes。
+- [-] M4.15.6 准备修订版 1.0.8，完善标注直接拖动、固定窗口等比缩放与跨平台最高置顶行为。
 
 ### P3：发布后增强
 
@@ -220,7 +221,7 @@ M3 功能与视觉阶段已完成，当前进入 M4 发布准备阶段，严格�
 7. M4.7～M4.11 使用者体验、维护性和包体积完善。
 8. M4.12～M4.15 alpha/beta、CI 和正式 npm 发布。
 
-当前任务：修订版 1.0.7 已发布到 npm `latest`，`v1.0.7` tag 与同名英文 GitHub Release 已公开；M4.17 固定到屏幕基础能力已完成；M4.14 等待配置 Trusted Publishing；M4.4 剩余 ARM64、签名 Mac 与 Linux 验收。
+当前任务：正在准备修订版 1.0.8，整理标注交互、固定窗口缩放/置顶和 macOS 回归修复后执行发布门禁；M4.14 等待配置 Trusted Publishing；M4.4 剩余 ARM64、签名 Mac 与 Linux 验收。
 
 ## 风险与约束
 

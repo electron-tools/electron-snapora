@@ -101,12 +101,6 @@ export class PinnedWindowManager {
       },
     });
     window.setAspectRatio(aspectRatio);
-    if (process.platform === 'darwin') {
-      window.setVisibleOnAllWorkspaces(true, {
-        visibleOnFullScreen: true,
-        skipTransformProcessType: true,
-      });
-    }
     /** 固定截图在关闭前始终保持最高标准置顶层级。 */
     const keepOnTop = (): void => {
       if (window.isDestroyed()) {
@@ -181,11 +175,11 @@ export class PinnedWindowManager {
         locale: options.locale ?? DEFAULT_SCREENSHOT_LOCALE,
         menuLabels: getPinnedMenuLabels(options),
       });
-      window.show();
+      // 固定截图创建时不抢宿主焦点，避免 macOS 将宿主窗口退到其他应用之后。
+      window.showInactive();
       // 窗口可见后再锁回截图外框，吸收 Windows 阴影初始化产生的尺寸结算。
       window.setBounds(bounds, false);
       keepOnTop();
-      window.focus();
     } catch (error) {
       this.#windows.delete(window);
       if (!window.isDestroyed()) {

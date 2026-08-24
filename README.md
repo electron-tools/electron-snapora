@@ -13,7 +13,9 @@ An easy-to-integrate Electron screenshot plugin with one-call setup and secure P
 - Electron screenshot and screen capture.
 - Region capture with an interactive snipping overlay.
 - Contextual presets for rectangle, ellipse, arrow, brush, text, adjustable mosaic, and tiled watermark annotations.
+- Directly drag existing annotations without leaving the active drawing tool.
 - Clipboard copy, native PNG save, and pin-to-screen windows.
+- Proportionally resizable pinned windows that remain at the highest always-on-top level until closed.
 - TypeScript, ESM, and CommonJS support.
 
 Repository: [github.com/electron-tools/electron-snapora](https://github.com/electron-tools/electron-snapora)
@@ -95,14 +97,17 @@ if (result.status === 'completed') {
 ```
 
 The screenshot overlay lets the user select a region, draw rectangles, ellipses, arrows, brush
-strokes, text, adjustable mosaic, or a tiled watermark, then copy, save, or pin the final PNG. `Escape` cancels. The result is
-always one of `completed`, `cancelled`, or `failed`, so callers do not need exception-based control
-flow for normal user actions.
+strokes, text, adjustable mosaic, or a tiled watermark, then copy, save, or pin the final PNG. While
+a drawing tool is active, dragging the topmost existing annotation moves it without switching tools;
+dragging an empty area keeps drawing with the current tool. `Escape` cancels. The result is always one
+of `completed`, `cancelled`, or `failed`, so callers do not need exception-based control flow for
+normal user actions.
 
-The vertical pin button creates an always-on-top frameless window at the selected screen position.
-Each pinned screenshot can be dragged independently or clicked to move above other pinned windows.
-The circular close control appears only while hovering the pinned window. Right-click to copy, save,
-or close it; a successful copy shows a localized in-window confirmation.
+The vertical pin button creates a frameless window at the selected screen position. Each pinned
+screenshot stays at the highest standard always-on-top level until closed, can be dragged
+independently, and resizes proportionally with a menu-safe 176 px minimum width and height. The
+circular close control appears only while hovering the pinned window. Right-click to copy, save, or
+close it; a successful copy shows a localized in-window confirmation.
 
 Cancel an active task from the same renderer with:
 
@@ -385,24 +390,11 @@ that display ID through capture and Overlay creation. If the monitor is disconne
 or scale changes during startup, the task fails with `DISPLAY_NOT_FOUND` and should be retried instead
 of displaying a screenshot on the wrong monitor.
 
-### Window snapping
+### Freeform selection
 
-Before a freehand selection starts, hovering a visible window from the current Electron process
-previews its bounds; click to select that exact region, or drag at least 4px to switch back to a
-freehand selection. Hosts with platform-native external-window discovery can provide global Screen
-DIP bounds through `managerOptions.getWindowSnapRegions`:
-
-```ts
-const snapora = setupElectronSnapora({
-  ipcMain,
-  managerOptions: {
-    getWindowSnapRegions: () => nativeWindowBounds,
-  },
-});
-```
-
-Electron does not expose external application window bounds directly, so the default provider is
-limited to the current application's visible `BrowserWindow` instances.
+Window snapping and attach behavior are intentionally disabled. The screenshot Overlay always uses
+freeform drag selection so the same interaction remains predictable across host applications and
+desktop platforms.
 
 ### Lifecycle and concurrency
 
