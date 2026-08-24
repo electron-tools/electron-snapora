@@ -391,7 +391,9 @@ export function isErrorPayload(
     typeof value.code === 'string' &&
     SCREENSHOT_ERROR_CODES.has(value.code as ScreenshotErrorCode) &&
     typeof value.message === 'string' &&
-    value.message.length > 0
+    value.message.length > 0 &&
+    (value.fallback === undefined ||
+      (value.fallback === 'capture-image' && value.code === 'CAPTURE_FAILED'))
   );
 }
 

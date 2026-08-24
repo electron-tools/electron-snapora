@@ -97,11 +97,16 @@ input {
   touch-action: none;
 }
 
+/* 透明 Overlay 先接管系统光标，避免 WGC 把点击位置的旧箭头烘焙进首帧。 */
+.capture-surface[data-state='waiting'],
+.capture-surface[data-state='waiting'] * {
+  cursor: none !important;
+}
+
 .screen-frame {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: fill;
   pointer-events: none;
 }
 

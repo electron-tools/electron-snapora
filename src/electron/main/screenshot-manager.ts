@@ -96,6 +96,7 @@ function createDefaultRunner(
   const resourceLimits = resolveScreenshotResourceLimits(managerOptions.resourceLimits);
   const captureAdapter =
     managerOptions.captureAdapter ?? new ElectronCaptureAdapter({ resourceLimits });
+  void captureAdapter.prepare?.().catch(() => undefined);
   const outputAdapter = managerOptions.outputAdapter ?? new ElectronOutputAdapter();
   const outputRouter = getScreenshotOutputRouter(ipcMain);
   const createCustomOverlay = managerOptions.createOverlay;

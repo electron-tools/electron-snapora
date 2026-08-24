@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { drawCapturedFrame } from './capture-frame.js';
 import { exportSelectionPng } from './export-selection.js';
 
 describe('selection PNG export', () => {
@@ -97,5 +98,158 @@ describe('selection PNG export', () => {
 
     expect(context.translate).toHaveBeenCalledWith(-20, -30);
     expect(context.strokeRect).toHaveBeenCalledWith(40, 45, 30, 20);
+  });
+});
+
+describe('captured frame canvas', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps legacy custom-adapter Data URLs compatible with the canvas', async () => {
+    class ImageMock {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      #src = '';
+
+      get src(): string {
+        return this.#src;
+      }
+
+      set src(value: string) {
+        this.#src = value;
+        if (value) {
+          queueMicrotask(() => this.onload?.());
+        }
+      }
+    }
+    const drawImage = vi.fn();
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => ({ drawImage })),
+    } as unknown as HTMLCanvasElement;
+    vi.stubGlobal('Image', ImageMock);
+
+    await drawCapturedFrame(canvas, {
+      display: {
+        id: '10',
+        bounds: { x: 0, y: 0, width: 800, height: 600 },
+        scaleFactor: 1,
+      },
+      dataUrl: 'data:image/png;base64,c25hcG9yYQ==',
+      pixelSize: { width: 800, height: 600 },
+    });
+
+    expect(drawImage).toHaveBeenCalledWith(expect.any(ImageMock), 0, 0, 800, 600);
+  });
+
+  it('draws a desktop video frame and always stops its stream', async () => {
+    const drawImage = vi.fn();
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => ({ drawImage })),
+    } as unknown as HTMLCanvasElement;
+    const stop = vi.fn();
+    const stream = {
+      getTracks: () => [{ stop }],
+    } as unknown as MediaStream;
+    const video = {
+      muted: false,
+      playsInline: false,
+      srcObject: null,
+      videoWidth: 800,
+      videoHeight: 600,
+      play: vi.fn(async () => undefined),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      requestVideoFrameCallback: vi.fn((callback: VideoFrameRequestCallback) => {
+        queueMicrotask(() => callback(0, {} as VideoFrameCallbackMetadata));
+        return 1;
+      }),
+      cancelVideoFrameCallback: vi.fn(),
+    } as unknown as HTMLVideoElement;
+    const getUserMedia = vi.fn(async () => stream);
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } });
+    vi.stubGlobal('document', { createElement: vi.fn(() => video) });
+
+    const pixelSize = await drawCapturedFrame(canvas, {
+      kind: 'desktop-source',
+      display: {
+        id: '10',
+        bounds: { x: 0, y: 0, width: 800, height: 600 },
+        scaleFactor: 1,
+      },
+      sourceId: 'screen:10:0',
+      pixelSize: { width: 801, height: 601 },
+    });
+
+    expect(getUserMedia).toHaveBeenCalledWith({
+      audio: false,
+      video: {
+        cursor: 'never',
+        mandatory: {
+          chromeMediaSource: 'desktop',
+          chromeMediaSourceId: 'screen:10:0',
+          maxWidth: 801,
+          maxHeight: 601,
+        },
+      },
+    });
+    expect(drawImage).toHaveBeenCalledWith(video, 0, 0, 800, 600);
+    expect(pixelSize).toEqual({ width: 800, height: 600 });
+    expect(canvas).toMatchObject({ width: 800, height: 600 });
+    expect(stop).toHaveBeenCalledOnce();
+    expect(video.srcObject).toBeNull();
+  });
+
+  it('stops the desktop stream when first-frame playback times out', async () => {
+    vi.useFakeTimers();
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => ({ drawImage: vi.fn() })),
+    } as unknown as HTMLCanvasElement;
+    const stop = vi.fn();
+    const stream = {
+      getTracks: () => [{ stop }],
+    } as unknown as MediaStream;
+    const video = {
+      muted: false,
+      playsInline: false,
+      srcObject: null,
+      videoWidth: 800,
+      videoHeight: 600,
+      play: vi.fn(() => new Promise<void>(() => undefined)),
+    } as unknown as HTMLVideoElement;
+    vi.stubGlobal('navigator', {
+      mediaDevices: { getUserMedia: vi.fn(async () => stream) },
+    });
+    vi.stubGlobal('document', { createElement: vi.fn(() => video) });
+
+    const drawing = drawCapturedFrame(
+      canvas,
+      {
+        kind: 'desktop-source',
+        display: {
+          id: '10',
+          bounds: { x: 0, y: 0, width: 800, height: 600 },
+          scaleFactor: 1,
+        },
+        sourceId: 'screen:10:0',
+        pixelSize: { width: 800, height: 600 },
+      },
+      { timeoutMs: 50 }
+    );
+    const rejected = expect(drawing).rejects.toThrow(
+      'Timed out while capturing the desktop frame.'
+    );
+
+    await vi.advanceTimersByTimeAsync(51);
+    await rejected;
+    expect(stop).toHaveBeenCalledOnce();
+    expect(video.srcObject).toBeNull();
   });
 });

@@ -127,6 +127,21 @@ app.whenReady().then(async () => {
       return;
     }
   }
+  const captureMode = diagnostics.find(
+    (event) => event.stage === 'capture' && event.phase === 'complete'
+  )?.context?.captureMode;
+  const usedFallback = diagnostics.some((event) => event.context?.fallback === true);
+  const expectedCaptureMode = process.platform === 'win32' ? 'desktop-source' : 'image';
+  if (captureMode !== expectedCaptureMode || usedFallback) {
+    console.error('Electron Snapora capture-path smoke test failed.', {
+      captureMode,
+      expectedCaptureMode,
+      usedFallback,
+      diagnostics,
+    });
+    process.exit(1);
+    return;
+  }
 
   const [firstOverlay] = BrowserWindow.getAllWindows().filter(
     (window) => !window.isDestroyed()
@@ -151,22 +166,40 @@ app.whenReady().then(async () => {
       event.phase === 'complete' &&
       event.context?.reused === true
   );
+  const secondCaptureDurationMs = diagnostics
+    .filter((event) => event.stage === 'capture' && event.phase === 'complete')
+    .at(-1)?.durationMs;
+  const secondPrepareDurationMs = diagnostics
+    .filter((event) => event.stage === 'overlay-prepare' && event.phase === 'complete')
+    .at(-1)?.durationMs;
+  const usedFallbackAfterReuse = diagnostics.some(
+    (event) => event.context?.fallback === true
+  );
   if (
     secondResult.status !== 'cancelled' ||
     remainingWindows.length !== 1 ||
     remainingWindows[0] !== firstOverlay ||
-    !reusedRenderer
+    !reusedRenderer ||
+    (process.platform === 'win32' &&
+      (usedFallbackAfterReuse ||
+        secondCaptureDurationMs > 100 ||
+        secondPrepareDurationMs > 500))
   ) {
     console.error('Electron Snapora overlay reuse smoke test failed.', {
       secondResult,
       windowCount: remainingWindows.length,
       reusedRenderer,
+      usedFallbackAfterReuse,
+      secondCaptureDurationMs,
+      secondPrepareDurationMs,
     });
     process.exit(1);
     return;
   }
 
   manager.dispose();
-  console.log('Electron Snapora smoke test passed.');
+  console.log(
+    `Electron Snapora smoke test passed (repeat capture ${secondCaptureDurationMs}ms, prepare ${secondPrepareDurationMs}ms).`
+  );
   process.exit(0);
 });

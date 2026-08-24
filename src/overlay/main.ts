@@ -17,6 +17,7 @@ import type {
   ScreenshotOptions,
   ScreenshotTool,
 } from '../types.js';
+import { drawCapturedFrame } from './capture-frame.js';
 import {
   calculateTextBaselinePosition,
   createDrawableElement,
@@ -106,7 +107,7 @@ const surface = requireElement('.capture-surface');
 const status = requireElement('.status');
 const copyFeedback = requireElement('.copy-feedback');
 const copyFeedbackText = requireElement('.copy-feedback-text');
-const screenFrame = requireElement<HTMLImageElement>('.screen-frame');
+const screenFrame = requireElement<HTMLCanvasElement>('.screen-frame');
 const screenMask = requireElement('.screen-mask');
 const annotationCanvas = requireElement<HTMLCanvasElement>('.annotation-canvas');
 const annotationContext = requireCanvasContext(annotationCanvas);
@@ -188,6 +189,7 @@ let exportProgressTimer: number | undefined;
 let currentMessages: ScreenshotMessages = resolveScreenshotMessages();
 let annotationCanvasRenderCache: AnnotationCanvasRenderCache | undefined;
 let toolbarPositionCacheKey: string | null = null;
+let frameLoadController: AbortController | undefined;
 
 const EXPORT_PROGRESS_DELAY_MS = 180;
 /** 水印字号固定为紧凑预设，避免给面板再增加一个低价值控件。 */
@@ -204,7 +206,7 @@ interface AnnotationCanvasRenderCache {
 }
 
 /** 捕获帧加载完成后才开放选区和标注，确保三套坐标使用同一实际图片尺寸。 */
-function initializeOverlay(payload: ScreenshotInitializePayload): void {
+async function initializeOverlay(payload: ScreenshotInitializePayload): Promise<void> {
   const frame = payload.frames[0];
   if (!frame) {
     window.snaporaOverlay.reportError({
@@ -219,13 +221,32 @@ function initializeOverlay(payload: ScreenshotInitializePayload): void {
   resetOverlaySession();
   windowSnapRegions = resolveWindowSnapRegions(payload, frame.display.bounds);
   hoveredWindowSnap = null;
-  selectionStore.dispatch({ type: 'initialize', payload });
   applyTheme(payload.options);
   applyLocale(payload.options);
   applyToolAvailability(payload.options.tools);
-  screenFrame.onload = async () => {
-    annotationCanvas.width = frame.pixelSize.width;
-    annotationCanvas.height = frame.pixelSize.height;
+  const controller = new AbortController();
+  frameLoadController = controller;
+  try {
+    // 先让透明全屏 Overlay 的 cursor:none 进入 Windows 合成器，再采集桌面首帧。
+    await waitForCompositeFrames();
+    if (controller.signal.aborted) {
+      return;
+    }
+    const pixelSize = await drawCapturedFrame(screenFrame, frame, {
+      signal: controller.signal,
+    });
+    if (controller.signal.aborted) {
+      return;
+    }
+    const preparedPayload = isSameSize(pixelSize, frame.pixelSize)
+      ? payload
+      : {
+          ...payload,
+          frames: [{ ...frame, pixelSize }, ...payload.frames.slice(1)],
+        };
+    selectionStore.dispatch({ type: 'initialize', payload: preparedPayload });
+    annotationCanvas.width = pixelSize.width;
+    annotationCanvas.height = pixelSize.height;
     selectionStore.dispatch({ type: 'image-ready' });
     // 缓存窗口可能仍保留上一帧合成结果；仅在新图和空画布都准备好后才解除渲染层隐藏。
     screenFrame.hidden = false;
@@ -234,19 +255,42 @@ function initializeOverlay(payload: ScreenshotInitializePayload): void {
     screenFrame.getBoundingClientRect();
     await waitForCompositeFrames();
     window.snaporaOverlay.prepared(payload.jobId);
-  };
-  screenFrame.onerror = () => {
+  } catch (error) {
+    if (controller.signal.aborted) {
+      return;
+    }
     window.snaporaOverlay.reportError({
       jobId: payload.jobId,
       code: 'CAPTURE_FAILED',
-      message: 'The captured screen image could not be loaded.',
+      message:
+        frame.kind === 'desktop-source'
+          ? `The desktop capture stream could not provide a frame: ${formatCaptureError(error)}`
+          : 'The captured screen image could not be loaded.',
+      ...(frame.kind === 'desktop-source'
+        ? { fallback: 'capture-image' as const }
+        : {}),
     });
-  };
-  screenFrame.src = frame.dataUrl;
+  } finally {
+    if (frameLoadController === controller) {
+      frameLoadController = undefined;
+    }
+  }
+}
+
+function isSameSize(first: Size, second: Size): boolean {
+  return first.width === second.width && first.height === second.height;
+}
+
+function formatCaptureError(error: unknown): string {
+  return (
+    error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+  ).slice(0, 512);
 }
 
 /** 复用 renderer 时恢复到新建窗口的初始状态，避免上一次选区和控件值残留。 */
 function resetOverlaySession(): void {
+  frameLoadController?.abort();
+  frameLoadController = undefined;
   clearExportProgress();
   closeTextEditor(false);
   closeColorPicker();
@@ -257,7 +301,8 @@ function resetOverlaySession(): void {
   pendingTextViewportPoint = null;
   outputFeedback = null;
   // 彻底抹掉可复用窗口缓存的上一帧图像和标注内容，避免下一次截图时出现“前一帧残留”。
-  screenFrame.removeAttribute('src');
+  screenFrame.width = 0;
+  screenFrame.height = 0;
   screenFrame.hidden = true;
   annotationContext.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
   annotationCanvas.width = 0;
@@ -286,7 +331,10 @@ function resetOverlaySession(): void {
   delete document.documentElement.dataset.tooltipPointer;
 }
 
-window.snaporaOverlay.onInitialize(initializeOverlay);
+window.snaporaOverlay.onInitialize((payload) => {
+  void initializeOverlay(payload);
+});
+window.addEventListener('pagehide', () => frameLoadController?.abort());
 window.snaporaOverlay.onFeedback((payload) => {
   if (payload.kind !== 'copy') {
     return;

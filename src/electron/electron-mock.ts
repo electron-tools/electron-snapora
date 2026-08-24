@@ -2,6 +2,10 @@ function unavailable(): never {
   throw new Error('Electron runtime APIs are unavailable in unit tests.');
 }
 
+export const app = {
+  whenReady: async () => undefined,
+};
+
 export const desktopCapturer = {
   getSources: unavailable,
 };

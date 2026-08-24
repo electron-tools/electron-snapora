@@ -244,8 +244,13 @@ Electron 默认适配器会同步解析目标显示器，让屏幕采集与完�
 
 ```ts
 export interface ScreenCaptureAdapter {
+  prepare?(): Promise<void>;
   resolveTargetDisplay?(options: ScreenshotOptions): CaptureDisplay;
   capture(options: ScreenshotOptions): Promise<CapturedFrame[]>;
+  captureFallback?(
+    options: ScreenshotOptions,
+    targetDisplay: CaptureDisplay
+  ): Promise<CapturedFrame[]>;
 }
 
 export interface CaptureDisplay {
@@ -259,7 +264,8 @@ export interface CaptureDisplay {
   scaleFactor: number;
 }
 
-export interface CapturedFrame {
+export interface CapturedImageFrame {
+  kind?: 'image';
   display: CaptureDisplay;
   dataUrl: string;
   pixelSize: {
@@ -267,15 +273,29 @@ export interface CapturedFrame {
     height: number;
   };
 }
+
+export interface CapturedDesktopSourceFrame {
+  kind: 'desktop-source';
+  display: CaptureDisplay;
+  sourceId: string;
+  pixelSize: {
+    width: number;
+    height: number;
+  };
+}
+
+export type CapturedFrame = CapturedImageFrame | CapturedDesktopSourceFrame;
 ```
 
 默认 `ElectronCaptureAdapter` 使用：
 
 - `screen.getCursorScreenPoint()` 获取鼠标位置。
 - `screen.getDisplayNearestPoint()` 确定目标显示器。
-- `desktopCapturer.getSources()` 获取屏幕图像。
+- Windows 在初始化期间使用零尺寸 `desktopCapturer.getSources()` 枚举并缓存屏幕来源。
 - `DesktopCapturerSource.display_id` 匹配显示器。
-- `nativeImage.toPNG()` 转换图片数据。
+- Overlay 通过 `chromeMediaSourceId` 获取第一帧，以视频真实像素尺寸直接画入 Canvas。
+- Renderer 捕获失败时，本次会话自动回退到旧 Data URL 图片帧。
+- macOS 和 Linux 继续使用全尺寸缩略图与 Data URL 图片帧。
 
 如果未来需要原生窗口识别、更高性能捕获或特殊平台支持，只需增加新的 Adapter，不修改 UI 和绘制核心。
 
@@ -557,6 +577,7 @@ electron-snapora:host:capture
 ```text
 electron-snapora:overlay:ready
 electron-snapora:overlay:initialize
+electron-snapora:overlay:prepared
 electron-snapora:overlay:confirm
 electron-snapora:overlay:cancel
 electron-snapora:overlay:error
@@ -566,9 +587,9 @@ electron-snapora:overlay:error
 
 ```ts
 export interface ScreenshotInitializePayload {
-  protocolVersion: 1;
+  protocolVersion: 2;
   jobId: string;
-  frame: CapturedFrame;
+  frames: CapturedFrame[];
   options: ScreenshotOptions;
 }
 ```
@@ -577,7 +598,7 @@ export interface ScreenshotInitializePayload {
 
 ```ts
 export interface ScreenshotCompletePayload {
-  protocolVersion: 1;
+  protocolVersion: 2;
   jobId: string;
   image: Uint8Array;
   mimeType: 'image/png';
@@ -650,7 +671,7 @@ export interface ScreenshotOptions {
 
 默认语言固定为 `en-US`，避免库行为受宿主启动时机或操作系统语言变化影响。`ScreenshotTheme` 只暴露语义颜色和 `dark` / `light` 模式，`ScreenshotMessages` 覆盖可见文案、气泡和无障碍标签；二者都在主进程 IPC 边界按字段白名单校验。
 
-当前稳定的 `desktopCapturer` 缩略图接口无法跨平台可靠控制鼠标指针是否进入图像，因此不公开无实际行为的 `includeCursor`。后续只有在适配器能够保证平台语义并完成验证后才重新增加。
+Windows MediaStream 路径在首帧前先用透明 Overlay 的 `cursor: none` 隐藏系统指针并等待桌面合成，同时保留 `cursor: 'never'` 约束，避免点击位置的箭头冻结在截图像素中；旧缩略图路径无法跨平台可靠控制鼠标指针，因此仍不公开语义不一致的 `includeCursor`。
 
 ### 12.2 截图结果
 

@@ -88,6 +88,15 @@ app.on('browser-window-created', (_event, window) => {
       button: 'left',
       clickCount: 1,
     });
+    const instructionHiddenDuringDrag = await window.webContents.executeJavaScript(`
+      new Promise((resolve) => requestAnimationFrame(() => {
+        const status = document.querySelector('.status');
+        resolve(status?.hidden === true && getComputedStyle(status).display === 'none');
+      }))
+    `);
+    if (!instructionHiddenDuringDrag) {
+      throw new Error('Capture instruction remained visible after selection started.');
+    }
     window.webContents.sendInputEvent({ type: 'mouseMove', ...end });
     window.webContents.sendInputEvent({
       type: 'mouseUp',

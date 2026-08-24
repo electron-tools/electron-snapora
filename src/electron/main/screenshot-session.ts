@@ -77,6 +77,9 @@ export class ScreenshotSession {
   #state: ScreenshotSessionState = 'idle';
   #overlay: ScreenshotOverlayWindow | undefined;
   #frames: CapturedFrame[] = [];
+  #captureDisplay: CaptureDisplay | undefined;
+  #fallbackAttempted = false;
+  #preparingDesktopSource = false;
   #overlayLoaded = false;
   #rendererReady = false;
   #resolve: SessionResolver | undefined;
@@ -147,25 +150,9 @@ export class ScreenshotSession {
       if (this.#settled) {
         return;
       }
-      if (!frames[0]) {
-        throw new ScreenshotError(
-          'CAPTURE_FAILED',
-          'Screen capture returned no frames.'
-        );
-      }
-      if (targetDisplay && !isSameDisplayGeometry(targetDisplay, frames[0].display)) {
-        throw new ScreenshotError(
-          'DISPLAY_NOT_FOUND',
-          'The target display changed while the screenshot was starting. Please retry.'
-        );
-      }
-      for (const frame of frames) {
-        const violation = findCapturedFrameLimitViolation(frame, this.#resourceLimits);
-        if (violation) {
-          throw new ScreenshotError('RESOURCE_LIMIT_EXCEEDED', violation);
-        }
-      }
+      this.#validateCapturedFrames(frames, targetDisplay);
       this.#finishDiagnosticStage('capture', 'complete', {
+        captureMode: frames[0]?.kind === 'desktop-source' ? 'desktop-source' : 'image',
         frameCount: frames.length,
         capturePixels: frames.reduce(
           (total, frame) => total + frame.pixelSize.width * frame.pixelSize.height,
@@ -180,11 +167,34 @@ export class ScreenshotSession {
     }
 
     this.#frames = frames;
+    const firstFrame = frames[0]!;
+    this.#captureDisplay = firstFrame.display;
     this.#state = 'opening-overlay';
     if (!this.#overlay) {
-      this.#openOverlay(frames[0].display);
+      this.#openOverlay(firstFrame.display);
     }
     this.#prepareOverlayWhenReady();
+  }
+
+  #validateCapturedFrames(
+    frames: CapturedFrame[],
+    expectedDisplay?: CaptureDisplay
+  ): void {
+    if (!frames[0]) {
+      throw new ScreenshotError('CAPTURE_FAILED', 'Screen capture returned no frames.');
+    }
+    if (expectedDisplay && !isSameDisplayGeometry(expectedDisplay, frames[0].display)) {
+      throw new ScreenshotError(
+        'DISPLAY_NOT_FOUND',
+        'The target display changed while the screenshot was starting. Please retry.'
+      );
+    }
+    for (const frame of frames) {
+      const violation = findCapturedFrameLimitViolation(frame, this.#resourceLimits);
+      if (violation) {
+        throw new ScreenshotError('RESOURCE_LIMIT_EXCEEDED', violation);
+      }
+    }
   }
 
   #openOverlay(display: CaptureDisplay): void {
@@ -316,6 +326,7 @@ export class ScreenshotSession {
     this.#state = 'preparing-overlay';
     this.#startDiagnosticStage('overlay-prepare');
     this.#overlay.prime();
+    this.#preparingDesktopSource = this.#frames[0].kind === 'desktop-source';
     this.#overlay.sendInitialize({
       protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
       jobId: this.#options.jobId,
@@ -347,6 +358,7 @@ export class ScreenshotSession {
 
     this.#clearReadyTimeout();
     this.#finishDiagnosticStage('overlay-prepare', 'complete');
+    this.#preparingDesktopSource = false;
     this.#state = 'editing';
     this.#overlay.reveal();
   };
@@ -400,12 +412,69 @@ export class ScreenshotSession {
       return;
     }
 
+    if (payload.fallback === 'capture-image') {
+      void this.#captureImageFallback(payload.message);
+      return;
+    }
+
     this.#settle({
       status: 'failed',
       code: payload.code,
       message: payload.message,
     });
   };
+
+  async #captureImageFallback(message: string): Promise<void> {
+    const adapter = this.#options.captureAdapter;
+    const display = this.#captureDisplay;
+    if (
+      !this.#preparingDesktopSource ||
+      this.#fallbackAttempted ||
+      !adapter.captureFallback ||
+      !display
+    ) {
+      this.#settle({ status: 'failed', code: 'CAPTURE_FAILED', message });
+      return;
+    }
+
+    this.#fallbackAttempted = true;
+    this.#preparingDesktopSource = false;
+    this.#clearReadyTimeout();
+    this.#finishDiagnosticStage('overlay-prepare', 'error', {
+      fallback: true,
+      reason: message,
+    });
+    this.#state = 'capturing';
+    this.#startDiagnosticStage('capture', { fallback: true });
+    try {
+      const frames = await adapter.captureFallback(
+        this.#options.captureOptions,
+        display
+      );
+      if (this.#settled) {
+        return;
+      }
+      this.#validateCapturedFrames(frames, display);
+      if (frames.some((frame) => frame.kind === 'desktop-source')) {
+        throw new ScreenshotError(
+          'CAPTURE_FAILED',
+          'The capture fallback did not return an image frame.'
+        );
+      }
+      this.#finishDiagnosticStage('capture', 'complete', {
+        captureMode: 'image',
+        fallback: true,
+        frameCount: frames.length,
+      });
+      this.#frames = frames;
+      this.#state = 'opening-overlay';
+      this.#prepareOverlayWhenReady();
+    } catch (error) {
+      const failure = toScreenshotFailure(error);
+      this.#finishDiagnosticStage('capture', 'error', diagnosticError(error), failure);
+      this.#settle(failure);
+    }
+  }
 
   #isExpectedSender(event: IpcMainEvent): boolean {
     return (
@@ -449,6 +518,8 @@ export class ScreenshotSession {
     }
 
     this.#settled = true;
+    const destroyPreparingDesktopSource =
+      result.status === 'cancelled' && this.#preparingDesktopSource;
     const phase: ScreenshotDiagnosticPhase =
       result.status === 'cancelled'
         ? 'cancel'
@@ -468,13 +539,18 @@ export class ScreenshotSession {
     this.#clearReadyTimeout();
     this.#removeListeners();
     this.#frames = [];
+    this.#preparingDesktopSource = false;
     if (
       result.status === 'completed' &&
       result.output.action === 'copy' &&
       this.#overlay?.showCopyFeedback
     ) {
       this.#overlay.showCopyFeedback(3_000, this.#options.captureOptions);
-    } else if (result.status !== 'failed' && this.#overlay?.hide) {
+    } else if (
+      !destroyPreparingDesktopSource &&
+      result.status !== 'failed' &&
+      this.#overlay?.hide
+    ) {
       this.#overlay.hide();
     } else {
       this.#overlay?.destroy();

@@ -50,7 +50,10 @@ export function findCapturedFrameLimitViolation(
   ) {
     return `Captured frame exceeds the ${limits.maxCapturePixels} pixel limit.`;
   }
-  if (frame.dataUrl.length > limits.maxCaptureDataUrlBytes) {
+  if (
+    frame.kind !== 'desktop-source' &&
+    frame.dataUrl.length > limits.maxCaptureDataUrlBytes
+  ) {
     return `Captured frame exceeds the ${limits.maxCaptureDataUrlBytes} byte Data URL limit.`;
   }
   return undefined;

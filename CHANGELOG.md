@@ -2,11 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## [1.0.7] - 2026-08-24
+
+### Added
+
+- Add a prepared Windows desktop-source capture path that sends a cached source ID to the isolated Overlay and draws the first MediaStream frame directly to Canvas.
+- Add an automatic per-session fallback to the legacy image capture path when the direct desktop stream cannot provide a frame.
 
 ### Changed
 
+- Prewarm Windows screen sources after Electron app readiness and reuse cached source IDs to reduce repeat-capture latency.
+- Upgrade the internal screenshot IPC protocol to version 2 while keeping custom capture adapters that return image frames compatible.
 - Add a trademark policy while keeping the source code under MIT, and clarify GitHub Issue and X support channels in the English and Chinese README files.
+
+### Fixed
+
+- Hide the system cursor while the Windows direct-capture frame is being prepared so the click-position cursor is not baked into the screenshot.
+- Stop and release desktop MediaStreams when a frame is replaced, times out, is aborted, or the Overlay page is hidden.
+- Use the captured video's actual pixel dimensions for Canvas rendering, selection geometry, and exported PNG output.
 
 ## [1.0.6] - 2026-08-24
 

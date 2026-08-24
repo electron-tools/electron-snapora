@@ -25,6 +25,13 @@ const frame: CapturedFrame = {
   pixelSize: { width: 800, height: 600 },
 };
 
+const desktopSourceFrame: CapturedFrame = {
+  kind: 'desktop-source',
+  display: frame.display,
+  sourceId: 'screen:10:0',
+  pixelSize: frame.pixelSize,
+};
+
 function createOverlay() {
   let closedListener: (() => void) | undefined;
   let rendererGoneListener: (() => void) | undefined;
@@ -130,6 +137,85 @@ describe('ScreenshotSession', () => {
       jobId: 'parallel-overlay',
     });
     await expect(resultPromise).resolves.toEqual({ status: 'cancelled' });
+  });
+
+  it('retries the current session with an image when desktop stream capture fails', async () => {
+    const ipc = new EventEmitter();
+    const { overlay } = createOverlay();
+    const captureFallback = vi.fn(async () => [frame]);
+    const session = new ScreenshotSession({
+      jobId: 'source-fallback',
+      captureOptions: { display: 'cursor' },
+      captureAdapter: {
+        capture: vi.fn(async () => [desktopSourceFrame]),
+        captureFallback,
+      },
+      ipcMain: ipc as unknown as Pick<IpcMain, 'on' | 'removeListener'>,
+      createOverlay: () => overlay,
+      overlayReadyTimeoutMs: 1_000,
+    });
+
+    const resultPromise = session.run();
+    await vi.waitFor(() => expect(overlay.load).toHaveBeenCalledOnce());
+    emitOverlayMessage(ipc, OVERLAY_CHANNELS.ready, {
+      protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
+    });
+    await vi.waitFor(() => expect(overlay.sendInitialize).toHaveBeenCalledOnce());
+    expect(overlay.sendInitialize).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ frames: [desktopSourceFrame] })
+    );
+
+    emitOverlayMessage(ipc, OVERLAY_CHANNELS.error, {
+      protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
+      jobId: 'source-fallback',
+      code: 'CAPTURE_FAILED',
+      message: 'Desktop stream failed.',
+      fallback: 'capture-image',
+    });
+
+    await vi.waitFor(() => expect(overlay.sendInitialize).toHaveBeenCalledTimes(2));
+    expect(captureFallback).toHaveBeenCalledWith({ display: 'cursor' }, frame.display);
+    expect(overlay.sendInitialize).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ frames: [frame] })
+    );
+
+    emitOverlayMessage(ipc, OVERLAY_CHANNELS.prepared, {
+      protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
+      jobId: 'source-fallback',
+    });
+    emitOverlayMessage(ipc, OVERLAY_CHANNELS.cancel, {
+      protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
+      jobId: 'source-fallback',
+    });
+    await expect(resultPromise).resolves.toEqual({ status: 'cancelled' });
+  });
+
+  it('destroys a reusable overlay when cancellation interrupts desktop streaming', async () => {
+    const ipc = new EventEmitter();
+    const { overlay: baseOverlay } = createOverlay();
+    const hide = vi.fn();
+    const overlay: ScreenshotOverlayWindow = {
+      ...baseOverlay,
+      rendererReady: true,
+      hide,
+    };
+    const session = new ScreenshotSession({
+      jobId: 'cancel-source-stream',
+      captureOptions: {},
+      captureAdapter: { capture: vi.fn(async () => [desktopSourceFrame]) },
+      ipcMain: ipc as unknown as Pick<IpcMain, 'on' | 'removeListener'>,
+      createOverlay: () => overlay,
+    });
+
+    const resultPromise = session.run();
+    await vi.waitFor(() => expect(overlay.sendInitialize).toHaveBeenCalledOnce());
+    expect(session.cancel()).toBe(true);
+
+    await expect(resultPromise).resolves.toEqual({ status: 'cancelled' });
+    expect(overlay.destroy).toHaveBeenCalledOnce();
+    expect(hide).not.toHaveBeenCalled();
   });
 
   it('rejects oversized frames returned by a custom capture adapter', async () => {

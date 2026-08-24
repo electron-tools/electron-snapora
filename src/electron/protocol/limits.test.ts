@@ -47,5 +47,16 @@ describe('screenshot resource limits', () => {
         limits
       )
     ).toMatch(/Data URL limit/);
+    expect(
+      findCapturedFrameLimitViolation(
+        {
+          kind: 'desktop-source',
+          display: frame.display,
+          sourceId: 'screen:1:0',
+          pixelSize: { width: 2, height: 2 },
+        },
+        limits
+      )
+    ).toBeUndefined();
   });
 });

@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { app } from 'electron';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ElectronCaptureAdapter } from './electron-capture-adapter.js';
 
@@ -21,6 +22,7 @@ function createDesktopCapturer(displayId = '10') {
   return {
     getSources: vi.fn(async () => [
       {
+        id: `screen:${displayId}:0`,
         display_id: displayId,
         thumbnail: {
           getSize: () => ({ width: 1600, height: 1200 }),
@@ -33,6 +35,31 @@ function createDesktopCapturer(displayId = '10') {
 }
 
 describe('ElectronCaptureAdapter', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('waits for Electron app readiness before desktop source prewarming', async () => {
+    let resolveReady: (() => void) | undefined;
+    vi.spyOn(app, 'whenReady').mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveReady = resolve;
+      })
+    );
+    const desktopCapturer = createDesktopCapturer();
+    const adapter = new ElectronCaptureAdapter({
+      screen: createScreen(),
+      desktopCapturer,
+      platform: 'win32',
+    });
+
+    const preparing = adapter.prepare();
+    await Promise.resolve();
+    expect(desktopCapturer.getSources).not.toHaveBeenCalled();
+
+    resolveReady?.();
+    await preparing;
+    expect(desktopCapturer.getSources).toHaveBeenCalledOnce();
+  });
+
   it('resolves the target display synchronously for parallel overlay loading', () => {
     const screen = createScreen();
     const adapter = new ElectronCaptureAdapter({
@@ -49,7 +76,7 @@ describe('ElectronCaptureAdapter', () => {
     expect(screen.getDisplayNearestPoint).toHaveBeenCalledWith({ x: 20, y: 30 });
   });
 
-  it('captures the display nearest to the cursor at physical pixel size', async () => {
+  it('enumerates only the Windows desktop source id without thumbnails', async () => {
     const screen = createScreen();
     const desktopCapturer = createDesktopCapturer();
     const adapter = new ElectronCaptureAdapter({
@@ -63,10 +90,51 @@ describe('ElectronCaptureAdapter', () => {
     expect(screen.getDisplayNearestPoint).toHaveBeenCalledWith({ x: 20, y: 30 });
     expect(desktopCapturer.getSources).toHaveBeenCalledWith({
       types: ['screen'],
-      thumbnailSize: { width: 1600, height: 1200 },
+      thumbnailSize: { width: 0, height: 0 },
       fetchWindowIcons: false,
     });
     expect(frames).toEqual([
+      {
+        kind: 'desktop-source',
+        display: {
+          id: '10',
+          bounds: primaryDisplay.bounds,
+          scaleFactor: 2,
+        },
+        sourceId: 'screen:10:0',
+        pixelSize: { width: 1600, height: 1200 },
+      },
+    ]);
+  });
+
+  it('reuses a desktop source id prepared before the user starts capture', async () => {
+    const desktopCapturer = createDesktopCapturer();
+    const adapter = new ElectronCaptureAdapter({
+      screen: createScreen(),
+      desktopCapturer,
+      platform: 'win32',
+    });
+
+    await adapter.prepare();
+    desktopCapturer.getSources.mockClear();
+    await expect(adapter.capture()).resolves.toMatchObject([
+      { kind: 'desktop-source', sourceId: 'screen:10:0' },
+    ]);
+
+    expect(desktopCapturer.getSources).not.toHaveBeenCalled();
+  });
+
+  it('captures a legacy image when the Windows renderer requests fallback', async () => {
+    const desktopCapturer = createDesktopCapturer();
+    const adapter = new ElectronCaptureAdapter({
+      screen: createScreen(),
+      desktopCapturer,
+      platform: 'win32',
+    });
+
+    await expect(
+      adapter.captureFallback({}, adapter.resolveTargetDisplay({ display: 'primary' }))
+    ).resolves.toEqual([
       {
         display: {
           id: '10',
@@ -77,6 +145,21 @@ describe('ElectronCaptureAdapter', () => {
         pixelSize: { width: 1600, height: 1200 },
       },
     ]);
+    expect(desktopCapturer.getSources).toHaveBeenCalledWith({
+      types: ['screen'],
+      thumbnailSize: { width: 1600, height: 1200 },
+      fetchWindowIcons: false,
+    });
+
+    desktopCapturer.getSources.mockClear();
+    await expect(adapter.capture()).resolves.toMatchObject([
+      { dataUrl: 'data:image/png;base64,c25hcG9yYQ==' },
+    ]);
+    expect(desktopCapturer.getSources).toHaveBeenCalledWith({
+      types: ['screen'],
+      thumbnailSize: { width: 1600, height: 1200 },
+      fetchWindowIcons: false,
+    });
   });
 
   it('keeps the pre-resolved cursor display locked while capture is pending', async () => {

@@ -67,6 +67,7 @@ describe('ScreenshotManager', () => {
       }),
     }) as unknown as Pick<IpcMain, 'handle' | 'on' | 'removeListener'>;
     const captureAdapter = {
+      prepare: vi.fn(async () => undefined),
       capture: vi.fn(async () => [frame]),
     };
     const outputAdapter = {
@@ -102,6 +103,7 @@ describe('ScreenshotManager', () => {
       resourceLimits: { maxOutputBytes: 3 },
       onDiagnostic: (event) => diagnostics.push(event),
     });
+    expect(captureAdapter.prepare).toHaveBeenCalledOnce();
 
     const resultPromise = manager.capture({ locale: 'zh-CN' });
     await vi.waitFor(() => expect(overlay.load).toHaveBeenCalledOnce());

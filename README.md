@@ -248,9 +248,18 @@ session lifecycle; when it is supplied, the other default-runner options are ign
 
 Custom capture adapters may implement the optional synchronous
 `resolveTargetDisplay(options)` method. When present, Snapora loads the still-hidden Overlay in
-parallel with `capture()` and only primes or reveals it after the captured frame is ready. The
-resolved display must match the first frame returned by the following `capture()` call. Adapters
-that omit this method keep the compatible capture-then-load sequence.
+parallel with `capture()`, keeps the resolved display locked through initialization, and reveals the
+window only after the Renderer has prepared the frame. The resolved display must match the first
+frame returned by the following `capture()` call. Adapters that omit this method keep the compatible
+capture-then-load sequence.
+
+Existing custom adapters can keep returning `{ display, dataUrl, pixelSize }` without a `kind`
+field. On Windows, the built-in adapter instead sends an internal desktop source reference so the
+Overlay can draw the first MediaStream frame directly to Canvas. Source references are prepared and
+cached outside the click path, and the actual video size becomes the Canvas pixel size. If direct
+capture fails, Snapora retries once with the legacy image frame and uses that stable path for later
+captures on the same display. macOS and Linux continue to use image frames until their native
+capture paths are validated.
 
 Resource limits can be lowered per host application:
 

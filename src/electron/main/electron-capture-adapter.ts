@@ -1,4 +1,4 @@
-import { desktopCapturer, screen, shell, systemPreferences } from 'electron';
+import { app, desktopCapturer, screen, shell, systemPreferences } from 'electron';
 
 import type { ScreenshotOptions } from '../../types.js';
 import type {
@@ -33,6 +33,7 @@ interface ScreenApi {
 }
 
 interface DesktopCaptureSource {
+  id: string;
   display_id: string;
   thumbnail: {
     getSize(): { width: number; height: number };
@@ -76,6 +77,9 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
   readonly #getScreenPermissionStatus: () => ScreenPermissionStatus;
   readonly #openScreenCaptureSettings: () => Promise<void> | void;
   readonly #resourceLimits: ScreenshotResourceLimits;
+  readonly #desktopSourceIds = new Map<string, string>();
+  readonly #desktopSourceFallbacks = new Set<string>();
+  #desktopSourceEnumeration: Promise<void> | undefined;
 
   constructor(options: ElectronCaptureAdapterOptions = {}) {
     this.#desktopCapturer = options.desktopCapturer ?? desktopCapturer;
@@ -94,9 +98,32 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
     return this.#toCaptureDisplay(this.#resolveDisplay(options.display ?? 'cursor'));
   }
 
+  async prepare(): Promise<void> {
+    if (this.#platform === 'win32') {
+      await this.#enumerateDesktopSources();
+    }
+  }
+
   async capture(
     options: ScreenshotOptions = {},
     targetDisplay?: CaptureDisplay
+  ): Promise<CapturedFrame[]> {
+    return this.#capture(options, targetDisplay, this.#platform === 'win32');
+  }
+
+  async captureFallback(
+    options: ScreenshotOptions,
+    targetDisplay: CaptureDisplay
+  ): Promise<CapturedFrame[]> {
+    this.#desktopSourceFallbacks.add(targetDisplay.id);
+    this.#desktopSourceIds.delete(targetDisplay.id);
+    return this.#capture(options, targetDisplay, false);
+  }
+
+  async #capture(
+    options: ScreenshotOptions,
+    targetDisplay: CaptureDisplay | undefined,
+    returnDesktopSource: boolean
   ): Promise<CapturedFrame[]> {
     await this.#ensurePermission();
 
@@ -109,6 +136,25 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
       height: Math.max(1, Math.round(display.bounds.height * display.scaleFactor)),
     };
     this.#assertRequestedPixelSize(pixelSize);
+
+    const displayId = String(display.id);
+    if (returnDesktopSource && !this.#desktopSourceFallbacks.has(displayId)) {
+      const sourceId = await this.#resolveDesktopSourceId(displayId);
+      if (!sourceId) {
+        throw new ScreenshotError(
+          'DISPLAY_NOT_FOUND',
+          `No desktop capture source matched display ${display.id}.`
+        );
+      }
+      return [
+        {
+          kind: 'desktop-source',
+          display: this.#toCaptureDisplay(display),
+          sourceId,
+          pixelSize,
+        },
+      ];
+    }
 
     let sources: DesktopCaptureSource[];
     try {
@@ -167,6 +213,47 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
       throw new ScreenshotError('RESOURCE_LIMIT_EXCEEDED', violation);
     }
     return [frame];
+  }
+
+  async #resolveDesktopSourceId(displayId: string): Promise<string | undefined> {
+    const cachedSourceId = this.#desktopSourceIds.get(displayId);
+    if (cachedSourceId) {
+      return cachedSourceId;
+    }
+    try {
+      await this.#enumerateDesktopSources();
+    } catch (error) {
+      throw new ScreenshotError(
+        'CAPTURE_FAILED',
+        'Electron failed to enumerate desktop capture sources.',
+        { cause: error }
+      );
+    }
+    return this.#desktopSourceIds.get(displayId);
+  }
+
+  #enumerateDesktopSources(): Promise<void> {
+    this.#desktopSourceEnumeration ??= app
+      .whenReady()
+      .then(() =>
+        this.#desktopCapturer.getSources({
+          types: ['screen'],
+          thumbnailSize: { width: 0, height: 0 },
+          fetchWindowIcons: false,
+        })
+      )
+      .then((sources) => {
+        this.#desktopSourceIds.clear();
+        for (const source of sources) {
+          if (source.display_id && source.id) {
+            this.#desktopSourceIds.set(source.display_id, source.id);
+          }
+        }
+      })
+      .finally(() => {
+        this.#desktopSourceEnumeration = undefined;
+      });
+    return this.#desktopSourceEnumeration;
   }
 
   #assertRequestedPixelSize(pixelSize: { width: number; height: number }): void {

@@ -14,7 +14,7 @@ import {
 describe('screenshot protocol validators', () => {
   it('accepts the supported ready protocol', () => {
     expect(isReadyPayload({ protocolVersion: SCREENSHOT_PROTOCOL_VERSION })).toBe(true);
-    expect(isReadyPayload({ protocolVersion: 2 })).toBe(false);
+    expect(isReadyPayload({ protocolVersion: 999 })).toBe(false);
   });
 
   it('validates the prepared frame against the active job', () => {
@@ -82,6 +82,30 @@ describe('screenshot protocol validators', () => {
           jobId: 'job-1',
           code: 'UNKNOWN_CODE',
           message: 'Nope.',
+        },
+        'job-1'
+      )
+    ).toBe(false);
+    expect(
+      isErrorPayload(
+        {
+          protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
+          jobId: 'job-1',
+          code: 'CAPTURE_FAILED',
+          message: 'Use the image fallback.',
+          fallback: 'capture-image',
+        },
+        'job-1'
+      )
+    ).toBe(true);
+    expect(
+      isErrorPayload(
+        {
+          protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
+          jobId: 'job-1',
+          code: 'EXPORT_FAILED',
+          message: 'Invalid fallback request.',
+          fallback: 'capture-image',
         },
         'job-1'
       )
