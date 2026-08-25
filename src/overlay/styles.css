@@ -16,6 +16,7 @@
   --snapora-color-border: rgb(255 255 255 / 12%);
   --snapora-color-hover: rgb(255 255 255 / 11%);
   --snapora-color-tooltip: rgb(25 27 31 / 98%);
+  --snapora-color-tooltip-border: rgb(255 255 255 / 10%);
   --snapora-color-on-tooltip: rgb(255 255 255 / 92%);
   --snapora-color-danger: rgb(255 69 58 / 76%);
   --snapora-color-warning: var(--snapora-amber-400);
@@ -930,19 +931,21 @@ input {
 }
 
 [data-tooltip]::before {
-  bottom: calc(100% + 4px);
+  z-index: 21;
+  bottom: calc(100% - 1px);
   width: 0;
   height: 0;
-  border: 5px solid transparent;
+  border: 6px solid transparent;
   border-top-color: var(--snapora-tooltip);
   content: '';
 }
 
 [data-tooltip]::after {
-  bottom: calc(100% + 14px);
+  bottom: calc(100% + 11px);
   min-width: max-content;
   padding: 7px 9px;
-  border: 1px solid rgb(255 255 255 / 10%);
+  border: 1px solid var(--snapora-color-tooltip-border);
+  border-bottom-color: transparent;
   border-radius: 7px;
   color: var(--snapora-tooltip-foreground);
   background: var(--snapora-tooltip);
@@ -987,13 +990,14 @@ input {
 }
 
 .selection-toolbar[data-placement='above'] [data-tooltip]::before {
-  top: calc(100% + 4px);
+  top: calc(100% + 3px);
   border-top-color: transparent;
   border-bottom-color: var(--snapora-tooltip);
 }
 
 .selection-toolbar[data-placement='above'] [data-tooltip]::after {
-  top: calc(100% + 14px);
+  top: calc(100% + 15px);
+  border-top-color: transparent;
 }
 
 .selection-toolbar[data-placement='above'] [data-tooltip]:hover::before,
