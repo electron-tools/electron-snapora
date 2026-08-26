@@ -36,7 +36,7 @@
   "bugs": {
     "url": "https://github.com/electron-tools/electron-snapora/issues"
   },
-  "homepage": "https://github.com/electron-tools/electron-snapora#readme",
+  "homepage": "https://novrasnap.pages.dev/",
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/",
