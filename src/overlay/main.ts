@@ -1428,7 +1428,30 @@ function positionToolbar(selection: Rect): void {
   const position = calculateToolbarPosition(selection, getSurfaceSize(), toolbarSize);
   toolbar.style.transform = `translate(${position.x}px, ${position.y}px)`;
   toolbar.dataset.placement = position.placement;
+  positionTooltip(position.placement);
   positionPresetPanel();
+}
+
+/** 根据工具栏上下剩余空间决定 tooltip 方向，避免全屏截图时顶部内容被裁掉。 */
+function positionTooltip(toolbarPlacement: 'above' | 'below' | 'inside'): void {
+  const toolbarBounds = toolbar.getBoundingClientRect();
+  const surfaceBounds = surface.getBoundingClientRect();
+  const topSpace = toolbarBounds.top - surfaceBounds.top;
+  const bottomSpace = surfaceBounds.bottom - toolbarBounds.bottom;
+  const tooltipSpace = 48;
+  const preferred = toolbarPlacement === 'above' ? 'below' : 'above';
+  const canShowAbove = topSpace >= tooltipSpace;
+  const canShowBelow = bottomSpace >= tooltipSpace;
+  const placement = canShowAbove && canShowBelow
+    ? preferred
+    : canShowAbove
+      ? 'above'
+      : canShowBelow
+        ? 'below'
+        : topSpace >= bottomSpace
+          ? 'above'
+          : 'below';
+  toolbar.dataset.tooltipPlacement = placement;
 }
 
 /** 将预设面板限制在屏幕内，并让箭头始终指向当前点击的工具按钮。 */
@@ -1632,6 +1655,8 @@ function renderPresetControls(selectedElement: AnnotationElement | undefined): v
   }
   for (const button of textStyleButtons) {
     setPresetButtonState(button, button.dataset.textStyle === textStyle);
+    button.style.setProperty('--text-shadow-color', color);
+    button.style.setProperty('--text-shadow-fill', getTextContrastColor(color));
   }
   const closestFontSize = [...fontSizeSelect.options].reduce((closest, option) =>
     Math.abs(Number(option.value) - fontSize) <
@@ -1855,12 +1880,17 @@ function applyTextStyle(textStyle: TextStyle): void {
 function applyTextEditorPreset(textStyle: TextStyle, color: string): void {
   const contrastColor = getTextContrastColor(color);
   textEditor.dataset.textStyle = textStyle;
-  textEditor.style.color = textStyle === 'fill' ? contrastColor : color;
+  textEditor.style.color = textStyle === 'fill' || textStyle === 'shadow' ? contrastColor : color;
   textEditor.style.backgroundColor = textStyle === 'fill' ? color : 'transparent';
+  textEditor.style.textShadow = 'none';
   textEditor.style.borderColor = 'var(--snapora-accent)';
   textEditor.style.setProperty(
     '-webkit-text-stroke',
-    textStyle === 'outline' ? `1px ${contrastColor}` : '0 transparent'
+    textStyle === 'shadow'
+      ? `1px ${color}`
+      : textStyle === 'outline'
+        ? `1px ${contrastColor}`
+        : '0 transparent'
   );
 }
 
@@ -1982,6 +2012,7 @@ function applyLocale(options: ScreenshotOptions): void {
   const textStyleLabels: Record<TextStyle, string> = {
     default: localized.textDefault,
     fill: localized.textFill,
+    shadow: localized.textOutline,
     outline: localized.textOutline,
   };
   for (const button of textStyleButtons) {

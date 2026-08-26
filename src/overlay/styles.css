@@ -297,7 +297,7 @@ input {
   position: absolute;
   top: 0;
   left: 0;
-  z-index: 4;
+  z-index: 6;
   display: grid;
   grid-template-columns: repeat(4, max-content);
   align-items: stretch;
@@ -342,6 +342,12 @@ input {
   gap: var(--snapora-toolbar-item-gap);
   padding-right: var(--snapora-toolbar-group-padding);
   padding-left: var(--snapora-toolbar-group-padding);
+}
+
+/* backdrop-filter creates a stacking context; raise the hovered panel with its tooltip. */
+.toolbar-panel:has([data-tooltip]:hover),
+.toolbar-panel:has([data-tooltip]:focus-visible) {
+  z-index: 100;
 }
 
 .toolbar-divider {
@@ -603,13 +609,14 @@ input {
   background: var(--snapora-accent);
 }
 
-.text-style-outline .text-style-glyph {
-  color: transparent;
-  -webkit-text-stroke: 1px var(--snapora-toolbar-foreground);
+.text-style-shadow .text-style-glyph {
+  color: var(--text-shadow-fill, var(--snapora-toolbar-foreground));
+  -webkit-text-stroke: 1px var(--text-shadow-color, var(--snapora-toolbar-foreground));
 }
 
-.text-style-outline[data-active='true'] .text-style-glyph {
-  -webkit-text-stroke-color: var(--snapora-accent);
+.text-style-shadow[data-active='true'] .text-style-glyph {
+  color: var(--text-shadow-fill, var(--snapora-accent-foreground));
+  -webkit-text-stroke: 1px var(--text-shadow-color, var(--snapora-accent));
 }
 
 .selection-toolbar select {
@@ -920,7 +927,7 @@ input {
 [data-tooltip]::after {
   position: absolute;
   left: 50%;
-  z-index: 20;
+  z-index: 100;
   opacity: 0;
   pointer-events: none;
   transform: translate(-50%, 4px);
@@ -931,7 +938,6 @@ input {
 }
 
 [data-tooltip]::before {
-  z-index: 21;
   bottom: calc(100% - 1px);
   width: 0;
   height: 0;
@@ -982,28 +988,28 @@ input {
   opacity: 0;
 }
 
-.selection-toolbar[data-placement='above'] [data-tooltip]::before,
-.selection-toolbar[data-placement='above'] [data-tooltip]::after {
+.selection-toolbar[data-tooltip-placement='below'] [data-tooltip]::before,
+.selection-toolbar[data-tooltip-placement='below'] [data-tooltip]::after {
   top: auto;
   bottom: auto;
   transform: translate(-50%, -4px);
 }
 
-.selection-toolbar[data-placement='above'] [data-tooltip]::before {
+.selection-toolbar[data-tooltip-placement='below'] [data-tooltip]::before {
   top: calc(100% + 3px);
   border-top-color: transparent;
   border-bottom-color: var(--snapora-tooltip);
 }
 
-.selection-toolbar[data-placement='above'] [data-tooltip]::after {
+.selection-toolbar[data-tooltip-placement='below'] [data-tooltip]::after {
   top: calc(100% + 15px);
   border-top-color: transparent;
 }
 
-.selection-toolbar[data-placement='above'] [data-tooltip]:hover::before,
-.selection-toolbar[data-placement='above'] [data-tooltip]:hover::after,
-.selection-toolbar[data-placement='above'] [data-tooltip]:focus-visible::before,
-.selection-toolbar[data-placement='above'] [data-tooltip]:focus-visible::after {
+.selection-toolbar[data-tooltip-placement='below'] [data-tooltip]:hover::before,
+.selection-toolbar[data-tooltip-placement='below'] [data-tooltip]:hover::after,
+.selection-toolbar[data-tooltip-placement='below'] [data-tooltip]:focus-visible::before,
+.selection-toolbar[data-tooltip-placement='below'] [data-tooltip]:focus-visible::after {
   transform: translate(-50%, 0);
 }
 

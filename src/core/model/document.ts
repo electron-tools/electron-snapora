@@ -38,8 +38,8 @@ export interface TextLayoutMetrics {
   descent: number;
 }
 
-/** 文字预设对应普通文字、色块填充和对比色描边。 */
-export type TextStyle = 'default' | 'fill' | 'outline';
+/** 文字预设对应普通文字、色块填充和阴影；outline 为旧文档兼容值。 */
+export type TextStyle = 'default' | 'fill' | 'shadow' | 'outline';
 
 export interface TextElement extends AnnotationElementBase {
   type: 'text';

@@ -26,6 +26,7 @@ export type AnnotationElementStyle = Partial<AnnotationStyle>;
 export const TEXT_LINE_HEIGHT = 1.3;
 const TEXT_FILL_PADDING_FACTOR = 0.28;
 const TEXT_OUTLINE_WIDTH_FACTOR = 0.1;
+const TEXT_SHADOW_PADDING_FACTOR = TEXT_OUTLINE_WIDTH_FACTOR;
 
 type TextBaselineMetrics = Pick<TextLayoutMetrics, 'ascent' | 'descent'> &
   Partial<Pick<TextLayoutMetrics, 'width'>>;
@@ -279,6 +280,8 @@ export function getElementBounds(element: AnnotationElement): Rect {
       const decorationPadding =
         textStyle === 'fill'
           ? element.fontSize * TEXT_FILL_PADDING_FACTOR
+          : textStyle === 'shadow'
+            ? element.fontSize * TEXT_SHADOW_PADDING_FACTOR
           : textStyle === 'outline'
             ? Math.max(2, element.fontSize * TEXT_OUTLINE_WIDTH_FACTOR)
             : 0;

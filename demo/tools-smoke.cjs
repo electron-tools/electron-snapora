@@ -816,7 +816,7 @@ app.on('browser-window-created', (_event, window) => {
       })()
     `);
     if (
-      JSON.stringify(textPresetState) !== JSON.stringify(['default', 'fill', 'outline'])
+      JSON.stringify(textPresetState) !== JSON.stringify(['default', 'fill', 'shadow'])
     ) {
       throw new Error(
         `Text style presets were invalid: ${JSON.stringify(textPresetState)}`

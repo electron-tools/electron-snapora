@@ -34,6 +34,10 @@ function createContext() {
     font: '',
     textAlign: 'start',
     textBaseline: 'alphabetic',
+    shadowColor: '',
+    shadowBlur: 0,
+    shadowOffsetX: 0,
+    shadowOffsetY: 0,
     imageSmoothingEnabled: true,
     imageSmoothingQuality: 'low',
   } as unknown as CanvasRenderingContext2D;
@@ -123,7 +127,7 @@ describe('annotation renderer', () => {
     expect(context.lineTo).not.toHaveBeenCalled();
   });
 
-  it('renders text fill and outline presets', () => {
+  it('renders text fill, shadow, and legacy outline presets', () => {
     const context = createContext();
     const text = {
       ...base,
@@ -137,7 +141,8 @@ describe('annotation renderer', () => {
       context,
       [
         { ...text, id: 'fill', type: 'text', textStyle: 'fill' },
-        { ...text, id: 'outline', type: 'text', textStyle: 'outline', zIndex: 1 },
+        { ...text, id: 'shadow', type: 'text', textStyle: 'shadow', zIndex: 1 },
+        { ...text, id: 'outline', type: 'text', textStyle: 'outline', zIndex: 2 },
       ],
       { imageSize: { width: 120, height: 80 } }
     );
@@ -145,7 +150,7 @@ describe('annotation renderer', () => {
     expect(context.roundRect).toHaveBeenCalled();
     expect(context.fill).toHaveBeenCalled();
     expect(context.strokeText).toHaveBeenCalledWith('Snapora', 10, 40);
-    expect(context.fillText).toHaveBeenCalledTimes(2);
+    expect(context.fillText).toHaveBeenCalledTimes(3);
   });
 
   it('clips a pixelated source to a mosaic area and outlines drafts without handles', () => {

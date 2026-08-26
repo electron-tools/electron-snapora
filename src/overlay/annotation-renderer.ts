@@ -190,7 +190,7 @@ function drawArrow(
   context.stroke();
 }
 
-/** 按文字预设绘制普通文字、圆角色块填充或对比色描边。 */
+/** 按文字预设绘制普通文字、色块填充、阴影或兼容旧文档的描边。 */
 function drawText(context: AnnotationDrawingContext, element: TextElement): void {
   const textStyle = element.textStyle ?? 'default';
   const contrastColor = getTextContrastColor(element.color);
@@ -207,6 +207,10 @@ function drawText(context: AnnotationDrawingContext, element: TextElement): void
     );
     context.fill();
     context.fillStyle = contrastColor;
+  } else if (textStyle === 'shadow') {
+    context.fillStyle = contrastColor;
+    context.strokeStyle = element.color;
+    context.lineWidth = Math.max(2, element.fontSize * 0.1);
   } else {
     context.fillStyle = element.color;
   }
@@ -219,7 +223,7 @@ function drawText(context: AnnotationDrawingContext, element: TextElement): void
   }
   splitTextLines(element.value).forEach((line, index) => {
     const y = element.position.y + index * element.fontSize * TEXT_LINE_HEIGHT;
-    if (textStyle === 'outline') {
+    if (textStyle === 'shadow' || textStyle === 'outline') {
       context.strokeText(line, element.position.x, y);
     }
     context.fillText(line, element.position.x, y);
