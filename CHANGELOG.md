@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.9] - 2026-08-26
+
+### Changed
+
+- Replace the user-facing text outline preset with a high-contrast shadow preset while retaining rendering compatibility for existing outline annotations.
+
+### Fixed
+
+- Keep annotation tooltips above neighboring toolbar panels and automatically place them above or below the toolbar based on the available screen space.
+- Include the shadow decoration in text bounds and align the preset preview, active text editor, Canvas rendering, and smoke coverage with the new style.
+
 ## [1.0.8] - 2026-08-24
 
 ### Added
