@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.10] - 2026-08-27
+
+### Changed
+
+- Keep filled text backgrounds aligned with the textarea content bounds after commit, movement, and style updates.
+- Use high-contrast foreground colors consistently for filled and shadow text presets in the editor, preview, and Canvas output.
+
+### Fixed
+
+- Prevent filled text from shifting or resizing after Enter commits the annotation by preserving its exact content-area bounds.
+- Keep filled text bounds synchronized when the annotation is translated and cover the geometry and rendering regressions with focused tests and smoke assertions.
+
 ## [1.0.9] - 2026-08-26
 
 ### Changed
