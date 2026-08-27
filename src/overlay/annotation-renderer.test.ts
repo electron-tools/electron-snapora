@@ -153,6 +153,38 @@ describe('annotation renderer', () => {
     expect(context.fillText).toHaveBeenCalledTimes(3);
   });
 
+  it('renders bright shadow text with a white interior', () => {
+    const context = createContext();
+    const fillColors: string[] = [];
+    const strokeColors: string[] = [];
+    vi.mocked(context.fillText).mockImplementation(() => {
+      fillColors.push(String(context.fillStyle));
+    });
+    vi.mocked(context.strokeText).mockImplementation(() => {
+      strokeColors.push(String(context.strokeStyle));
+    });
+    drawAnnotations(
+      context,
+      [
+        {
+          ...base,
+          id: 'yellow-shadow',
+          type: 'text',
+          color: '#ffcc00',
+          position: { x: 10, y: 40 },
+          value: '黄色',
+          fontSize: 24,
+          metrics: { width: 48, ascent: 20, descent: 5 },
+          textStyle: 'shadow',
+        },
+      ],
+      { imageSize: { width: 120, height: 80 } }
+    );
+
+    expect(fillColors).toEqual(['#ffffff']);
+    expect(strokeColors).toEqual(['#ffcc00']);
+  });
+
   it('clips a pixelated source to a mosaic area and outlines drafts without handles', () => {
     const sampleContext = createContext();
     const OffscreenCanvasMock = vi.fn(

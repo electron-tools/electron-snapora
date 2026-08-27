@@ -610,12 +610,12 @@ input {
 }
 
 .text-style-shadow .text-style-glyph {
-  color: var(--text-shadow-fill, var(--snapora-toolbar-foreground));
+  color: var(--text-shadow-fill, var(--snapora-neutral-0));
   -webkit-text-stroke: 1px var(--text-shadow-color, var(--snapora-toolbar-foreground));
 }
 
 .text-style-shadow[data-active='true'] .text-style-glyph {
-  color: var(--text-shadow-fill, var(--snapora-accent-foreground));
+  color: var(--text-shadow-fill, var(--snapora-neutral-0));
   -webkit-text-stroke: 1px var(--text-shadow-color, var(--snapora-accent));
 }
 

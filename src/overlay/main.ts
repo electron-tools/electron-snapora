@@ -20,10 +20,12 @@ import type {
 import { drawCapturedFrame } from './capture-frame.js';
 import {
   calculateTextBaselinePosition,
+  calculateTextFillBounds,
   createDrawableElement,
   getElementBounds,
   getResizeHandleAtPoint,
   getTextContrastColor,
+  getTextFillColor,
   hitTestElement,
   isDrawableElementValid,
   measureTextBaselineMetrics,
@@ -1128,16 +1130,20 @@ function closeTextEditor(commit: boolean): void {
       x: editorBounds.left - surfaceBounds.left,
       y: editorBounds.top - surfaceBounds.top,
     });
+    const borderLeft = parseCssPixels(editorStyle.borderLeftWidth);
+    const borderRight = parseCssPixels(editorStyle.borderRightWidth);
+    const borderTop = parseCssPixels(editorStyle.borderTopWidth);
+    const borderBottom = parseCssPixels(editorStyle.borderBottomWidth);
     const contentOffset = {
-      x:
-        (parseCssPixels(editorStyle.borderLeftWidth) +
-          parseCssPixels(editorStyle.paddingLeft)) *
-        imageScale,
-      y:
-        (parseCssPixels(editorStyle.borderTopWidth) +
-          parseCssPixels(editorStyle.paddingTop)) *
-        imageScale,
+      x: (borderLeft + parseCssPixels(editorStyle.paddingLeft)) * imageScale,
+      y: (borderTop + parseCssPixels(editorStyle.paddingTop)) * imageScale,
     };
+    const fillBounds = calculateTextFillBounds(
+      editorOrigin,
+      { width: editorBounds.width, height: editorBounds.height },
+      { left: borderLeft, right: borderRight, top: borderTop, bottom: borderBottom },
+      imageScale
+    );
     const measuredLineHeight = parseCssPixels(editorStyle.lineHeight) * imageScale;
     const position = calculateTextBaselinePosition(
       editorOrigin,
@@ -1156,6 +1162,7 @@ function closeTextEditor(commit: boolean): void {
       fontSize,
       metrics,
       textStyle: state.style.textStyle,
+      ...(state.style.textStyle === 'fill' ? { fillBounds } : {}),
     };
     annotationStore.setDraft(element);
     annotationStore.commitDraft(false);
@@ -1656,7 +1663,7 @@ function renderPresetControls(selectedElement: AnnotationElement | undefined): v
   for (const button of textStyleButtons) {
     setPresetButtonState(button, button.dataset.textStyle === textStyle);
     button.style.setProperty('--text-shadow-color', color);
-    button.style.setProperty('--text-shadow-fill', getTextContrastColor(color));
+    button.style.setProperty('--text-shadow-fill', getTextFillColor('shadow', color));
   }
   const closestFontSize = [...fontSizeSelect.options].reduce((closest, option) =>
     Math.abs(Number(option.value) - fontSize) <
@@ -1879,8 +1886,9 @@ function applyTextStyle(textStyle: TextStyle): void {
 /** 让 textarea 输入态提前呈现最终文字预设，减少提交后的视觉跳变。 */
 function applyTextEditorPreset(textStyle: TextStyle, color: string): void {
   const contrastColor = getTextContrastColor(color);
+  const textFillColor = getTextFillColor(textStyle, color);
   textEditor.dataset.textStyle = textStyle;
-  textEditor.style.color = textStyle === 'fill' || textStyle === 'shadow' ? contrastColor : color;
+  textEditor.style.color = textFillColor;
   textEditor.style.backgroundColor = textStyle === 'fill' ? color : 'transparent';
   textEditor.style.textShadow = 'none';
   textEditor.style.borderColor = 'var(--snapora-accent)';

@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   calculateTextBaselinePosition,
+  calculateTextFillBounds,
   createDrawableElement,
   getElementBounds,
   getResizeHandleAtPoint,
+  getTextFillColor,
   hitTestElement,
   isElementResizable,
   measureTextBaselineMetrics,
@@ -235,6 +237,59 @@ describe('annotation element geometry', () => {
     expect(bounds.y).toBeCloseTo(18.4);
     expect(bounds.width).toBeCloseTo(51.2);
     expect(bounds.height).toBeCloseTo(31.2);
+  });
+
+  it('keeps fill and shadow text white for bright preset colors', () => {
+    expect(getTextFillColor('fill', '#ffcc00')).toBe('#ffffff');
+    expect(getTextFillColor('shadow', '#ffcc00')).toBe('#ffffff');
+    expect(getTextFillColor('fill', '#ffffff')).toBe('#111111');
+  });
+
+  it('converts the textarea content box to scaled fill bounds', () => {
+    expect(
+      calculateTextFillBounds(
+        { x: 100, y: 60 },
+        { width: 71, height: 49 },
+        { left: 1, right: 1, top: 1, bottom: 1 },
+        1.25
+      )
+    ).toEqual({ x: 101.25, y: 61.25, width: 86.25, height: 58.75 });
+  });
+
+  it('prefers the captured editor bounds for fill text', () => {
+    const text = {
+      id: 'text-fill-bounds',
+      type: 'text' as const,
+      zIndex: 0,
+      createdAt: 1,
+      color: '#ff3b30',
+      position: { x: 20, y: 50 },
+      value: '222',
+      fontSize: 24,
+      metrics: { width: 48, ascent: 20, descent: 5 },
+      textStyle: 'fill' as const,
+      fillBounds: { x: 10, y: 15, width: 70, height: 48 },
+    };
+
+    expect(getElementBounds(text)).toEqual(text.fillBounds);
+  });
+
+  it('drops captured fill bounds when the font size changes', () => {
+    const text = {
+      id: 'text-fill-resize',
+      type: 'text' as const,
+      zIndex: 0,
+      createdAt: 1,
+      color: '#ff3b30',
+      position: { x: 20, y: 50 },
+      value: '222',
+      fontSize: 24,
+      metrics: { width: 48, ascent: 20, descent: 5 },
+      textStyle: 'fill' as const,
+      fillBounds: { x: 10, y: 15, width: 70, height: 48 },
+    };
+
+    expect(updateElementStyle(text, { fontSize: 32 })).not.toHaveProperty('fillBounds');
   });
 
   it('measures full-width text with the same Canvas font used for rendering', () => {

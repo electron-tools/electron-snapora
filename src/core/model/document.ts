@@ -49,6 +49,8 @@ export interface TextElement extends AnnotationElementBase {
   metrics: TextLayoutMetrics;
   /** 缺省时兼容旧文档并按普通文字渲染。 */
   textStyle?: TextStyle;
+  /** 填充预设复用输入框内容区域，确保编辑态与 Canvas 背景边界一致。 */
+  fillBounds?: Rect;
 }
 
 export interface MosaicElement extends AnnotationElementBase {

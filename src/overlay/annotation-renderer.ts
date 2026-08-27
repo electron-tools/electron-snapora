@@ -9,6 +9,7 @@ import {
   getResizeHandlePoints,
   getTextCanvasFont,
   getTextContrastColor,
+  getTextFillColor,
   isElementResizable,
   splitTextLines,
   TEXT_LINE_HEIGHT,
@@ -194,6 +195,7 @@ function drawArrow(
 function drawText(context: AnnotationDrawingContext, element: TextElement): void {
   const textStyle = element.textStyle ?? 'default';
   const contrastColor = getTextContrastColor(element.color);
+  const textFillColor = getTextFillColor(textStyle, element.color);
   if (textStyle === 'fill') {
     const bounds = getElementBounds(element);
     context.fillStyle = element.color;
@@ -206,9 +208,9 @@ function drawText(context: AnnotationDrawingContext, element: TextElement): void
       Math.max(4, element.fontSize * 0.22)
     );
     context.fill();
-    context.fillStyle = contrastColor;
+    context.fillStyle = textFillColor;
   } else if (textStyle === 'shadow') {
-    context.fillStyle = contrastColor;
+    context.fillStyle = textFillColor;
     context.strokeStyle = element.color;
     context.lineWidth = Math.max(2, element.fontSize * 0.1);
   } else {

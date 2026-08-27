@@ -849,9 +849,37 @@ app.on('browser-window-created', (_event, window) => {
         `Text fill preset was not previewed: ${JSON.stringify(fillEditorStyle)}`
       );
     }
-    window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
-    window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+    await window.webContents.insertText('222');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const fillInputBounds = await getRedPixelBounds(window, textRegion);
+    window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' });
+    window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' });
     await nextFrame(window);
+    const fillCommittedBounds = await getRedPixelBounds(window, textRegion);
+    if (
+      !fillInputBounds ||
+      !fillCommittedBounds ||
+      ['left', 'top', 'right', 'bottom'].some(
+        (edge) => Math.abs(fillInputBounds[edge] - fillCommittedBounds[edge]) > 1
+      )
+    ) {
+      throw new Error(
+        `Text fill moved or resized after commit: ${JSON.stringify({ fillInputBounds, fillCommittedBounds })}`
+      );
+    }
+    await activateTool(window, 'select');
+    sendClick(window, {
+      x:
+        textPoint.x +
+        Math.round((fillCommittedBounds.right - fillCommittedBounds.left) / 2),
+      y:
+        textPoint.y +
+        Math.round((fillCommittedBounds.bottom - fillCommittedBounds.top) / 2),
+    });
+    window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Delete' });
+    window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Delete' });
+    await nextFrame(window);
+    await activateTool(window, 'text');
     await window.webContents.executeJavaScript(
       `document.querySelector('[data-text-style="default"]')?.click()`
     );

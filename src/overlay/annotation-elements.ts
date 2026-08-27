@@ -1,4 +1,9 @@
-import { normalizeRect, type Point, type Rect } from '../core/geometry/rect.js';
+import {
+  normalizeRect,
+  type Point,
+  type Rect,
+  type Size,
+} from '../core/geometry/rect.js';
 import type {
   AnnotationElement,
   ArrowElement,
@@ -24,6 +29,8 @@ export interface AnnotationStyle {
 export type AnnotationElementStyle = Partial<AnnotationStyle>;
 
 export const TEXT_LINE_HEIGHT = 1.3;
+export const TEXT_LIGHT_FOREGROUND_COLOR = '#ffffff';
+export const TEXT_DARK_FOREGROUND_COLOR = '#111111';
 const TEXT_FILL_PADDING_FACTOR = 0.28;
 const TEXT_OUTLINE_WIDTH_FACTOR = 0.1;
 const TEXT_SHADOW_PADDING_FACTOR = TEXT_OUTLINE_WIDTH_FACTOR;
@@ -46,6 +53,27 @@ export function calculateTextBaselinePosition(
   return {
     x: editorOrigin.x + contentOffset.x,
     y: editorOrigin.y + contentOffset.y + leadingBeforeBaseline + metrics.ascent,
+  };
+}
+
+/** 把 textarea 实际内容区域换算为 Image Pixel，供填充背景提交后直接复用。 */
+export function calculateTextFillBounds(
+  editorOrigin: Point,
+  editorSize: Size,
+  borderWidths: { left: number; right: number; top: number; bottom: number },
+  imageScale: number
+): Rect {
+  return {
+    x: editorOrigin.x + borderWidths.left * imageScale,
+    y: editorOrigin.y + borderWidths.top * imageScale,
+    width: Math.max(
+      1,
+      (editorSize.width - borderWidths.left - borderWidths.right) * imageScale
+    ),
+    height: Math.max(
+      1,
+      (editorSize.height - borderWidths.top - borderWidths.bottom) * imageScale
+    ),
   };
 }
 
@@ -132,16 +160,32 @@ export function wrapTextToWidth(
 
 /** 根据所选文字颜色返回清晰可读的黑色或白色对比色。 */
 export function getTextContrastColor(color: string): '#111111' | '#ffffff' {
-  const normalized = color.trim();
-  const match = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(normalized);
+  const brightness = getColorBrightness(color);
+  return brightness !== undefined && brightness > 0.62
+    ? TEXT_DARK_FOREGROUND_COLOR
+    : TEXT_LIGHT_FOREGROUND_COLOR;
+}
+
+/** 填充和阴影优先使用白色字面，仅接近白色的背景改用深色确保可见。 */
+export function getTextFillColor(textStyle: TextStyle, color: string): string {
+  if (textStyle !== 'fill' && textStyle !== 'shadow') {
+    return color;
+  }
+  const brightness = getColorBrightness(color);
+  return brightness !== undefined && brightness > 0.92
+    ? TEXT_DARK_FOREGROUND_COLOR
+    : TEXT_LIGHT_FOREGROUND_COLOR;
+}
+
+function getColorBrightness(color: string): number | undefined {
+  const match = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(color.trim());
   if (!match) {
-    return '#ffffff';
+    return undefined;
   }
   const red = Number.parseInt(match[1] ?? '00', 16);
   const green = Number.parseInt(match[2] ?? '00', 16);
   const blue = Number.parseInt(match[3] ?? '00', 16);
-  const brightness = (red * 299 + green * 587 + blue * 114) / 255000;
-  return brightness > 0.62 ? '#111111' : '#ffffff';
+  return (red * 299 + green * 587 + blue * 114) / 255000;
 }
 
 /** 使用与 Canvas 渲染一致的字体测量文字，避免中文等全角字符被固定比例低估。 */
@@ -277,6 +321,9 @@ export function getElementBounds(element: AnnotationElement): Rect {
     case 'text': {
       const lines = splitTextLines(element.value);
       const textStyle = element.textStyle ?? 'default';
+      if (textStyle === 'fill' && element.fillBounds) {
+        return element.fillBounds;
+      }
       const decorationPadding =
         textStyle === 'fill'
           ? element.fontSize * TEXT_FILL_PADDING_FACTOR
@@ -321,16 +368,23 @@ export function updateElementStyle(
       const currentTextStyle = element.textStyle ?? 'default';
       const textStyle = style.textStyle ?? currentTextStyle;
       const scale = fontSize / element.fontSize;
+      const { fillBounds, ...textWithoutFillBounds } = element;
       return color === element.color &&
         fontSize === element.fontSize &&
         textStyle === currentTextStyle
         ? element
         : {
-            ...element,
+            ...textWithoutFillBounds,
             color,
             fontSize,
             textStyle,
             metrics: scaleTextMetrics(element.metrics, scale),
+            ...(textStyle === 'fill' &&
+            currentTextStyle === 'fill' &&
+            fontSize === element.fontSize &&
+            fillBounds
+              ? { fillBounds }
+              : {}),
           };
     }
     case 'mosaic': {
@@ -438,7 +492,19 @@ export function translateElement(
         points: element.points.map((point) => addPoint(point, boundedDelta)),
       };
     case 'text':
-      return { ...element, position: addPoint(element.position, boundedDelta) };
+      return {
+        ...element,
+        position: addPoint(element.position, boundedDelta),
+        ...(element.fillBounds
+          ? {
+              fillBounds: {
+                ...element.fillBounds,
+                x: element.fillBounds.x + boundedDelta.x,
+                y: element.fillBounds.y + boundedDelta.y,
+              },
+            }
+          : {}),
+      };
   }
 }
 
