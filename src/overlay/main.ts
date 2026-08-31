@@ -1417,15 +1417,16 @@ function positionTooltip(toolbarPlacement: 'above' | 'below' | 'inside'): void {
   const preferred = toolbarPlacement === 'above' ? 'below' : 'above';
   const canShowAbove = topSpace >= tooltipSpace;
   const canShowBelow = bottomSpace >= tooltipSpace;
-  const placement = canShowAbove && canShowBelow
-    ? preferred
-    : canShowAbove
-      ? 'above'
-      : canShowBelow
-        ? 'below'
-        : topSpace >= bottomSpace
-          ? 'above'
-          : 'below';
+  const placement =
+    canShowAbove && canShowBelow
+      ? preferred
+      : canShowAbove
+        ? 'above'
+        : canShowBelow
+          ? 'below'
+          : topSpace >= bottomSpace
+            ? 'above'
+            : 'below';
   toolbar.dataset.tooltipPlacement = placement;
 }
 

@@ -67,7 +67,8 @@ export function getTextStrokeWidth(fontSize: number): number {
 export function calculateTextFillBounds(
   editorOrigin: Point,
   editorSize: Size,
-  _borderWidths: { left: number; right: number; top: number; bottom: number } | undefined,
+  _borderWidths:
+    { left: number; right: number; top: number; bottom: number } | undefined,
   imageScale: number
 ): Rect {
   return {
@@ -330,9 +331,9 @@ export function getElementBounds(element: AnnotationElement): Rect {
           ? element.fontSize * TEXT_FILL_PADDING_FACTOR
           : textStyle === 'shadow'
             ? element.fontSize * TEXT_SHADOW_PADDING_FACTOR
-          : textStyle === 'outline'
-            ? Math.max(2, element.fontSize * TEXT_OUTLINE_WIDTH_FACTOR)
-            : 0;
+            : textStyle === 'outline'
+              ? Math.max(2, element.fontSize * TEXT_OUTLINE_WIDTH_FACTOR)
+              : 0;
       return {
         x: element.position.x - decorationPadding,
         y: element.position.y - element.metrics.ascent - decorationPadding,
