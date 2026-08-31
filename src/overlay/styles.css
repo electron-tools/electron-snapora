@@ -1025,7 +1025,7 @@ input {
   appearance: none;
   overflow: hidden;
   resize: none;
-  border: 1px solid var(--snapora-accent);
+  border: 1px solid transparent;
   border-radius: 6px;
   outline: none;
   color: #fff;
@@ -1034,6 +1034,7 @@ input {
   font-family: system-ui, sans-serif;
   font-weight: 600;
   line-height: 1.3;
+  paint-order: stroke fill;
   caret-color: #fff;
   user-select: text;
 }

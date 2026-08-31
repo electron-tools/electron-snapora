@@ -10,6 +10,7 @@ import {
   getTextCanvasFont,
   getTextContrastColor,
   getTextFillColor,
+  getTextStrokeWidth,
   isElementResizable,
   splitTextLines,
   TEXT_LINE_HEIGHT,
@@ -212,7 +213,9 @@ function drawText(context: AnnotationDrawingContext, element: TextElement): void
   } else if (textStyle === 'shadow') {
     context.fillStyle = textFillColor;
     context.strokeStyle = element.color;
-    context.lineWidth = Math.max(2, element.fontSize * 0.1);
+    context.lineWidth = getTextStrokeWidth(element.fontSize);
+    context.lineJoin = 'round';
+    context.lineCap = 'round';
   } else {
     context.fillStyle = element.color;
   }
@@ -221,7 +224,9 @@ function drawText(context: AnnotationDrawingContext, element: TextElement): void
   context.textBaseline = 'alphabetic';
   if (textStyle === 'outline') {
     context.strokeStyle = contrastColor;
-    context.lineWidth = Math.max(2, element.fontSize * 0.1);
+    context.lineWidth = getTextStrokeWidth(element.fontSize);
+    context.lineJoin = 'round';
+    context.lineCap = 'round';
   }
   splitTextLines(element.value).forEach((line, index) => {
     const y = element.position.y + index * element.fontSize * TEXT_LINE_HEIGHT;

@@ -26,6 +26,7 @@ import {
   getResizeHandleAtPoint,
   getTextContrastColor,
   getTextFillColor,
+  getTextStrokeWidth,
   hitTestElement,
   isDrawableElementValid,
   measureTextBaselineMetrics,
@@ -188,15 +189,12 @@ let customColor = colorInput.value.toLowerCase();
 let customColorHsv = hexToHsv(customColor);
 let colorPickerPointerId: number | null = null;
 let outputFeedback: string | null = null;
-let exportProgressVisible = false;
-let exportProgressTimer: number | undefined;
 let currentMessages: ScreenshotMessages = resolveScreenshotMessages();
 let annotationCanvasRenderCache: AnnotationCanvasRenderCache | undefined;
 let toolbarPositionCacheKey: string | null = null;
 let frameLoadController: AbortController | undefined;
 let directMovingElementId: string | null = null;
 
-const EXPORT_PROGRESS_DELAY_MS = 180;
 const DIRECT_MOVE_THRESHOLD = 4;
 /** 水印字号固定为紧凑预设，避免给面板再增加一个低价值控件。 */
 const WATERMARK_FONT_SIZE = 18;
@@ -298,7 +296,6 @@ function formatCaptureError(error: unknown): string {
 function resetOverlaySession(): void {
   frameLoadController?.abort();
   frameLoadController = undefined;
-  clearExportProgress();
   closeTextEditor(false);
   closeColorPicker();
   pointerInteraction = null;
@@ -348,7 +345,6 @@ window.snaporaOverlay.onFeedback((payload) => {
   if (payload.kind !== 'copy') {
     return;
   }
-  clearExportProgress();
   applyTheme(payload.options);
   applyLocale(payload.options);
   document.documentElement.dataset.snaporaFeedback = 'copy';
@@ -1044,13 +1040,14 @@ function finishSelection(pointerId: number): void {
 
 function openTextEditor(viewportPoint: Point, imagePoint: Point): void {
   const style = annotationStore.getState().style;
+  const fontSize = Math.max(14, style.fontSize);
   pendingTextPoint = imagePoint;
   pendingTextViewportPoint = viewportPoint;
   textEditor.value = '';
   textEditor.hidden = false;
   textEditor.style.transform = `translate(${viewportPoint.x}px, ${viewportPoint.y}px)`;
-  applyTextEditorPreset(style.textStyle, style.color);
-  textEditor.style.fontSize = `${Math.max(14, style.fontSize)}px`;
+  applyTextEditorPreset(style.textStyle, style.color, fontSize);
+  textEditor.style.fontSize = `${fontSize}px`;
   resizeTextEditor();
   textEditor.focus();
 }
@@ -1196,9 +1193,7 @@ async function confirmCapture(
   }
 
   outputFeedback = null;
-  clearExportProgress();
   selectionStore.dispatch({ type: 'begin-export' });
-  scheduleExportProgress();
   try {
     const viewportSize = getSurfaceSize();
     const imageRect = viewportRectToImageRect(
@@ -1233,10 +1228,8 @@ async function confirmCapture(
       result,
     });
     if (response.status !== 'completed') {
-      clearExportProgress();
       selectionStore.dispatch({ type: 'export-failed' });
-      outputFeedback =
-        response.status === 'cancelled' ? localize('saveCancelled') : response.message;
+      outputFeedback = response.status === 'cancelled' ? null : response.message;
       render();
       return;
     }
@@ -1247,7 +1240,6 @@ async function confirmCapture(
         : response.action === 'pin'
           ? { action: 'pin' as const }
           : { action: 'copy' as const };
-    clearExportProgress();
     window.snaporaOverlay.confirm({
       jobId: state.payload.jobId,
       result: { ...result, output },
@@ -1256,7 +1248,6 @@ async function confirmCapture(
       resetOverlaySession();
     });
   } catch (error) {
-    clearExportProgress();
     selectionStore.dispatch({ type: 'export-failed' });
     window.snaporaOverlay.reportError({
       jobId: state.payload.jobId,
@@ -1264,25 +1255,6 @@ async function confirmCapture(
       message: error instanceof Error ? error.message : 'Screenshot export failed.',
     });
   }
-}
-
-/** 快速复制不显示瞬时 loading，只有导出确实耗时时才呈现进度。 */
-function scheduleExportProgress(): void {
-  exportProgressTimer = window.setTimeout(() => {
-    exportProgressTimer = undefined;
-    if (selectionStore.getState().phase === 'exporting') {
-      exportProgressVisible = true;
-      render();
-    }
-  }, EXPORT_PROGRESS_DELAY_MS);
-}
-
-function clearExportProgress(): void {
-  if (exportProgressTimer !== undefined) {
-    window.clearTimeout(exportProgressTimer);
-    exportProgressTimer = undefined;
-  }
-  exportProgressVisible = false;
 }
 
 function render(): void {
@@ -1319,14 +1291,10 @@ function render(): void {
   selectionElement.hidden = selection === null;
   toolbar.hidden = selectionState.phase !== 'selected';
 
-  const showPhaseStatus =
-    selectionState.phase === 'ready' ||
-    (selectionState.phase === 'exporting' && exportProgressVisible);
+  const showPhaseStatus = selectionState.phase === 'ready';
   status.hidden = !showPhaseStatus && !outputFeedback;
   if (selectionState.phase === 'ready') {
     status.textContent = localize('instruction');
-  } else if (selectionState.phase === 'exporting') {
-    status.textContent = localize('exporting');
   } else if (outputFeedback) {
     status.textContent = outputFeedback;
   }
@@ -1713,6 +1681,10 @@ function setPresetButtonState(button: HTMLButtonElement, active: boolean): void 
 function applyColor(color: string): void {
   annotationStore.setStyle({ color });
   commitSelectedElementStyle({ color });
+  if (!textEditor.hidden) {
+    const style = annotationStore.getState().style;
+    applyTextEditorPreset(style.textStyle, color, Math.max(14, style.fontSize));
+  }
 }
 
 /** 点击彩环入口时开关自绘取色器。 */
@@ -1875,29 +1847,49 @@ function hsvToHex(color: HsvColor): string {
 function applyFontSize(fontSize: number): void {
   annotationStore.setStyle({ fontSize });
   commitSelectedElementStyle({ fontSize: fontSize * getImageScale() });
+  if (!textEditor.hidden) {
+    const style = annotationStore.getState().style;
+    const effectiveFontSize = Math.max(14, fontSize);
+    textEditor.style.fontSize = `${effectiveFontSize}px`;
+    applyTextEditorPreset(style.textStyle, style.color, effectiveFontSize);
+    resizeTextEditor();
+  }
 }
 
 /** 文字外观预设同时作用于后续输入和已选文字。 */
 function applyTextStyle(textStyle: TextStyle): void {
   annotationStore.setStyle({ textStyle });
   commitSelectedElementStyle({ textStyle });
+  if (!textEditor.hidden) {
+    const style = annotationStore.getState().style;
+    applyTextEditorPreset(textStyle, style.color, Math.max(14, style.fontSize));
+    resizeTextEditor();
+  }
 }
 
 /** 让 textarea 输入态提前呈现最终文字预设，减少提交后的视觉跳变。 */
-function applyTextEditorPreset(textStyle: TextStyle, color: string): void {
+function applyTextEditorPreset(
+  textStyle: TextStyle,
+  color: string,
+  fontSize = 14
+): void {
   const contrastColor = getTextContrastColor(color);
   const textFillColor = getTextFillColor(textStyle, color);
+  const strokeWidth = getTextStrokeWidth(fontSize);
   textEditor.dataset.textStyle = textStyle;
   textEditor.style.color = textFillColor;
   textEditor.style.backgroundColor = textStyle === 'fill' ? color : 'transparent';
   textEditor.style.textShadow = 'none';
-  textEditor.style.borderColor = 'var(--snapora-accent)';
+  textEditor.style.paintOrder = 'stroke fill';
+  // 带背景色预设：输入框边框颜色与背景色一致；
+  // 普通和描边预设：边框设为透明（保留边框占位以保持精确几何布局），避免确认后边框突兀消失闪烁。
+  textEditor.style.borderColor = textStyle === 'fill' ? color : 'transparent';
   textEditor.style.setProperty(
     '-webkit-text-stroke',
     textStyle === 'shadow'
-      ? `1px ${color}`
+      ? `${strokeWidth}px ${color}`
       : textStyle === 'outline'
-        ? `1px ${contrastColor}`
+        ? `${strokeWidth}px ${contrastColor}`
         : '0 transparent'
   );
 }

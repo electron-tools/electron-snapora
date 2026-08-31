@@ -56,24 +56,25 @@ export function calculateTextBaselinePosition(
   };
 }
 
-/** 把 textarea 实际内容区域换算为 Image Pixel，供填充背景提交后直接复用。 */
+export function getTextStrokeWidth(fontSize: number): number {
+  return Math.max(1, Math.round(fontSize * 0.08));
+}
+
+/**
+ * 将 textarea 外框换算为 Image Pixel 填充背景。
+ * 包含边框整体范围，确保与输入态完全贴合，消除确认后的尺寸跳变和闪烁。
+ */
 export function calculateTextFillBounds(
   editorOrigin: Point,
   editorSize: Size,
-  borderWidths: { left: number; right: number; top: number; bottom: number },
+  _borderWidths: { left: number; right: number; top: number; bottom: number } | undefined,
   imageScale: number
 ): Rect {
   return {
-    x: editorOrigin.x + borderWidths.left * imageScale,
-    y: editorOrigin.y + borderWidths.top * imageScale,
-    width: Math.max(
-      1,
-      (editorSize.width - borderWidths.left - borderWidths.right) * imageScale
-    ),
-    height: Math.max(
-      1,
-      (editorSize.height - borderWidths.top - borderWidths.bottom) * imageScale
-    ),
+    x: editorOrigin.x,
+    y: editorOrigin.y,
+    width: Math.max(1, editorSize.width * imageScale),
+    height: Math.max(1, editorSize.height * imageScale),
   };
 }
 

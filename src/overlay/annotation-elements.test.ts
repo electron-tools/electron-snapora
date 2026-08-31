@@ -6,6 +6,7 @@ import {
   getElementBounds,
   getResizeHandleAtPoint,
   getTextFillColor,
+  getTextStrokeWidth,
   hitTestElement,
   isElementResizable,
   measureTextBaselineMetrics,
@@ -245,7 +246,13 @@ describe('annotation element geometry', () => {
     expect(getTextFillColor('fill', '#ffffff')).toBe('#111111');
   });
 
-  it('converts the textarea content box to scaled fill bounds', () => {
+  it('calculates consistent text stroke width from font size', () => {
+    expect(getTextStrokeWidth(14)).toBe(1);
+    expect(getTextStrokeWidth(24)).toBe(2);
+    expect(getTextStrokeWidth(36)).toBe(3);
+  });
+
+  it('converts the textarea editor box to scaled fill bounds', () => {
     expect(
       calculateTextFillBounds(
         { x: 100, y: 60 },
@@ -253,7 +260,7 @@ describe('annotation element geometry', () => {
         { left: 1, right: 1, top: 1, bottom: 1 },
         1.25
       )
-    ).toEqual({ x: 101.25, y: 61.25, width: 86.25, height: 58.75 });
+    ).toEqual({ x: 100, y: 60, width: 88.75, height: 61.25 });
   });
 
   it('prefers the captured editor bounds for fill text', () => {

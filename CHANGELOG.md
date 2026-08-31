@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.11] - 2026-08-31
+
+### Changed
+
+- Remove intrusive export progress and save-cancel status messages during screenshot saving to provide a cleaner capture experience.
+- Use transparent placeholder borders for text editor presets to avoid visual jumping or flashing when editing completes.
+- Apply `paint-order: stroke fill` to the text editor to ensure editing typography and stroke styles perfectly match Canvas output.
+
+### Fixed
+
+- Align filled text backgrounds with the exact editor bounds during creation and confirmation, eliminating bounding-box shrinking and flashing.
+- Synchronize outline and shadow stroke width calculation between DOM text input and Canvas rendering.
+- Keep baseline alignment consistent across all text annotation presets.
+
 ## [1.0.10] - 2026-08-27
 
 ### Changed
