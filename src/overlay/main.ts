@@ -120,6 +120,7 @@ const selectionElement = requireElement('.selection');
 const windowSnapPreview = requireElement<HTMLElement>('.window-snap-preview');
 const sizeHint = requireElement<HTMLOutputElement>('.size-hint');
 const toolbar = requireElement('.selection-toolbar');
+const textEditorContainer = requireElement<HTMLElement>('.text-editor-container');
 const textEditor = requireElement<HTMLTextAreaElement>('.text-editor');
 const cancelButton = requireElement<HTMLButtonElement>('.cancel-button');
 const saveButton = requireElement<HTMLButtonElement>('.save-button');
@@ -561,7 +562,7 @@ window.addEventListener('keydown', (event) => {
     colorControl.focus();
     return;
   }
-  if (!textEditor.hidden) {
+  if (!textEditorContainer.hidden) {
     return;
   }
   const eventTarget = event.target;
@@ -639,7 +640,7 @@ function handleCanvasPointerDown(event: PointerEvent): void {
     return;
   }
   // textarea 会被下一次文字点击复用，必须在清空并移动它之前提交当前内容。
-  if (!textEditor.hidden) {
+  if (!textEditorContainer.hidden) {
     closeTextEditor(true);
   }
   event.stopPropagation();
@@ -1044,8 +1045,7 @@ function openTextEditor(viewportPoint: Point, imagePoint: Point): void {
   pendingTextPoint = imagePoint;
   pendingTextViewportPoint = viewportPoint;
   textEditor.value = '';
-  textEditor.hidden = false;
-  textEditor.style.transform = `translate(${viewportPoint.x}px, ${viewportPoint.y}px)`;
+  textEditorContainer.hidden = false;
   applyTextEditorPreset(style.textStyle, style.color, fontSize);
   textEditor.style.fontSize = `${fontSize}px`;
   resizeTextEditor();
@@ -1059,44 +1059,86 @@ function resizeTextEditor(): void {
     return;
   }
   const editorStyle = window.getComputedStyle(textEditor);
+  const containerStyle = window.getComputedStyle(textEditorContainer);
   const fontSize = parseCssPixels(editorStyle.fontSize) || 14;
   const textWidth = textEditor.value
     ? measureTextLayout(annotationContext, textEditor.value, fontSize).width
     : 0;
-  const horizontalChrome =
-    parseCssPixels(editorStyle.borderLeftWidth) +
-    parseCssPixels(editorStyle.borderRightWidth) +
+
+  const containerPaddingX =
+    parseCssPixels(containerStyle.paddingLeft) +
+    parseCssPixels(containerStyle.paddingRight);
+  const containerBorderX =
+    parseCssPixels(containerStyle.borderLeftWidth) +
+    parseCssPixels(containerStyle.borderRightWidth);
+  const containerChromeX = containerPaddingX + containerBorderX;
+
+  const containerPaddingY =
+    parseCssPixels(containerStyle.paddingTop) +
+    parseCssPixels(containerStyle.paddingBottom);
+  const containerBorderY =
+    parseCssPixels(containerStyle.borderTopWidth) +
+    parseCssPixels(containerStyle.borderBottomWidth);
+  const containerChromeY = containerPaddingY + containerBorderY;
+
+  const editorPaddingX =
     parseCssPixels(editorStyle.paddingLeft) +
     parseCssPixels(editorStyle.paddingRight);
-  const minimumWidth = Math.min(44, selection.width);
-  const targetWidth = Math.min(
-    selection.width,
-    Math.max(minimumWidth, Math.ceil(textWidth + horizontalChrome + 4))
-  );
-  textEditor.style.minWidth = `${minimumWidth}px`;
-  textEditor.style.width = `${targetWidth}px`;
-  textEditor.style.height = 'auto';
-  const borderHeight = textEditor.offsetHeight - textEditor.clientHeight;
-  const minimumHeight = Math.min(42, selection.height);
-  const desiredHeight = Math.max(textEditor.scrollHeight + borderHeight, minimumHeight);
-  const targetHeight = Math.min(selection.height, desiredHeight);
-  textEditor.style.minHeight = `${minimumHeight}px`;
-  textEditor.style.height = `${targetHeight}px`;
-  textEditor.style.overflowY = desiredHeight > targetHeight ? 'auto' : 'hidden';
 
+  const minEditorWidth = 36;
+  const minEditorHeight = 32;
+
+  const desiredEditorWidth = Math.max(
+    minEditorWidth,
+    Math.ceil(textWidth + editorPaddingX + 4)
+  );
+  const targetContainerWidth = Math.min(
+    selection.width,
+    desiredEditorWidth + containerChromeX
+  );
+  const actualEditorWidth = Math.max(
+    minEditorWidth,
+    targetContainerWidth - containerChromeX
+  );
+
+  textEditor.style.width = `${actualEditorWidth}px`;
+  textEditor.style.height = 'auto';
+
+  const desiredEditorHeight = Math.max(
+    textEditor.scrollHeight,
+    minEditorHeight
+  );
+  const targetContainerHeight = Math.min(
+    selection.height,
+    desiredEditorHeight + containerChromeY
+  );
+  const actualEditorHeight = Math.max(
+    minEditorHeight,
+    targetContainerHeight - containerChromeY
+  );
+
+  textEditor.style.height = `${actualEditorHeight}px`;
+  textEditor.style.overflowY =
+    desiredEditorHeight > actualEditorHeight ? 'auto' : 'hidden';
+
+  // 水平位置：鼠标点击处右边出现，限制在选区内
   const left = Math.min(
     Math.max(anchor.x, selection.x),
-    selection.x + selection.width - targetWidth
+    selection.x + selection.width - targetContainerWidth
   );
+
+  // 垂直位置：相对鼠标点击点上下居中，限制在选区内
+  const desiredTop = anchor.y - targetContainerHeight / 2;
   const top = Math.min(
-    Math.max(anchor.y, selection.y),
-    selection.y + selection.height - targetHeight
+    Math.max(desiredTop, selection.y),
+    selection.y + selection.height - targetContainerHeight
   );
-  textEditor.style.transform = `translate(${left}px, ${top}px)`;
+
+  textEditorContainer.style.transform = `translate(${left}px, ${top}px)`;
 }
 
 function closeTextEditor(commit: boolean): void {
-  if (textEditor.hidden) {
+  if (textEditorContainer.hidden) {
     return;
   }
   const rawValue = textEditor.value;
@@ -1122,23 +1164,21 @@ function closeTextEditor(commit: boolean): void {
     );
     const surfaceBounds = surface.getBoundingClientRect();
     const editorBounds = textEditor.getBoundingClientRect();
-    // 使用浏览器实际布局后的边框坐标，吸收不同系统的子像素取整差异。
+    // 使用内部输入区实际布局后的视口坐标换算为 Image Pixel
     const editorOrigin = toImagePoint({
       x: editorBounds.left - surfaceBounds.left,
       y: editorBounds.top - surfaceBounds.top,
     });
-    const borderLeft = parseCssPixels(editorStyle.borderLeftWidth);
-    const borderRight = parseCssPixels(editorStyle.borderRightWidth);
-    const borderTop = parseCssPixels(editorStyle.borderTopWidth);
-    const borderBottom = parseCssPixels(editorStyle.borderBottomWidth);
+    const paddingLeft = parseCssPixels(editorStyle.paddingLeft);
+    const paddingTop = parseCssPixels(editorStyle.paddingTop);
     const contentOffset = {
-      x: (borderLeft + parseCssPixels(editorStyle.paddingLeft)) * imageScale,
-      y: (borderTop + parseCssPixels(editorStyle.paddingTop)) * imageScale,
+      x: paddingLeft * imageScale,
+      y: paddingTop * imageScale,
     };
     const fillBounds = calculateTextFillBounds(
       editorOrigin,
       { width: editorBounds.width, height: editorBounds.height },
-      { left: borderLeft, right: borderRight, top: borderTop, bottom: borderBottom },
+      undefined,
       imageScale
     );
     const measuredLineHeight = parseCssPixels(editorStyle.lineHeight) * imageScale;
@@ -1166,7 +1206,7 @@ function closeTextEditor(commit: boolean): void {
   }
   pendingTextPoint = null;
   pendingTextViewportPoint = null;
-  textEditor.hidden = true;
+  textEditorContainer.hidden = true;
   textEditor.value = '';
 }
 
@@ -1682,7 +1722,7 @@ function setPresetButtonState(button: HTMLButtonElement, active: boolean): void 
 function applyColor(color: string): void {
   annotationStore.setStyle({ color });
   commitSelectedElementStyle({ color });
-  if (!textEditor.hidden) {
+  if (!textEditorContainer.hidden) {
     const style = annotationStore.getState().style;
     applyTextEditorPreset(style.textStyle, color, Math.max(14, style.fontSize));
   }
@@ -1848,7 +1888,7 @@ function hsvToHex(color: HsvColor): string {
 function applyFontSize(fontSize: number): void {
   annotationStore.setStyle({ fontSize });
   commitSelectedElementStyle({ fontSize: fontSize * getImageScale() });
-  if (!textEditor.hidden) {
+  if (!textEditorContainer.hidden) {
     const style = annotationStore.getState().style;
     const effectiveFontSize = Math.max(14, fontSize);
     textEditor.style.fontSize = `${effectiveFontSize}px`;
@@ -1861,7 +1901,7 @@ function applyFontSize(fontSize: number): void {
 function applyTextStyle(textStyle: TextStyle): void {
   annotationStore.setStyle({ textStyle });
   commitSelectedElementStyle({ textStyle });
-  if (!textEditor.hidden) {
+  if (!textEditorContainer.hidden) {
     const style = annotationStore.getState().style;
     applyTextEditorPreset(textStyle, style.color, Math.max(14, style.fontSize));
     resizeTextEditor();
@@ -1882,9 +1922,6 @@ function applyTextEditorPreset(
   textEditor.style.backgroundColor = textStyle === 'fill' ? color : 'transparent';
   textEditor.style.textShadow = 'none';
   textEditor.style.paintOrder = 'stroke fill';
-  // 带背景色预设：输入框边框颜色与背景色一致；
-  // 普通和描边预设：边框设为透明（保留边框占位以保持精确几何布局），避免确认后边框突兀消失闪烁。
-  textEditor.style.borderColor = textStyle === 'fill' ? color : 'transparent';
   textEditor.style.setProperty(
     '-webkit-text-stroke',
     textStyle === 'shadow'

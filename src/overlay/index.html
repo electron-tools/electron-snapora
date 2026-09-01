@@ -440,14 +440,15 @@
             aria-label="Hue"
           />
         </div>
-        <textarea
-          class="text-editor"
-          rows="1"
-          wrap="soft"
-          maxlength="500"
-          aria-label="Annotation text"
-          hidden
-        ></textarea>
+        <div class="text-editor-container" hidden>
+          <textarea
+            class="text-editor"
+            rows="1"
+            wrap="soft"
+            maxlength="500"
+            aria-label="Annotation text"
+          ></textarea>
+        </div>
         <p class="status">Preparing screenshot…</p>
         <div class="copy-feedback" role="status" aria-live="polite" hidden>
           <span class="copy-feedback-icon" aria-hidden="true">

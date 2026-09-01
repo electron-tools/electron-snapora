@@ -91,16 +91,20 @@ export function measureTextBaselineMetrics(
   const previousFont = context.font;
   context.font = getTextCanvasFont(fontSize);
   try {
-    const metrics = context.measureText(splitTextLines(value)[0] || 'Mg');
+    const firstLine = splitTextLines(value)[0] || 'Mg国';
+    const lineMetrics = context.measureText(firstLine);
+    const referenceMetrics = context.measureText('Mg国');
     return {
       ascent: positiveMetric(
-        metrics.fontBoundingBoxAscent,
-        metrics.actualBoundingBoxAscent,
+        lineMetrics.fontBoundingBoxAscent,
+        referenceMetrics.fontBoundingBoxAscent,
+        referenceMetrics.actualBoundingBoxAscent,
         fontSize * 0.8
       ),
       descent: positiveMetric(
-        metrics.fontBoundingBoxDescent,
-        metrics.actualBoundingBoxDescent,
+        lineMetrics.fontBoundingBoxDescent,
+        referenceMetrics.fontBoundingBoxDescent,
+        referenceMetrics.actualBoundingBoxDescent,
         fontSize * 0.2
       ),
     };
