@@ -137,6 +137,7 @@ function verifyPackagingMode(consumerDirectory, mode, asar) {
       `--config.asar=${String(asar)}`,
       `--config.electronDist=${electronDist}`,
       `--config.directories.output=${outputDirectory}`,
+      '--config.win.signAndEditExecutable=false',
     ],
     repositoryRoot
   );

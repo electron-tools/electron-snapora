@@ -176,9 +176,18 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
     }
     await this.#ensurePermission();
 
-    const source = sources.find(
-      (candidate) => candidate.display_id === String(display.id)
-    );
+    const allDisplays = this.#screen.getAllDisplays();
+    const targetIdStr = String(display.id);
+    const source =
+      sources.find((candidate) => candidate.display_id === targetIdStr) ??
+      sources.find(
+        (candidate) =>
+          candidate.id === `screen:${targetIdStr}:0` ||
+          candidate.id.startsWith(`screen:${targetIdStr}:`)
+      ) ??
+      (sources.every((s) => !s.display_id) && sources.length === allDisplays.length
+        ? sources[allDisplays.findIndex((d) => d.id === display.id)]
+        : undefined);
     if (!source) {
       await this.#ensurePermission();
       throw new ScreenshotError(
@@ -244,10 +253,19 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
       )
       .then((sources) => {
         this.#desktopSourceIds.clear();
+        const allDisplays = this.#screen.getAllDisplays();
         for (const source of sources) {
           if (source.display_id && source.id) {
             this.#desktopSourceIds.set(source.display_id, source.id);
           }
+        }
+        if (sources.every((s) => !s.display_id) && sources.length === allDisplays.length) {
+          sources.forEach((source, index) => {
+            const displayItem = allDisplays[index];
+            if (displayItem && source.id && !this.#desktopSourceIds.has(String(displayItem.id))) {
+              this.#desktopSourceIds.set(String(displayItem.id), source.id);
+            }
+          });
         }
       })
       .finally(() => {
