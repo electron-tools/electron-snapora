@@ -3,42 +3,55 @@
 [![npm version](https://img.shields.io/npm/v/electron-snapora?style=flat-square&color=cb3837)](https://www.npmjs.com/package/electron-snapora)
 [![npm total downloads](https://img.shields.io/npm/dt/electron-snapora?style=flat-square&color=blue)](https://www.npmjs.com/package/electron-snapora)
 [![npm monthly downloads](https://img.shields.io/npm/dm/electron-snapora?style=flat-square&color=2088FF)](https://www.npmjs.com/package/electron-snapora)
-[![CI Status](https://img.shields.io/github/actions/workflow/status/electron-tools/electron-snapora/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/electron-tools/electron-snapora/actions)
+[![License](https://img.shields.io/npm/l/electron-snapora?style=flat-square)](https://github.com/electron-tools/electron-snapora/blob/main/LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square)](https://github.com/electron-tools/electron-snapora)
+[![Modules](https://img.shields.io/badge/Modules-ESM%20%7C%20CJS-informational?style=flat-square)](https://github.com/electron-tools/electron-snapora)
 [![Electron Version](https://img.shields.io/badge/Electron-%3E%3D42-47848F?style=flat-square&logo=electron&logoColor=white)](https://www.electronjs.org)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Zero Native Addons](https://img.shields.io/badge/Native%20Addons-0-success?style=flat-square)](https://github.com/electron-tools/electron-snapora)
-[![License](https://img.shields.io/npm/l/electron-snapora?style=flat-square)](https://github.com/electron-tools/electron-snapora/blob/main/LICENSE)
-[![GitHub Stars](https://img.shields.io/github/stars/electron-tools/electron-snapora?style=flat-square)](https://github.com/electron-tools/electron-snapora/stargazers)
+[![CI Status](https://img.shields.io/github/actions/workflow/status/electron-tools/electron-snapora/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/electron-tools/electron-snapora/actions)
 
 [English](https://github.com/electron-tools/electron-snapora/blob/main/README.md) | [简体中文](https://github.com/electron-tools/electron-snapora/blob/main/README.zh-CN.md) | [日本語](https://github.com/electron-tools/electron-snapora/blob/main/README.ja.md) | [한국어](https://github.com/electron-tools/electron-snapora/blob/main/README.ko.md) | Español
 
-Añade captura por región, selección interactiva, anotaciones, copia al portapapeles y exportación PNG a aplicaciones Electron.
+Una biblioteca de capturas de pantalla para Electron con configuración en una línea, IPC seguro mediante Preload, selección por región, anotaciones interactivas, copia al portapapeles, exportación PNG y ventanas fijas en pantalla.
 
 <p align="center">
   <img src="./docs/assets/preview.jpg" alt="electron-snapora preview" width="800" />
 </p>
 
-## Funciones
+## Características principales
 
-- Captura de regiones rectangulares mediante una superposición interactiva.
-- Anotaciones con rectángulos, elipses, flechas, pincel, texto, mosaico ajustable y marca de agua.
-- Deshacer, rehacer, copiar, guardar PNG de forma nativa y fijar capturas en pantalla.
-- Compatible con TypeScript, ESM y CommonJS.
-- Sin complementos nativos ni compilación posterior a la instalación.
+- **Captura por región**：Captura de pantalla por pantalla seleccionada o posición del cursor.
+- **Superposición interactiva**：Selección libre mediante arrastre y 8 manejadores de redimensionamiento.
+- **Herramientas de anotación**：Rectángulos, elipses, flechas, pincel, texto (estilos estándar/fondo relleno/trazo), mosaico regulable y marca de agua.
+- **Experiencia fluida**：Arrastra anotaciones existentes directamente sin salir de la herramienta de dibujo activa.
+- **Salida y fijación**：Copia al portapapeles, guardado PNG nativo y ventanas flotantes fijadas siempre visibles.
+- **Ventana fija escalable**：Siempre visible en el nivel superior, redimensionamiento proporcional por arrastre y menú contextual.
+- **Soporte para TypeScript, ESM y CommonJS**：Tipos integrados.
+- **Cero dependencias nativas (Zero Native Addons)**：Sin módulos C++ nativos ni compilación posterior a la instalación.
+
+Repositorio: [github.com/electron-tools/electron-snapora](https://github.com/electron-tools/electron-snapora)  
+Soporte: [GitHub Issues](https://github.com/electron-tools/electron-snapora/issues) · [@novratools on X](https://x.com/novratools)  
+Política de marcas: [TRADEMARKS.md](https://github.com/electron-tools/electron-snapora/blob/main/TRADEMARKS.md)
 
 ## Inicio rápido
 
-Requisitos: Node.js 20 o posterior y Electron 42 o posterior.
+**Requisitos mínimos:** Electron 42 o posterior, Node.js 20 o posterior.
 
-### 1. Instalar
+### 1. Instalación
 
 ```bash
 npm install electron-snapora
 ```
 
-Mantén el paquete en las `dependencies` de producción de la aplicación.
+Si la aplicación host no tiene Electron instalado:
 
-### 2. Configurar el proceso principal
+```bash
+npm install --save-dev electron
+```
+
+### 2. Configuración en el proceso principal
 
 ```ts
 import { app, BrowserWindow, ipcMain } from 'electron';
@@ -69,11 +82,29 @@ if (result.status === 'completed') {
 }
 ```
 
-`result.data` contiene los bytes PNG. Una cancelación devuelve `cancelled` y un error devuelve `failed`.
+Devuelve `cancelled` si el usuario cancela o `failed` si se produce un error.
+
+Para cancelar una tarea de captura en curso desde el mismo Renderer:
+
+```ts
+await window.electronSnapora.cancel();
+```
+
+Declaración de tipos para TypeScript:
+
+```ts
+import type { ScreenshotRendererApi } from 'electron-snapora/types';
+
+declare global {
+  interface Window {
+    electronSnapora: ScreenshotRendererApi;
+  }
+}
+```
 
 ## Aplicaciones con un Preload existente
 
-Expón la API desde el Preload de la aplicación y empaqueta ese Preload con la herramienta de compilación del host.
+Si la aplicación tiene su propio script Preload, ignora `snapora.preloadPath` y expón la API dentro de tu Preload:
 
 ```ts
 import { contextBridge, ipcRenderer } from 'electron';
@@ -82,12 +113,72 @@ import { exposeScreenshotApi } from 'electron-snapora/preload';
 exposeScreenshotApi({ contextBridge, ipcRenderer });
 ```
 
-## Empaquetado
+## Validación del origen del remitente
 
-Al empaquetar el proceso principal de Electron, mantén `electron-snapora` como external y como dependencia de producción. Así se instalarán los archivos HTML, CSS y Preload del Overlay junto con la aplicación.
+```ts
+const snapora = setupElectronSnapora({
+  ipcMain,
+  validateSender(event) {
+    const senderUrl = event.senderFrame?.url;
+    if (!senderUrl) return false;
 
-Consulta la [documentación completa en inglés](https://github.com/electron-tools/electron-snapora/blob/main/README.md) para temas, localización, validación del origen IPC, cola de concurrencia, diagnóstico y configuración de empaquetadores.
+    const url = new URL(senderUrl);
+    return (
+      url.protocol === 'app:' ||
+      (process.env.NODE_ENV === 'development' && url.origin === 'http://localhost:5173')
+    );
+  },
+});
+```
 
-Repositorio: [github.com/electron-tools/electron-snapora](https://github.com/electron-tools/electron-snapora)
+## Configuración avanzada
 
-Licencia: [MIT](https://github.com/electron-tools/electron-snapora/blob/main/LICENSE)
+### Temas y localización
+
+```ts
+await window.electronSnapora.capture({
+  locale: 'es-ES',
+  theme: {
+    mode: 'dark',
+    accentColor: '#0a84ff',
+  },
+});
+```
+
+### Límites de recursos
+
+```ts
+const snapora = setupElectronSnapora({
+  ipcMain,
+  managerOptions: {
+    resourceLimits: {
+      maxCapturePixels: 32 * 1024 * 1024,
+      maxCaptureDataUrlBytes: 96 * 1024 * 1024,
+      maxOutputBytes: 32 * 1024 * 1024,
+    },
+  },
+});
+```
+
+## Empaquetado y compilación
+
+Al empaquetar el proceso principal, mantén `electron-snapora` como external (compatible con electron-vite, Webpack, electron-builder y Forge).
+
+## Tabla de códigos de error
+
+| Código | Significado |
+| :--- | :--- |
+| `CAPTURE_BUSY` | La tarea o la cola de captura está ocupada. |
+| `INVALID_REQUEST` | Error de validación en la solicitud o parámetros. |
+| `RESOURCE_LIMIT_EXCEEDED` | Se superaron los límites de tamaño o memoria. |
+| `PERMISSION_DENIED` | Permiso de grabación de pantalla denegado por el SO. |
+| `DISPLAY_NOT_FOUND` | No se encontró la pantalla objetivo. |
+| `CAPTURE_FAILED` | No se pudo capturar el fotograma de la pantalla. |
+| `OVERLAY_LOAD_FAILED` | Error al cargar los recursos del Overlay. |
+| `EXPORT_FAILED` | Falló la salida PNG, el portapapeles o el guardado. |
+| `INVALID_RESULT` | Datos de resultado no válidos. |
+| `UNSUPPORTED_PLATFORM` | Plataforma o protocolo de pantalla no compatible. |
+
+## Licencia y marcas
+
+El código fuente está licenciado bajo la [Licencia MIT](https://github.com/electron-tools/electron-snapora/blob/main/LICENSE). El nombre y la marca de `electron-snapora` se rigen por la [Política de marcas](https://github.com/electron-tools/electron-snapora/blob/main/TRADEMARKS.md).

@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.12] - 2026-09-01
+
+### Added
+
+- Add dual `.text-editor-container` and `.text-editor` structure to provide clear theme-accented outer border feedback across all text presets with a 4 px breathable gap.
+- Add platform, dual module format (ESM & CommonJS), and Node.js requirement badges across all documentation languages.
+
+### Changed
+
+- Center text editor vertically at the click anchor point and expand horizontally to the right within the screenshot selection.
+- Update repository preview with a 100% real DOM rendered, pure English dark-mode showcase image.
+- Synchronize all localized READMEs (`zh-CN`, `ja`, `ko`, `es`) with the complete canonical documentation.
+
+### Fixed
+
+- Eliminate pixel jitter and baseline shift during text annotation confirmation by stabilizing font metric measurements and locking editor origin.
+
 ## [1.0.11] - 2026-08-31
 
 ### Changed
