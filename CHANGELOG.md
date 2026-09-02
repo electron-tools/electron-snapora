@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.13] - 2026-09-02
+
+### Changed
+
+- Remove automatic `sender.focus()` invocation on capture completion and cancellation, allowing host applications to manage window focus independently.
+
+### Fixed
+
+- Unify text annotation geometry and layout across input, canvas commit, focus highlight, and re-editing states via `inputBounds` and centralized `getTextEditorLayout` calculation, eliminating baseline shifts, focus outline misalignments, and bounding box shrinking upon double-click re-editing.
+- Calculate multiline text editor height based on measured line heights and line count to ensure expansion without internal scrolling or container clipping.
+
 ## [1.0.12] - 2026-09-01
 
 ### Added

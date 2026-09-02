@@ -249,19 +249,6 @@ function createDefaultRunner(
             return response;
           }
         ),
-      onSettled: (result) => {
-        if (result.status === 'completed' && result.output.action === 'pin') {
-          return;
-        }
-        if (context.senderWebContentsId === undefined) {
-          return;
-        }
-
-        const sender = webContents.fromId(context.senderWebContentsId);
-        if (sender && !sender.isDestroyed()) {
-          sender.focus();
-        }
-      },
     });
 
     return {
