@@ -25,6 +25,7 @@ import {
   getElementBounds,
   getResizeHandleAtPoint,
   getTextContrastColor,
+  getTextEditorLayout,
   getTextFillColor,
   getTextStrokeWidth,
   hitTestElement,
@@ -32,11 +33,11 @@ import {
   measureTextBaselineMetrics,
   measureTextLayout,
   scaleElementToBounds,
+  splitTextLines,
   translateElement,
   updateDrawableElement,
   updateElementStyle,
   wrapTextToWidth,
-  TEXT_LINE_HEIGHT,
   type AnnotationElementStyle,
 } from './annotation-elements.js';
 import { drawAnnotations, type WatermarkOptions } from './annotation-renderer.js';
@@ -184,6 +185,7 @@ let windowSnapRegions: Rect[] = [];
 let hoveredWindowSnap: Rect | null = null;
 let pendingTextPoint: Point | null = null;
 let pendingTextViewportPoint: Point | null = null;
+let editingTextElement: TextElement | null = null;
 // 固定预设只保存颜色值；单独记录来源，确保相同色值也能呈现为“自定义”。
 let customColorSelected = false;
 let customColor = colorInput.value.toLowerCase();
@@ -208,6 +210,7 @@ interface AnnotationCanvasRenderCache {
   preview: AnnotationState['preview'];
   movingElementId: string | null;
   selectedElementId: AnnotationState['selectedElementId'];
+  editingTextId: string | null;
   watermarkKey: string;
 }
 
@@ -672,13 +675,36 @@ function handleCanvasPointerDown(event: PointerEvent): void {
 
   const imagePoint = toImagePoint(viewportPoint);
   const annotationState = annotationStore.getState();
+  const tolerance = getImageScale() * 8;
+  const elements = getRenderableElements(annotationState);
+
   if (annotationState.activeTool === 'select') {
     beginSelectInteraction(event.pointerId, imagePoint, viewportPoint);
   } else if (annotationState.activeTool === 'text') {
+    // 检查是否点击了已确认的文字：立即显示边框效果并支持拖拽移动
+    const hitText = hitTestElement(
+      elements.filter((el): el is TextElement => el.type === 'text'),
+      imagePoint,
+      tolerance
+    );
+    if (hitText) {
+      annotationStore.select(hitText.id);
+      pointerInteraction = {
+        kind: 'move-element',
+        pointerId: event.pointerId,
+        origin: imagePoint,
+        before: hitText,
+        started: true,
+        temporary: false,
+      };
+      return;
+    }
+
     if (beginDirectElementMove(event.pointerId, imagePoint)) {
       return;
     }
-    // Canvas 的默认聚焦发生在 pointerdown 处理之后，会让刚打开的文字编辑框立即 blur。
+    // 点击空白处：取消旧选中，打开新的文字输入框
+    annotationStore.select(null);
     event.preventDefault();
     annotationCanvas.releasePointerCapture(event.pointerId);
     openTextEditor(viewportPoint, imagePoint);
@@ -848,6 +874,24 @@ function handleCanvasDoubleClick(event: MouseEvent): void {
     !state.selection ||
     !containsPoint(state.selection, toSurfacePoint(event))
   ) {
+    return;
+  }
+
+  const viewportPoint = toSurfacePoint(event);
+  const imagePoint = toImagePoint(viewportPoint);
+  const textElements = (annotationStore.getState().document?.elements ?? []).filter(
+    (element): element is TextElement => element.type === 'text'
+  );
+  const hitText = hitTestElement(
+    textElements,
+    imagePoint,
+    getImageScale() * 8
+  ) as TextElement | undefined;
+
+  if (hitText) {
+    event.preventDefault();
+    event.stopPropagation();
+    openTextEditorForElement(hitText);
     return;
   }
 
@@ -1042,6 +1086,7 @@ function finishSelection(pointerId: number): void {
 function openTextEditor(viewportPoint: Point, imagePoint: Point): void {
   const style = annotationStore.getState().style;
   const fontSize = Math.max(14, style.fontSize);
+  editingTextElement = null;
   pendingTextPoint = imagePoint;
   pendingTextViewportPoint = viewportPoint;
   textEditor.value = '';
@@ -1050,6 +1095,57 @@ function openTextEditor(viewportPoint: Point, imagePoint: Point): void {
   textEditor.style.fontSize = `${fontSize}px`;
   resizeTextEditor();
   textEditor.focus();
+  renderAnnotationCanvas();
+}
+
+function openTextEditorForElement(element: TextElement): void {
+  const frame = selectionStore.getState().payload?.frames[0];
+  if (!frame) {
+    return;
+  }
+  editingTextElement = element;
+  const imageScale = getImageScale();
+  const effectiveFontSize = Math.max(14, Math.round(element.fontSize / imageScale));
+
+  pendingTextPoint = element.position;
+  const lines = splitTextLines(element.value);
+  const layout = getTextEditorLayout(
+    element.metrics.width / imageScale,
+    lines.length,
+    effectiveFontSize,
+    1
+  );
+
+  if (element.inputBounds) {
+    pendingTextViewportPoint = {
+      x: element.inputBounds.x / imageScale,
+      y: element.inputBounds.y / imageScale,
+    };
+  } else {
+    pendingTextViewportPoint = {
+      x: element.position.x / imageScale - layout.offsetToBaseline.x,
+      y: (element.position.y - element.metrics.ascent) / imageScale - layout.offsetToBaseline.y,
+    };
+  }
+
+  textEditor.value = element.value;
+  textEditorContainer.hidden = false;
+
+  annotationStore.setStyle({
+    color: element.color,
+    fontSize: effectiveFontSize,
+    textStyle: element.textStyle ?? 'default',
+  });
+  applyTextEditorPreset(
+    element.textStyle ?? 'default',
+    element.color,
+    effectiveFontSize
+  );
+  textEditor.style.fontSize = `${effectiveFontSize}px`;
+  resizeTextEditor();
+  textEditor.focus();
+  textEditor.setSelectionRange(textEditor.value.length, textEditor.value.length);
+  renderAnnotationCanvas();
 }
 
 function resizeTextEditor(): void {
@@ -1059,80 +1155,66 @@ function resizeTextEditor(): void {
     return;
   }
   const editorStyle = window.getComputedStyle(textEditor);
-  const containerStyle = window.getComputedStyle(textEditorContainer);
   const fontSize = parseCssPixels(editorStyle.fontSize) || 14;
   const textWidth = textEditor.value
     ? measureTextLayout(annotationContext, textEditor.value, fontSize).width
     : 0;
 
-  const containerPaddingX =
-    parseCssPixels(containerStyle.paddingLeft) +
-    parseCssPixels(containerStyle.paddingRight);
-  const containerBorderX =
-    parseCssPixels(containerStyle.borderLeftWidth) +
-    parseCssPixels(containerStyle.borderRightWidth);
-  const containerChromeX = containerPaddingX + containerBorderX;
+  const lines = splitTextLines(textEditor.value);
+  const layout = getTextEditorLayout(textWidth, lines.length, fontSize, 1);
 
-  const containerPaddingY =
-    parseCssPixels(containerStyle.paddingTop) +
-    parseCssPixels(containerStyle.paddingBottom);
-  const containerBorderY =
-    parseCssPixels(containerStyle.borderTopWidth) +
-    parseCssPixels(containerStyle.borderBottomWidth);
-  const containerChromeY = containerPaddingY + containerBorderY;
+  let targetContainerWidth: number;
+  let targetContainerHeight: number;
 
-  const editorPaddingX =
-    parseCssPixels(editorStyle.paddingLeft) +
-    parseCssPixels(editorStyle.paddingRight);
+  if (
+    editingTextElement &&
+    editingTextElement.inputBounds &&
+    editingTextElement.value === textEditor.value
+  ) {
+    // 重新编辑且内容尚未变更时：尺寸与位置 100% 严格复用 inputBounds，0 变形 0 跳变
+    const imageScale = getImageScale();
+    targetContainerWidth = editingTextElement.inputBounds.width / imageScale;
+    targetContainerHeight = editingTextElement.inputBounds.height / imageScale;
+  } else {
+    targetContainerWidth = Math.min(selection.width, layout.containerWidth);
+    targetContainerHeight = Math.min(selection.height, layout.containerHeight);
+  }
 
-  const minEditorWidth = 36;
-  const minEditorHeight = 32;
-
-  const desiredEditorWidth = Math.max(
-    minEditorWidth,
-    Math.ceil(textWidth + editorPaddingX + 4)
-  );
-  const targetContainerWidth = Math.min(
-    selection.width,
-    desiredEditorWidth + containerChromeX
-  );
-  const actualEditorWidth = Math.max(
-    minEditorWidth,
-    targetContainerWidth - containerChromeX
-  );
+  const actualEditorWidth = Math.max(36, targetContainerWidth - 12);
+  const actualEditorHeight = Math.max(32, targetContainerHeight - 12);
 
   textEditor.style.width = `${actualEditorWidth}px`;
-  textEditor.style.height = 'auto';
-
-  const desiredEditorHeight = Math.max(
-    textEditor.scrollHeight,
-    minEditorHeight
-  );
-  const targetContainerHeight = Math.min(
-    selection.height,
-    desiredEditorHeight + containerChromeY
-  );
-  const actualEditorHeight = Math.max(
-    minEditorHeight,
-    targetContainerHeight - containerChromeY
-  );
-
   textEditor.style.height = `${actualEditorHeight}px`;
-  textEditor.style.overflowY =
-    desiredEditorHeight > actualEditorHeight ? 'auto' : 'hidden';
+  textEditor.style.overflowY = 'hidden';
 
-  // 水平位置：鼠标点击处右边出现，限制在选区内
-  const left = Math.min(
-    Math.max(anchor.x, selection.x),
-    selection.x + selection.width - targetContainerWidth
-  );
+  let left: number;
+  let top: number;
 
-  // 垂直位置：相对鼠标点击点上下居中，限制在选区内
-  const desiredTop = anchor.y - targetContainerHeight / 2;
-  const top = Math.min(
-    Math.max(desiredTop, selection.y),
-    selection.y + selection.height - targetContainerHeight
-  );
+  if (editingTextElement) {
+    // 重新编辑已有文字：anchor 即为外框左上角视口坐标，直接锁定 0 偏移
+    const desiredLeft = anchor.x;
+    const desiredTop = anchor.y;
+
+    left = Math.min(
+      Math.max(desiredLeft, selection.x),
+      selection.x + selection.width - targetContainerWidth
+    );
+    top = Math.min(
+      Math.max(desiredTop, selection.y),
+      selection.y + selection.height - targetContainerHeight
+    );
+  } else {
+    // 新建文字时：容器左上角紧贴点击点（留出 6px 容器 border+padding，让文字顶端对齐点击点）
+    left = Math.min(
+      Math.max(anchor.x - 6, selection.x),
+      selection.x + selection.width - targetContainerWidth
+    );
+    const desiredTop = anchor.y - 6;
+    top = Math.min(
+      Math.max(desiredTop, selection.y),
+      selection.y + selection.height - targetContainerHeight
+    );
+  }
 
   textEditorContainer.style.transform = `translate(${left}px, ${top}px)`;
 }
@@ -1142,6 +1224,9 @@ function closeTextEditor(commit: boolean): void {
     return;
   }
   const rawValue = textEditor.value;
+  const previousEditingElement = editingTextElement;
+  editingTextElement = null;
+
   if (commit && rawValue.trim() && pendingTextPoint) {
     const state = annotationStore.getState();
     const imageScale = getImageScale();
@@ -1164,6 +1249,16 @@ function closeTextEditor(commit: boolean): void {
     );
     const surfaceBounds = surface.getBoundingClientRect();
     const editorBounds = textEditor.getBoundingClientRect();
+    const containerBounds = textEditorContainer.getBoundingClientRect();
+
+    // 容器在 Image 坐标系下的绝对 bounds，永久存储保证选中态、拖拽态和重编 100% 绝对一致
+    const inputBounds: Rect = {
+      x: (containerBounds.left - surfaceBounds.left) * imageScale,
+      y: (containerBounds.top - surfaceBounds.top) * imageScale,
+      width: containerBounds.width * imageScale,
+      height: containerBounds.height * imageScale,
+    };
+
     // 使用内部输入区实际布局后的视口坐标换算为 Image Pixel
     const editorOrigin = toImagePoint({
       x: editorBounds.left - surfaceBounds.left,
@@ -1181,18 +1276,16 @@ function closeTextEditor(commit: boolean): void {
       undefined,
       imageScale
     );
-    const measuredLineHeight = parseCssPixels(editorStyle.lineHeight) * imageScale;
     const position = calculateTextBaselinePosition(
       editorOrigin,
       baselineMetrics,
-      contentOffset,
-      measuredLineHeight || fontSize * TEXT_LINE_HEIGHT
+      contentOffset
     );
     const element: TextElement = {
-      id: crypto.randomUUID(),
+      id: previousEditingElement ? previousEditingElement.id : crypto.randomUUID(),
       type: 'text',
-      zIndex: getNextZIndex(),
-      createdAt: Date.now(),
+      zIndex: previousEditingElement ? previousEditingElement.zIndex : getNextZIndex(),
+      createdAt: previousEditingElement ? previousEditingElement.createdAt : Date.now(),
       color: state.style.color,
       position,
       value,
@@ -1200,14 +1293,25 @@ function closeTextEditor(commit: boolean): void {
       metrics,
       textStyle: state.style.textStyle,
       ...(state.style.textStyle === 'fill' ? { fillBounds } : {}),
+      inputBounds,
     };
-    annotationStore.setDraft(element);
-    annotationStore.commitDraft(false);
+    if (previousEditingElement) {
+      annotationStore.commitUpdate(previousEditingElement, element);
+    } else {
+      annotationStore.setDraft(element);
+      annotationStore.commitDraft(false);
+    }
+  } else if (commit && !rawValue.trim() && previousEditingElement) {
+    annotationStore.deleteSelected();
   }
+
+  // 无论新建还是编辑提交，离开输入框后均取消选中，不残留高亮边框
+  annotationStore.select(null);
   pendingTextPoint = null;
   pendingTextViewportPoint = null;
   textEditorContainer.hidden = true;
   textEditor.value = '';
+  renderAnnotationCanvas();
 }
 
 function parseCssPixels(value: string): number {
@@ -1392,6 +1496,7 @@ function renderAnnotationCanvas(): void {
     preview: state.preview,
     movingElementId: directMovingElementId,
     selectedElementId: state.selectedElementId,
+    editingTextId: editingTextElement?.id ?? null,
     watermarkKey: watermark
       ? `${watermark.text}\u0000${watermark.color}\u0000${watermark.opacity}\u0000${watermark.fontSize}`
       : '',
@@ -1406,6 +1511,7 @@ function renderAnnotationCanvas(): void {
     previousCache.preview === nextCache.preview &&
     previousCache.movingElementId === nextCache.movingElementId &&
     previousCache.selectedElementId === nextCache.selectedElementId &&
+    previousCache.editingTextId === nextCache.editingTextId &&
     previousCache.watermarkKey === nextCache.watermarkKey
   ) {
     return;
@@ -1419,7 +1525,11 @@ function renderAnnotationCanvas(): void {
   const clipBounds = clipSelection
     ? viewportRectToImageRect(clipSelection, getSurfaceSize(), frame.pixelSize)
     : state.document.selection;
-  drawAnnotations(annotationContext, getRenderableElements(state), {
+  const rawElements = getRenderableElements(state);
+  const elements = editingTextElement
+    ? rawElements.filter((el) => el.id !== editingTextElement?.id)
+    : rawElements;
+  drawAnnotations(annotationContext, elements, {
     clipBounds,
     imageSize: frame.pixelSize,
     mosaicSource: screenFrame,
@@ -1919,6 +2029,7 @@ function applyTextEditorPreset(
   const strokeWidth = getTextStrokeWidth(fontSize);
   textEditor.dataset.textStyle = textStyle;
   textEditor.style.color = textFillColor;
+  textEditor.style.caretColor = textFillColor;
   textEditor.style.backgroundColor = textStyle === 'fill' ? color : 'transparent';
   textEditor.style.textShadow = 'none';
   textEditor.style.paintOrder = 'stroke fill';

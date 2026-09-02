@@ -1020,7 +1020,7 @@ input {
   z-index: 5;
   display: flex;
   box-sizing: border-box;
-  border: 1px solid var(--snapora-accent);
+  border: 2px solid var(--snapora-accent);
   border-radius: 8px;
   padding: 4px;
   background: transparent;

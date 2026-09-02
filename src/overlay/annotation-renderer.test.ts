@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AnnotationElement } from '../core/model/document.js';
-import { drawAnnotations } from './annotation-renderer.js';
+import { drawAnnotations, getTextFocusBounds } from './annotation-renderer.js';
 
 function createContext() {
   return {
@@ -266,7 +266,7 @@ describe('annotation renderer', () => {
     expect(context.fillRect).toHaveBeenCalledTimes(8);
   });
 
-  it('outlines selected text without resize handles', () => {
+  it('outlines selected text with breathable rounded border and without resize handles', () => {
     const context = createContext();
     const text: AnnotationElement = {
       ...base,
@@ -284,8 +284,8 @@ describe('annotation renderer', () => {
       selectionHandleSize: 8,
     });
 
-    expect(context.strokeRect).toHaveBeenCalledOnce();
-    expect(context.strokeRect).toHaveBeenCalledWith(10, 20, 90, 25);
+    expect(context.roundRect).toHaveBeenCalledWith(-4, 8, 122, 56, 8);
+    expect(context.stroke).toHaveBeenCalled();
     expect(context.fillRect).not.toHaveBeenCalled();
   });
 
@@ -308,9 +308,9 @@ describe('annotation renderer', () => {
       selectionHandleSize: 8,
     });
 
-    expect(textContext.strokeRect).toHaveBeenCalledTimes(2);
-    expect(textContext.strokeRect).toHaveBeenCalledWith(10, 20, 90, 25);
+    expect(textContext.roundRect).toHaveBeenCalledWith(-4, 8, 122, 56, 8);
     expect(textContext.strokeStyle).toBe('#6750a4');
+    expect(textContext.stroke).toHaveBeenCalled();
     expect(textContext.fillRect).not.toHaveBeenCalled();
 
     const mosaicContext = createContext();
@@ -351,5 +351,45 @@ describe('annotation renderer', () => {
     expect(context.translate).toHaveBeenCalledWith(140, 70);
     expect(context.fillText).toHaveBeenCalled();
     expect(context.globalAlpha).toBe(0.35);
+  });
+
+  it('calculates full breathable focus bounds matching input container dimensions', () => {
+    const defaultText: AnnotationElement = {
+      ...base,
+      id: 'text-1',
+      type: 'text',
+      position: { x: 50, y: 50 },
+      value: '2',
+      fontSize: 20,
+      metrics: { width: 12, ascent: 16, descent: 4 },
+    };
+
+    const bounds = getTextFocusBounds(defaultText, 8);
+    expect(bounds).toEqual({
+      x: 36,
+      y: 22,
+      width: 48,
+      height: 50,
+    });
+
+    const fillText: AnnotationElement = {
+      ...base,
+      id: 'text-fill',
+      type: 'text',
+      position: { x: 50, y: 50 },
+      value: '2',
+      fontSize: 20,
+      textStyle: 'fill',
+      fillBounds: { x: 40, y: 30, width: 60, height: 40 },
+      metrics: { width: 12, ascent: 16, descent: 4 },
+    };
+
+    const fillFocusBounds = getTextFocusBounds(fillText, 8);
+    expect(fillFocusBounds).toEqual({
+      x: 36,
+      y: 26,
+      width: 68,
+      height: 48,
+    });
   });
 });

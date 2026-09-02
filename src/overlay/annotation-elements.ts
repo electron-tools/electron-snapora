@@ -45,14 +45,59 @@ type TextBaselineMetrics = Pick<TextLayoutMetrics, 'ascent' | 'descent'> &
 export function calculateTextBaselinePosition(
   editorOrigin: Point,
   metrics: TextBaselineMetrics,
-  contentOffset: Point,
-  lineHeight: number
+  contentOffset: Point
 ): Point {
-  const fontBoxHeight = metrics.ascent + metrics.descent;
-  const leadingBeforeBaseline = Math.max(0, lineHeight - fontBoxHeight) / 2;
   return {
     x: editorOrigin.x + contentOffset.x,
-    y: editorOrigin.y + contentOffset.y + leadingBeforeBaseline + metrics.ascent,
+    y: editorOrigin.y + contentOffset.y + metrics.ascent,
+  };
+}
+
+/**
+ * 计算 Text 标注的 DOM 容器与 Canvas 排版几何信息。
+ * 容器结构：外层 .text-editor-container (border: 2px, padding: 4px) -> 内层 .text-editor (padding: 6px 8px, min-width: 36px, min-height: 32px)
+ * 单侧水平留白: 2 + 4 + 8 = 14px * scale
+ * 单侧垂直留白: 2 + 4 + 6 = 12px * scale
+ */
+export function getTextEditorLayout(
+  textWidth: number,
+  lineCount: number,
+  fontSize: number,
+  scale: number
+): {
+  editorWidth: number;
+  editorHeight: number;
+  containerWidth: number;
+  containerHeight: number;
+  offsetToBaseline: Point;
+} {
+  const lineHeight = fontSize * TEXT_LINE_HEIGHT;
+  const editorPaddingX = 16 * scale; // 8px * 2
+  const editorPaddingY = 12 * scale; // 6px * 2
+  const containerChrome = 12 * scale; // (4px padding + 2px border) * 2
+
+  const minEditorWidth = 36 * scale;
+  const minEditorHeight = 32 * scale;
+
+  const contentHeight = Math.max(1, lineCount) * lineHeight;
+
+  const editorWidth = Math.max(minEditorWidth, Math.ceil(textWidth + editorPaddingX + 4 * scale));
+  const editorHeight = Math.max(minEditorHeight, Math.ceil(contentHeight + editorPaddingY));
+
+  const containerWidth = editorWidth + containerChrome;
+  const containerHeight = editorHeight + containerChrome;
+
+  const offsetToBaseline = {
+    x: 14 * scale,
+    y: 12 * scale,
+  };
+
+  return {
+    editorWidth,
+    editorHeight,
+    containerWidth,
+    containerHeight,
+    offsetToBaseline,
   };
 }
 
@@ -374,13 +419,13 @@ export function updateElementStyle(
       const currentTextStyle = element.textStyle ?? 'default';
       const textStyle = style.textStyle ?? currentTextStyle;
       const scale = fontSize / element.fontSize;
-      const { fillBounds, ...textWithoutFillBounds } = element;
+      const { fillBounds, inputBounds, ...textWithoutBounds } = element;
       return color === element.color &&
         fontSize === element.fontSize &&
         textStyle === currentTextStyle
         ? element
         : {
-            ...textWithoutFillBounds,
+            ...textWithoutBounds,
             color,
             fontSize,
             textStyle,
@@ -391,6 +436,7 @@ export function updateElementStyle(
             fillBounds
               ? { fillBounds }
               : {}),
+            ...(fontSize === element.fontSize && inputBounds ? { inputBounds } : {}),
           };
     }
     case 'mosaic': {
@@ -507,6 +553,15 @@ export function translateElement(
                 ...element.fillBounds,
                 x: element.fillBounds.x + boundedDelta.x,
                 y: element.fillBounds.y + boundedDelta.y,
+              },
+            }
+          : {}),
+        ...(element.inputBounds
+          ? {
+              inputBounds: {
+                ...element.inputBounds,
+                x: element.inputBounds.x + boundedDelta.x,
+                y: element.inputBounds.y + boundedDelta.y,
               },
             }
           : {}),

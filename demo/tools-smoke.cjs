@@ -827,14 +827,16 @@ app.on('browser-window-created', (_event, window) => {
     const fillEditorStyle = await window.webContents.executeJavaScript(`
       (() => {
         const editor = document.querySelector('.text-editor');
+        const container = document.querySelector('.text-editor-container');
         const selection = document.querySelector('.selection');
         const style = editor ? getComputedStyle(editor) : null;
+        const containerStyle = container ? getComputedStyle(container) : null;
         const selectionStyle = selection ? getComputedStyle(selection) : null;
         return {
-          visible: Boolean(editor && !editor.hidden),
+          visible: Boolean(editor && !editor.hidden && container && !container.hidden),
           backgroundColor: style?.backgroundColor,
           color: style?.color,
-          borderColor: style?.borderTopColor,
+          borderColor: containerStyle?.borderTopColor,
           selectionBorderColor: selectionStyle?.borderTopColor,
         };
       })()
@@ -850,6 +852,10 @@ app.on('browser-window-created', (_event, window) => {
       );
     }
     await window.webContents.insertText('222');
+    await window.webContents.executeJavaScript(
+      `document.querySelector('.text-editor')?.dispatchEvent(new Event('input', { bubbles: true }))`
+    );
+    await nextFrame(window);
     await new Promise((resolve) => setTimeout(resolve, 50));
     const fillInputBounds = await getRedPixelBounds(window, textRegion);
     window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' });
@@ -868,17 +874,13 @@ app.on('browser-window-created', (_event, window) => {
       );
     }
     await activateTool(window, 'select');
-    sendClick(window, {
-      x:
-        textPoint.x +
-        Math.round((fillCommittedBounds.right - fillCommittedBounds.left) / 2),
-      y:
-        textPoint.y +
-        Math.round((fillCommittedBounds.bottom - fillCommittedBounds.top) / 2),
-    });
+    sendClick(window, textPoint);
+    await nextFrame(window);
+    await new Promise((resolve) => setTimeout(resolve, 50));
     window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Delete' });
     window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Delete' });
     await nextFrame(window);
+    await new Promise((resolve) => setTimeout(resolve, 50));
     await activateTool(window, 'text');
     await window.webContents.executeJavaScript(
       `document.querySelector('[data-text-style="default"]')?.click()`
@@ -923,6 +925,7 @@ app.on('browser-window-created', (_event, window) => {
     await nextFrame(window);
     const beforeText = await countRegionPixels(window, textRegion);
     sendClick(window, textPoint);
+    await nextFrame(window);
     await new Promise((resolve) => setTimeout(resolve, 100));
     const editorReady = await window.webContents.executeJavaScript(`
       (() => {
@@ -962,9 +965,11 @@ app.on('browser-window-created', (_event, window) => {
     const editorOverflow = await window.webContents.executeJavaScript(`
       (() => {
         const editor = document.querySelector('.text-editor');
+        const container = document.querySelector('.text-editor-container');
         const selection = document.querySelector('.selection');
         if (!editor) return null;
         const style = getComputedStyle(editor);
+        const containerStyle = container ? getComputedStyle(container) : null;
         const selectionStyle = selection ? getComputedStyle(selection) : null;
         return {
           overflowY: style.overflowY,
@@ -972,9 +977,9 @@ app.on('browser-window-created', (_event, window) => {
           clientHeight: editor.clientHeight,
           scrollHeight: editor.scrollHeight,
           backgroundColor: style.backgroundColor,
-          borderTopColor: style.borderTopColor,
+          borderTopColor: containerStyle?.borderTopColor,
           selectionBorderColor: selectionStyle?.borderTopColor,
-          borderTopWidth: style.borderTopWidth,
+          borderTopWidth: containerStyle?.borderTopWidth,
           boxShadow: style.boxShadow,
         };
       })()

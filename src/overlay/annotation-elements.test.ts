@@ -339,12 +339,11 @@ describe('annotation element geometry', () => {
     const position = calculateTextBaselinePosition(
       { x: 100, y: 60 },
       { width: 48, ascent: 20, descent: 6 },
-      { x: 11, y: 9 },
-      31.2
+      { x: 11, y: 9 }
     );
 
     expect(position.x).toBe(111);
-    expect(position.y).toBeCloseTo(91.6);
+    expect(position.y).toBe(89);
   });
 
   it('uses the font box baseline used by textarea layout when available', () => {

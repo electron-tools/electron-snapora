@@ -51,6 +51,8 @@ export interface TextElement extends AnnotationElementBase {
   textStyle?: TextStyle;
   /** 填充预设复用输入框内容区域，确保编辑态与 Canvas 背景边界一致。 */
   fillBounds?: Rect;
+  /** 记录输入态容器的真实盒模型边界（Image Pixel），确保选中态、拖拽态与输入态 100% 像素级对齐。 */
+  inputBounds?: Rect;
 }
 
 export interface MosaicElement extends AnnotationElementBase {

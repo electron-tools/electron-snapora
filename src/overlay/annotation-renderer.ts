@@ -9,6 +9,7 @@ import {
   getResizeHandlePoints,
   getTextCanvasFont,
   getTextContrastColor,
+  getTextEditorLayout,
   getTextFillColor,
   getTextStrokeWidth,
   isElementResizable,
@@ -72,12 +73,21 @@ export function drawAnnotations(
   }
   const moving = elements.find((element) => element.id === options.movingElementId);
   if (moving) {
-    drawMovingOutline(
-      context,
-      getElementBounds(moving),
-      options.selectionHandleSize ?? 8,
-      options.movingOutlineColor ?? '#0a84ff'
-    );
+    if (moving.type === 'text') {
+      drawTextFocusOutline(
+        context,
+        moving,
+        options.selectionHandleSize ?? 8,
+        options.movingOutlineColor ?? '#0a84ff'
+      );
+    } else {
+      drawMovingOutline(
+        context,
+        getElementBounds(moving),
+        options.selectionHandleSize ?? 8,
+        options.movingOutlineColor ?? '#0a84ff'
+      );
+    }
   }
   context.restore();
 
@@ -92,12 +102,21 @@ export function drawAnnotations(
 
   const selected = elements.find((element) => element.id === options.selectedElementId);
   if (selected) {
-    drawSelectionOutline(
-      context,
-      getElementBounds(selected),
-      options.selectionHandleSize ?? 8,
-      isElementResizable(selected)
-    );
+    if (selected.type === 'text') {
+      drawTextFocusOutline(
+        context,
+        selected,
+        options.selectionHandleSize ?? 8,
+        options.movingOutlineColor ?? '#0a84ff'
+      );
+    } else {
+      drawSelectionOutline(
+        context,
+        getElementBounds(selected),
+        options.selectionHandleSize ?? 8,
+        isElementResizable(selected)
+      );
+    }
   }
 }
 
@@ -383,7 +402,7 @@ function drawDraftOutline(
   context.restore();
 }
 
-/** 文字和马赛克直接拖动时用主题强调色标明真实边界，不显示缩放控制点。 */
+/** 马赛克等图形直接拖动时用主题强调色标明真实边界，不显示缩放控制点。 */
 function drawMovingOutline(
   context: AnnotationDrawingContext,
   bounds: Rect,
@@ -399,6 +418,105 @@ function drawMovingOutline(
   context.lineWidth = Math.max(1.5, handleSize / 5);
   context.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
   context.restore();
+}
+
+/**
+ * 计算文字标注在输入态、选中态或拖拽态时的完整外框区域。
+ * 严格按照 .text-editor-container (border: 2px, padding: 4px) 与 .text-editor (padding: 6px 8px, min-width: 36px, min-height: 32px, line-height: 1.3)
+ * 的 DOM 布局盒模型还原真实外框，确保选中态/拖拽态与输入态 100% 像素级对齐。
+ */
+export function getTextFocusBounds(
+  element: TextElement,
+  handleSize: number
+): Rect {
+  const scale = handleSize / 8;
+
+  // 优先直接使用输入确认时永久保存的真实 DOM 容器外框（经平移后），保证 100% 像素级无缝对齐
+  if (element.inputBounds) {
+    return {
+      x: element.inputBounds.x,
+      y: element.inputBounds.y,
+      width: element.inputBounds.width,
+      height: element.inputBounds.height,
+    };
+  }
+
+  if (element.textStyle === 'fill' && element.fillBounds) {
+    return {
+      x: element.fillBounds.x - 4 * scale,
+      y: element.fillBounds.y - 4 * scale,
+      width: element.fillBounds.width + 8 * scale,
+      height: element.fillBounds.height + 8 * scale,
+    };
+  }
+
+  const lines = splitTextLines(element.value);
+  const layout = getTextEditorLayout(
+    element.metrics.width,
+    lines.length,
+    element.fontSize,
+    scale
+  );
+
+  return {
+    x: element.position.x - layout.offsetToBaseline.x,
+    y: element.position.y - element.metrics.ascent - layout.offsetToBaseline.y,
+    width: layout.containerWidth,
+    height: layout.containerHeight,
+  };
+}
+
+/**
+ * 文字标注在选中或拖拽时呈现与输入态完全一致的外框：
+ * 4px 呼吸间距、8px 圆角、2px 实线主题强调色外边框。
+ */
+function drawTextFocusOutline(
+  context: AnnotationDrawingContext,
+  element: TextElement,
+  handleSize: number,
+  color: string
+): void {
+  const scale = handleSize / 8;
+  const radius = 8 * scale;
+  const lineWidth = Math.max(2, 2 * scale);
+  const focusBounds = getTextFocusBounds(element, handleSize);
+
+  context.save();
+  context.strokeStyle = color;
+  context.lineWidth = lineWidth;
+  context.setLineDash([]);
+  strokeRoundedRect(
+    context,
+    focusBounds.x,
+    focusBounds.y,
+    focusBounds.width,
+    focusBounds.height,
+    radius
+  );
+  context.restore();
+}
+
+function strokeRoundedRect(
+  context: AnnotationDrawingContext,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+): void {
+  context.beginPath();
+  if (typeof context.roundRect === 'function') {
+    context.roundRect(x, y, width, height, radius);
+  } else {
+    const r = Math.min(radius, width / 2, height / 2);
+    context.moveTo(x + r, y);
+    context.arcTo(x + width, y, x + width, y + height, r);
+    context.arcTo(x + width, y + height, x, y + height, r);
+    context.arcTo(x, y + height, x, y, r);
+    context.arcTo(x, y, x + width, y, r);
+    context.closePath();
+  }
+  context.stroke();
 }
 
 function drawSelectionOutline(
