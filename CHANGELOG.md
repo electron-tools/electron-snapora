@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.14] - 2026-09-04
+
+### Added
+
+- Add Lark-style dedicated start and end resize handles for arrow annotations, supporting freeform stretching and 360-degree angle rotation along the arrow axis without bounding box distortion.
+- Add direct element click-to-select and 4-corner resize handle controls for rectangle, ellipse, and other geometric annotations under drawing tools.
+- Provide responsive cursor feedback (`crosshair` on arrow endpoints, `nwse-resize` / `nesw-resize` on corner handles, and `move` on element outlines).
+
+### Changed
+
+- Hide outer selection resize handles during region moving and creating interactions to eliminate visual clutter.
+
 ## [1.0.13] - 2026-09-02
 
 ### Changed

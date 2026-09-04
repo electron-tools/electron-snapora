@@ -4,6 +4,7 @@ import {
   calculateTextFillBounds,
   createDrawableElement,
   getElementBounds,
+  getElementResizeHandles,
   getResizeHandleAtPoint,
   getTextFillColor,
   getTextStrokeWidth,
@@ -11,6 +12,7 @@ import {
   isElementResizable,
   measureTextBaselineMetrics,
   measureTextLayout,
+  resizeAnnotationElement,
   scaleElementToBounds,
   translateElement,
   updateDrawableElement,
@@ -391,5 +393,55 @@ describe('annotation element geometry', () => {
         height: 92,
       })
     ).toBe(text);
+  });
+
+  it('provides start and end resize handles for arrows without a bounding box', () => {
+    const arrow = {
+      id: 'arrow-1',
+      type: 'arrow' as const,
+      zIndex: 0,
+      createdAt: 1,
+      color: '#ff3b30',
+      start: { x: 50, y: 100 },
+      end: { x: 200, y: 120 },
+      lineWidth: 4,
+    };
+
+    expect(isElementResizable(arrow)).toBe(true);
+    expect(getElementResizeHandles(arrow)).toEqual({
+      start: { x: 50, y: 100 },
+      end: { x: 200, y: 120 },
+    });
+
+    expect(getResizeHandleAtPoint(arrow, { x: 52, y: 101 }, 8)).toBe('start');
+    expect(getResizeHandleAtPoint(arrow, { x: 198, y: 122 }, 8)).toBe('end');
+    expect(getResizeHandleAtPoint(arrow, { x: 125, y: 110 }, 8)).toBeUndefined();
+
+    const selectionBounds = { x: 0, y: 0, width: 800, height: 600 };
+    // 拉伸/调整起点
+    const movedStart = resizeAnnotationElement(
+      arrow,
+      'start',
+      { x: 30, y: 80 },
+      selectionBounds
+    );
+    expect(movedStart).toEqual({
+      ...arrow,
+      start: { x: 30, y: 80 },
+      end: { x: 200, y: 120 },
+    });
+
+    // 拉伸/调整终点（可向任意方向拉长并改变角度）
+    const movedEnd = resizeAnnotationElement(
+      arrow,
+      'end',
+      { x: 250, y: 300 },
+      selectionBounds
+    );
+    expect(movedEnd).toEqual({
+      ...arrow,
+      start: { x: 50, y: 100 },
+      end: { x: 250, y: 300 },
+    });
   });
 });

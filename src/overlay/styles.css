@@ -235,7 +235,10 @@ input {
   pointer-events: auto;
 }
 
-.capture-surface:not([data-tool='select']) .resize-handle {
+/* 当选区在移动（moving）或创建（creating）过程中，隐藏选区周边的 8 个缩放控制点，避免移动时产生视觉杂乱且此时无法点击进行 resize */
+.capture-surface:not([data-tool='select']) .resize-handle,
+.capture-surface[data-state='moving'] .resize-handle,
+.capture-surface[data-state='creating'] .resize-handle {
   display: none;
 }
 

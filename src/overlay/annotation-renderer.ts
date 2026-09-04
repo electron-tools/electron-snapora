@@ -1,6 +1,7 @@
 import type { Rect, Size } from '../core/geometry/rect.js';
 import type {
   AnnotationElement,
+  ArrowElement,
   MosaicElement,
   TextElement,
 } from '../core/model/document.js';
@@ -108,6 +109,12 @@ export function drawAnnotations(
         selected,
         options.selectionHandleSize ?? 8,
         options.movingOutlineColor ?? '#0a84ff'
+      );
+    } else if (selected.type === 'arrow') {
+      drawArrowSelectionOutline(
+        context,
+        selected,
+        options.selectionHandleSize ?? 8
       );
     } else {
       drawSelectionOutline(
@@ -527,28 +534,63 @@ function drawSelectionOutline(
 ): void {
   context.save();
   context.strokeStyle = '#ffffff';
-  context.fillStyle = '#35a7ff';
   context.lineWidth = Math.max(1, handleSize / 8);
   context.setLineDash([handleSize, handleSize / 2]);
   context.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
   context.setLineDash([]);
 
   if (showResizeHandles) {
+    const handleRadius = Math.max(3.5, handleSize / 2);
     for (const point of Object.values(getResizeHandlePoints(bounds))) {
-      context.fillRect(
-        point.x - handleSize / 2,
-        point.y - handleSize / 2,
-        handleSize,
-        handleSize
-      );
-      context.strokeRect(
-        point.x - handleSize / 2,
-        point.y - handleSize / 2,
-        handleSize,
-        handleSize
-      );
+      if (!point) {
+        continue;
+      }
+      context.beginPath();
+      context.arc(point.x, point.y, handleRadius, 0, Math.PI * 2);
+      context.fillStyle = '#ffffff';
+      context.fill();
+      context.lineWidth = Math.max(1.5, handleSize / 4);
+      context.strokeStyle = '#0a84ff';
+      context.stroke();
     }
   }
+  context.restore();
+}
+
+/**
+ * 绘制箭头元素的选中态（对齐 Lark 交互体验）：
+ * 1. 沿箭头轴线绘制居中辅助线（#0a84ff）；
+ * 2. 仅在起止两端（start 与 end）绘制圆形控制点（白底蓝边），不绘制外层矩形虚线框；
+ * 3. 支持向两端自由拉伸或改变旋转角度。
+ */
+function drawArrowSelectionOutline(
+  context: AnnotationDrawingContext,
+  element: ArrowElement,
+  handleSize: number
+): void {
+  context.save();
+
+  // 1. 沿起点到终点轴线绘制辅助高亮线
+  context.beginPath();
+  context.moveTo(element.start.x, element.start.y);
+  context.lineTo(element.end.x, element.end.y);
+  context.strokeStyle = '#0a84ff';
+  context.lineWidth = Math.max(1.5, handleSize / 4);
+  context.stroke();
+
+  // 2. 在起点和终点各绘制一个圆形控制点
+  const handleRadius = Math.max(3.5, handleSize / 2);
+  const handlePoints = [element.start, element.end];
+  for (const point of handlePoints) {
+    context.beginPath();
+    context.arc(point.x, point.y, handleRadius, 0, Math.PI * 2);
+    context.fillStyle = '#ffffff';
+    context.fill();
+    context.lineWidth = Math.max(1.5, handleSize / 4);
+    context.strokeStyle = '#0a84ff';
+    context.stroke();
+  }
+
   context.restore();
 }
 

@@ -22,7 +22,6 @@ import {
   calculateTextBaselinePosition,
   calculateTextFillBounds,
   createDrawableElement,
-  getElementBounds,
   getResizeHandleAtPoint,
   getTextContrastColor,
   getTextEditorLayout,
@@ -32,7 +31,7 @@ import {
   isDrawableElementValid,
   measureTextBaselineMetrics,
   measureTextLayout,
-  scaleElementToBounds,
+  resizeAnnotationElement,
   splitTextLines,
   translateElement,
   updateDrawableElement,
@@ -52,7 +51,6 @@ import { resolveScreenshotMessages, resolveScreenshotTheme } from './presentatio
 import {
   calculateToolbarPosition,
   clampPoint,
-  resizeSelection,
   viewportRectToImageRect,
   viewportRectToScreenRect,
   type ResizeHandle,
@@ -677,6 +675,21 @@ function handleCanvasPointerDown(event: PointerEvent): void {
   const annotationState = annotationStore.getState();
   const tolerance = getImageScale() * 8;
   const elements = getRenderableElements(annotationState);
+  const selected = elements.find((element) => element.id === annotationState.selectedElementId);
+
+  // 1. 如果当前已有选中的标注元素，优先检查是否点击了其四个角 Resize 控制点（对齐 Lark：任意工具下均可直接拖拽控制点 resize）
+  if (selected) {
+    const handle = getResizeHandleAtPoint(selected, imagePoint, tolerance);
+    if (handle) {
+      pointerInteraction = {
+        kind: 'resize-element',
+        pointerId: event.pointerId,
+        before: selected,
+        handle,
+      };
+      return;
+    }
+  }
 
   if (annotationState.activeTool === 'select') {
     beginSelectInteraction(event.pointerId, imagePoint, viewportPoint);
@@ -712,9 +725,13 @@ function handleCanvasPointerDown(event: PointerEvent): void {
     event.preventDefault();
     annotationCanvas.releasePointerCapture(event.pointerId);
   } else {
-    if (!beginDirectElementMove(event.pointerId, imagePoint)) {
-      beginDrawInteraction(event.pointerId, imagePoint, annotationState.activeTool);
+    // 绘图工具（矩形、圆形、线条/箭头等）：优先检查是否点击了已有元素的边线；点击边线即选中并显示 4 个控制点
+    if (beginDirectElementMove(event.pointerId, imagePoint)) {
+      return;
     }
+    // 点击空白处：取消旧选中，开始绘制新图形
+    annotationStore.select(null);
+    beginDrawInteraction(event.pointerId, imagePoint, annotationState.activeTool);
   }
 }
 
@@ -806,14 +823,15 @@ function handleCanvasPointerMove(event: PointerEvent): void {
       )
     );
   } else {
-    const nextBounds = resizeSelection(
-      getElementBounds(interaction.before),
-      interaction.handle,
-      imagePoint,
-      annotationDocument.selection,
-      8
+    // 缩放标注元素：如果是箭头则更新 start/end 端点坐标；如果是矩形/椭圆等几何图形则更新外接盒
+    annotationStore.preview(
+      resizeAnnotationElement(
+        interaction.before,
+        interaction.handle,
+        imagePoint,
+        annotationDocument.selection
+      )
     );
-    annotationStore.preview(scaleElementToBounds(interaction.before, nextBounds));
   }
 }
 
@@ -848,7 +866,13 @@ function handleCanvasPointerEnd(event: PointerEvent): void {
       annotationStore.preview(null);
     }
     if (interaction.temporary) {
-      annotationStore.select(null);
+      if (interaction.started) {
+        // 发生了拖拽位移：移动结束后清除临时选中，保持绘图工具连贯
+        annotationStore.select(null);
+      } else if (event.type !== 'pointercancel') {
+        // 单纯点击边线（未拖动）：对齐 Lark 体验，立即选中该标注并显示四个控制点
+        annotationStore.select(interaction.before.id);
+      }
     }
   } else {
     const preview = annotationStore.getState().preview;
@@ -975,7 +999,10 @@ function beginSelectInteraction(
   resetAnnotationsAfterSelection = false;
 }
 
-/** 绘图工具保持激活时，命中已有标注则临时进入拖动，而不是创建新元素。 */
+/**
+ * 命中已有标注边线时，直接将其选中并显示四个控制点，同时支持拖拽平移或后续点击控制点 resize。
+ * 对齐 Lark 截图体验：点击边线即选中，无需先手动切换到选择工具。
+ */
 function beginDirectElementMove(pointerId: number, imagePoint: Point): boolean {
   const state = annotationStore.getState();
   const hit = hitTestElement(
@@ -988,7 +1015,6 @@ function beginDirectElementMove(pointerId: number, imagePoint: Point): boolean {
     return false;
   }
   annotationCanvas.dataset.canMove = 'true';
-  annotationStore.select(null);
   pointerInteraction = {
     kind: 'move-element',
     pointerId,
@@ -1000,28 +1026,60 @@ function beginDirectElementMove(pointerId: number, imagePoint: Point): boolean {
   return true;
 }
 
-/** 只在绘图态命中可见标注时显示移动光标，空白区域继续保留当前工具光标。 */
+/**
+ * 鼠标在画布上悬浮移动时的光标反馈：
+ * 1. 悬浮在当前选中元素的四个 Resize 控制点上时，呈现对应的 resize 光标；
+ * 2. 悬浮在已有标注轮廓边线上时，呈现 move 光标，提示可点击选中并拖拽；
+ * 3. 悬浮在空白区域时，恢复当前工具的默认光标。
+ */
 function updateDirectMoveHover(viewportPoint: Point | null): void {
   const selectionState = selectionStore.getState();
   const annotationState = annotationStore.getState();
   const selection = selectionState.selection;
+  if (
+    !viewportPoint ||
+    selectionState.phase !== 'selected' ||
+    !selection ||
+    !containsPoint(selection, viewportPoint)
+  ) {
+    delete annotationCanvas.dataset.canMove;
+    annotationCanvas.style.cursor = '';
+    return;
+  }
+
+  const imagePoint = toImagePoint(viewportPoint);
+  const elements = getRenderableElements(annotationState);
+  const tolerance = getImageScale() * 8;
+  const selected = elements.find((element) => element.id === annotationState.selectedElementId);
+
+  // 1. 优先检查是否悬浮在当前选中元素的四个 Resize 控制点上
+  if (selected) {
+    const handle = getResizeHandleAtPoint(selected, imagePoint, tolerance);
+    if (handle) {
+      delete annotationCanvas.dataset.canMove;
+      if (handle === 'nw' || handle === 'se') {
+        annotationCanvas.style.cursor = 'nwse-resize';
+      } else if (handle === 'ne' || handle === 'sw') {
+        annotationCanvas.style.cursor = 'nesw-resize';
+      } else if (handle === 'start' || handle === 'end') {
+        annotationCanvas.style.cursor = 'crosshair';
+      } else {
+        annotationCanvas.style.cursor = 'pointer';
+      }
+      return;
+    }
+  }
+
+  // 2. 检查是否悬浮在已有标注边线上：提示 move
   const canMove =
-    viewportPoint !== null &&
-    selectionState.phase === 'selected' &&
-    selection !== null &&
-    containsPoint(selection, viewportPoint) &&
-    annotationState.activeTool !== 'select' &&
     annotationState.activeTool !== 'watermark' &&
-    hitTestElement(
-      getRenderableElements(annotationState),
-      toImagePoint(viewportPoint),
-      getImageScale() * 8,
-      'outline'
-    ) !== undefined;
+    hitTestElement(elements, imagePoint, tolerance, 'outline') !== undefined;
   if (canMove) {
     annotationCanvas.dataset.canMove = 'true';
+    annotationCanvas.style.cursor = 'move';
   } else {
     delete annotationCanvas.dataset.canMove;
+    annotationCanvas.style.cursor = '';
   }
 }
 

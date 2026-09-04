@@ -15,7 +15,11 @@ import type {
   TextStyle,
 } from '../core/model/document.js';
 import type { ScreenshotTool } from '../types.js';
-import type { ResizeHandle } from './selection-geometry.js';
+import {
+  clampPoint,
+  resizeSelection,
+  type ResizeHandle,
+} from './selection-geometry.js';
 
 export interface AnnotationStyle {
   color: string;
@@ -476,9 +480,9 @@ export function getResizeHandleAtPoint(
   if (!isElementResizable(element)) {
     return undefined;
   }
-  const handles = getResizeHandlePoints(getElementBounds(element));
+  const handles = getElementResizeHandles(element);
   return (Object.entries(handles) as Array<[ResizeHandle, Point]>).find(
-    ([, handlePoint]) => distance(handlePoint, point) <= tolerance
+    ([, handlePoint]) => handlePoint && distance(handlePoint, point) <= tolerance
   )?.[0];
 }
 
@@ -487,22 +491,67 @@ export function isElementResizable(element: AnnotationElement): boolean {
   return element.type !== 'text';
 }
 
-export function getResizeHandlePoints(bounds: Rect): Record<ResizeHandle, Point> {
-  const centerX = bounds.x + bounds.width / 2;
-  const centerY = bounds.y + bounds.height / 2;
+/**
+ * 获取标注元素缩放控制点：
+ * 1. 箭头/线条（Arrow）：精准返回起点 (start) 与终点 (end) 两个端点控制点，对齐 Lark 效果；
+ * 2. 矩形、椭圆、马赛克等图形：返回四个角控制点（nw, ne, se, sw）。
+ */
+export function getElementResizeHandles(
+  element: AnnotationElement
+): Partial<Record<ResizeHandle, Point>> {
+  if (element.type === 'arrow') {
+    return {
+      start: element.start,
+      end: element.end,
+    };
+  }
+  return getResizeHandlePoints(getElementBounds(element));
+}
+
+/**
+ * 获取几何包围盒的四个角控制点（nw, ne, se, sw）。
+ */
+export function getResizeHandlePoints(bounds: Rect): Partial<Record<ResizeHandle, Point>> {
   const right = bounds.x + bounds.width;
   const bottom = bounds.y + bounds.height;
 
   return {
     nw: { x: bounds.x, y: bounds.y },
-    n: { x: centerX, y: bounds.y },
     ne: { x: right, y: bounds.y },
-    e: { x: right, y: centerY },
     se: { x: right, y: bottom },
-    s: { x: centerX, y: bottom },
     sw: { x: bounds.x, y: bottom },
-    w: { x: bounds.x, y: centerY },
   };
+}
+
+/**
+ * 拖拽调整标注元素尺寸或端点：
+ * 1. 箭头/线条：直接调整 start 或 end 端点，无包围盒变形失真，支持向任意方向自由拉伸或改变角度；
+ * 2. 矩形、椭圆等：基于当前 handle 和 bounding box 进行缩放。
+ */
+export function resizeAnnotationElement(
+  element: AnnotationElement,
+  handle: ResizeHandle,
+  point: Point,
+  selectionBounds: Rect
+): AnnotationElement {
+  const boundedPoint = clampPoint(point, selectionBounds);
+  if (element.type === 'arrow') {
+    if (handle === 'start') {
+      return { ...element, start: boundedPoint };
+    }
+    if (handle === 'end') {
+      return { ...element, end: boundedPoint };
+    }
+  }
+
+  const nextBounds = resizeSelection(
+    getElementBounds(element),
+    handle,
+    boundedPoint,
+    selectionBounds,
+    8
+  );
+  return scaleElementToBounds(element, nextBounds);
 }
 
 export function translateElement(

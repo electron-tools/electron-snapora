@@ -263,7 +263,7 @@ describe('annotation renderer', () => {
     });
 
     expect(context.strokeRect).toHaveBeenCalledWith(20, 20, 30, 25);
-    expect(context.fillRect).toHaveBeenCalledTimes(8);
+    expect(context.arc).toHaveBeenCalledTimes(4);
   });
 
   it('outlines selected text with breathable rounded border and without resize handles', () => {
@@ -287,6 +287,32 @@ describe('annotation renderer', () => {
     expect(context.roundRect).toHaveBeenCalledWith(-4, 8, 122, 56, 8);
     expect(context.stroke).toHaveBeenCalled();
     expect(context.fillRect).not.toHaveBeenCalled();
+  });
+
+  it('outlines selected arrow along its axis with start and end handles and without bounding box', () => {
+    const context = createContext();
+    const arrow: AnnotationElement = {
+      ...base,
+      id: 'arrow-1',
+      type: 'arrow',
+      start: { x: 30, y: 40 },
+      end: { x: 90, y: 40 },
+      lineWidth: 4,
+    };
+
+    drawAnnotations(context, [arrow], {
+      imageSize: { width: 100, height: 80 },
+      selectedElementId: 'arrow-1',
+      selectionHandleSize: 8,
+    });
+
+    // 对齐 Lark：不绘制外层矩形框
+    expect(context.strokeRect).not.toHaveBeenCalled();
+    // 仅在起点与终点各绘制一个圆点控制点
+    expect(context.arc).toHaveBeenCalledTimes(2);
+    // 绘制轴线高亮辅助线
+    expect(context.moveTo).toHaveBeenCalledWith(30, 40);
+    expect(context.lineTo).toHaveBeenCalledWith(90, 40);
   });
 
   it('outlines directly moving text and mosaic with the requested color', () => {
