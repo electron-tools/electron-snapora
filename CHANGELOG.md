@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.15] - 2026-09-07
+
+### Fixed
+
+- Prevent ghost pointer interactions, drag handling, and keydown events during double-click capture export.
+- Instantly hide the selection outline and resize handles while transitioning to the exporting phase, eliminating visual lag when double-clicking to complete capture.
+
 ## [1.0.14] - 2026-09-04
 
 ### Added
