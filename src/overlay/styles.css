@@ -204,6 +204,16 @@ input {
   display: none;
 }
 
+/* 准备导出/写入剪切板时（例如双击选区或确认），立即隐藏选择框及其手柄，并禁用所有鼠标指针交互，避免产生“未双击成功/还可拖拽”的卡顿感 */
+.capture-surface[data-state='exporting'] {
+  cursor: default !important;
+  pointer-events: none !important;
+}
+
+.capture-surface[data-state='exporting'] .selection {
+  display: none !important;
+}
+
 .size-hint {
   position: absolute;
   top: -27px;

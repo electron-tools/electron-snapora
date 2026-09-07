@@ -399,7 +399,7 @@ annotationCanvas.addEventListener('pointerleave', () => {
 });
 
 selectionElement.addEventListener('pointerdown', (event) => {
-  if (event.button !== 0) {
+  if (event.button !== 0 || selectionStore.getState().phase === 'exporting') {
     return;
   }
   const handle = (event.target as HTMLElement).dataset.handle as
@@ -415,7 +415,10 @@ selectionElement.addEventListener('pointerdown', (event) => {
 });
 
 surface.addEventListener('pointermove', (event) => {
-  if (pointerInteraction?.kind !== 'selection') {
+  if (
+    pointerInteraction?.kind !== 'selection' ||
+    selectionStore.getState().phase === 'exporting'
+  ) {
     return;
   }
   selectionStore.dispatch({
@@ -557,6 +560,9 @@ textEditor.addEventListener('blur', () => closeTextEditor(true));
 textEditor.addEventListener('input', resizeTextEditor);
 
 window.addEventListener('keydown', (event) => {
+  if (selectionStore.getState().phase === 'exporting') {
+    return;
+  }
   if (event.key === 'Escape' && !colorPickerPopover.hidden) {
     event.preventDefault();
     closeColorPicker();
@@ -637,7 +643,8 @@ window.addEventListener('keydown', (event) => {
 window.snaporaOverlay.ready();
 
 function handleCanvasPointerDown(event: PointerEvent): void {
-  if (event.button !== 0 || selectionStore.getState().phase === 'waiting') {
+  const phase = selectionStore.getState().phase;
+  if (event.button !== 0 || phase === 'waiting' || phase === 'exporting') {
     return;
   }
   // textarea 会被下一次文字点击复用，必须在清空并移动它之前提交当前内容。
@@ -736,6 +743,9 @@ function handleCanvasPointerDown(event: PointerEvent): void {
 }
 
 function handleCanvasPointerMove(event: PointerEvent): void {
+  if (selectionStore.getState().phase === 'exporting') {
+    return;
+  }
   const interaction = pointerInteraction;
   if (!interaction) {
     const viewportPoint = toSurfacePoint(event);
@@ -1394,6 +1404,8 @@ async function confirmCapture(
     return;
   }
 
+  // 立即重置任何正在进行的鼠标交互，防止双击或确认后产生残留拖动
+  pointerInteraction = null;
   outputFeedback = null;
   selectionStore.dispatch({ type: 'begin-export' });
   try {
@@ -1490,7 +1502,8 @@ function render(): void {
   if (showWindowSnap) {
     setRectStyle(windowSnapPreview, showWindowSnap);
   }
-  selectionElement.hidden = selection === null;
+  // 正在导出/准备写入剪切板时，立即隐藏选区选择框及其手柄，避免用户产生“未双击成功/还可拖拽”的卡顿感
+  selectionElement.hidden = selection === null || selectionState.phase === 'exporting';
   toolbar.hidden = selectionState.phase !== 'selected';
 
   const showPhaseStatus = selectionState.phase === 'ready';
