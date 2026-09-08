@@ -1,4 +1,3 @@
-import { globalShortcut } from 'electron';
 import type { IpcMain, IpcMainEvent } from 'electron';
 
 import type {
@@ -11,9 +10,7 @@ import {
   SCREENSHOT_PROTOCOL_VERSION,
   type CaptureDisplay,
   type CapturedFrame,
-  type OverlayShortcutPayload,
   type ScreenCaptureAdapter,
-  type ScreenshotTextEditingPayload,
 } from '../protocol/messages.js';
 import {
   findCapturedFrameLimitViolation,
@@ -54,17 +51,11 @@ export type ScreenshotOverlayFactory = (
   display: CaptureDisplay
 ) => ScreenshotOverlayWindow;
 
-export type ScreenshotGlobalShortcut = Pick<
-  typeof globalShortcut,
-  'register' | 'unregister' | 'isRegistered'
->;
-
 export interface ScreenshotSessionOptions {
   jobId: string;
   captureOptions: ScreenshotOptions;
   captureAdapter: ScreenCaptureAdapter;
   ipcMain: Pick<IpcMain, 'on' | 'removeListener'>;
-  globalShortcut?: ScreenshotGlobalShortcut;
   createOverlay: ScreenshotOverlayFactory;
   overlayReadyTimeoutMs?: number;
   onSettled?: (result: ScreenshotResult) => void;
@@ -76,47 +67,6 @@ export interface ScreenshotSessionOptions {
 
 type SessionResolver = (result: ScreenshotResult) => void;
 
-interface SessionShortcutDefinition {
-  accelerators: string[];
-  payload: OverlayShortcutPayload;
-  isSingleLetter?: boolean;
-}
-
-const SESSION_SHORTCUTS: SessionShortcutDefinition[] = [
-  { accelerators: ['Escape'], payload: { key: 'Escape' } },
-  { accelerators: ['Return', 'Enter'], payload: { key: 'Enter' } },
-  { accelerators: ['Delete'], payload: { key: 'Delete' } },
-  { accelerators: ['Backspace'], payload: { key: 'Backspace' } },
-  {
-    accelerators: ['CommandOrControl+Z'],
-    payload: { key: 'z', ctrlKey: true, metaKey: true },
-  },
-  {
-    accelerators: ['CommandOrControl+Shift+Z'],
-    payload: { key: 'z', ctrlKey: true, metaKey: true, shiftKey: true },
-  },
-  {
-    accelerators: ['CommandOrControl+Y'],
-    payload: { key: 'y', ctrlKey: true, metaKey: true },
-  },
-  {
-    accelerators: ['CommandOrControl+C'],
-    payload: { key: 'c', ctrlKey: true, metaKey: true },
-  },
-  {
-    accelerators: ['CommandOrControl+S'],
-    payload: { key: 's', ctrlKey: true, metaKey: true },
-  },
-  { accelerators: ['v', 'V'], payload: { key: 'v' }, isSingleLetter: true },
-  { accelerators: ['r', 'R'], payload: { key: 'r' }, isSingleLetter: true },
-  { accelerators: ['o', 'O'], payload: { key: 'o' }, isSingleLetter: true },
-  { accelerators: ['a', 'A'], payload: { key: 'a' }, isSingleLetter: true },
-  { accelerators: ['p', 'P'], payload: { key: 'p' }, isSingleLetter: true },
-  { accelerators: ['t', 'T'], payload: { key: 't' }, isSingleLetter: true },
-  { accelerators: ['m', 'M'], payload: { key: 'm' }, isSingleLetter: true },
-  { accelerators: ['w', 'W'], payload: { key: 'w' }, isSingleLetter: true },
-];
-
 /**
  * 管理一次截图任务从屏幕采集到 Overlay 结算的完整生命周期。
  * 所有 IPC 都同时校验发送窗口、协议版本和 jobId，并且只允许结算一次。
@@ -124,9 +74,6 @@ const SESSION_SHORTCUTS: SessionShortcutDefinition[] = [
 export class ScreenshotSession {
   readonly #options: ScreenshotSessionOptions;
   readonly #resourceLimits: ScreenshotResourceLimits;
-  readonly #globalShortcut: ScreenshotGlobalShortcut;
-  readonly #registeredShortcuts = new Set<string>();
-  #textEditingActive = false;
   #state: ScreenshotSessionState = 'idle';
   #overlay: ScreenshotOverlayWindow | undefined;
   #frames: CapturedFrame[] = [];
@@ -144,7 +91,6 @@ export class ScreenshotSession {
   constructor(options: ScreenshotSessionOptions) {
     this.#options = options;
     this.#resourceLimits = resolveScreenshotResourceLimits(options.resourceLimits);
-    this.#globalShortcut = options.globalShortcut ?? globalShortcut;
   }
 
   get state(): ScreenshotSessionState {
@@ -313,7 +259,6 @@ export class ScreenshotSession {
     this.#options.ipcMain.on(OVERLAY_CHANNELS.confirm, this.#handleConfirm);
     this.#options.ipcMain.on(OVERLAY_CHANNELS.cancel, this.#handleCancel);
     this.#options.ipcMain.on(OVERLAY_CHANNELS.error, this.#handleError);
-    this.#options.ipcMain.on(OVERLAY_CHANNELS.textEditing, this.#handleTextEditing);
 
     if (this.#overlay) {
       const outputCleanup = this.#options.registerOutputHandler?.(
@@ -416,7 +361,6 @@ export class ScreenshotSession {
     this.#preparingDesktopSource = false;
     this.#state = 'editing';
     this.#overlay.reveal();
-    this.#registerSessionShortcuts();
   };
 
   #handleConfirm = (event: IpcMainEvent, payload: unknown): void => {
@@ -593,7 +537,6 @@ export class ScreenshotSession {
           : 'failed';
 
     this.#clearReadyTimeout();
-    this.#unregisterSessionShortcuts();
     this.#removeListeners();
     this.#frames = [];
     this.#preparingDesktopSource = false;
@@ -616,116 +559,6 @@ export class ScreenshotSession {
     this.#options.onSettled?.(result);
     this.#resolve?.(result);
     this.#resolve = undefined;
-  }
-
-  #handleTextEditing = (event: IpcMainEvent, payload: unknown): void => {
-    if (!this.#isExpectedSender(event)) {
-      return;
-    }
-    const active = Boolean(
-      payload &&
-      typeof payload === 'object' &&
-      'active' in payload &&
-      (payload as ScreenshotTextEditingPayload).active
-    );
-    this.#textEditingActive = active;
-    if (active) {
-      this.#unregisterSingleLetterShortcuts();
-    } else {
-      this.#registerSingleLetterShortcuts();
-    }
-  };
-
-  #registerSessionShortcuts(): void {
-    for (const item of SESSION_SHORTCUTS) {
-      if (item.isSingleLetter && this.#textEditingActive) {
-        continue;
-      }
-      for (const accelerator of item.accelerators) {
-        if (this.#registeredShortcuts.has(accelerator)) {
-          continue;
-        }
-        try {
-          const registered = this.#globalShortcut.register(accelerator, () => {
-            if (this.#settled) {
-              return;
-            }
-            if (item.payload.key === 'Escape') {
-              if (this.#overlay) {
-                this.#overlay.sendShortcut?.(item.payload);
-              } else {
-                this.cancel();
-              }
-              return;
-            }
-            this.#overlay?.sendShortcut?.(item.payload);
-          });
-          if (registered) {
-            this.#registeredShortcuts.add(accelerator);
-          }
-        } catch {
-          // 忽略注册异常，避免中断截图流程
-        }
-      }
-    }
-  }
-
-  #unregisterSingleLetterShortcuts(): void {
-    for (const item of SESSION_SHORTCUTS) {
-      if (!item.isSingleLetter) {
-        continue;
-      }
-      for (const accelerator of item.accelerators) {
-        if (this.#registeredShortcuts.has(accelerator)) {
-          try {
-            this.#globalShortcut.unregister(accelerator);
-          } catch {
-            // 忽略注销异常
-          }
-          this.#registeredShortcuts.delete(accelerator);
-        }
-      }
-    }
-  }
-
-  #registerSingleLetterShortcuts(): void {
-    if (this.#state !== 'editing' || this.#settled) {
-      return;
-    }
-    for (const item of SESSION_SHORTCUTS) {
-      if (!item.isSingleLetter) {
-        continue;
-      }
-      for (const accelerator of item.accelerators) {
-        if (this.#registeredShortcuts.has(accelerator)) {
-          continue;
-        }
-        try {
-          const registered = this.#globalShortcut.register(accelerator, () => {
-            if (this.#settled) {
-              return;
-            }
-            this.#overlay?.sendShortcut?.(item.payload);
-          });
-          if (registered) {
-            this.#registeredShortcuts.add(accelerator);
-          }
-        } catch {
-          // 忽略注册异常
-        }
-      }
-    }
-  }
-
-  #unregisterSessionShortcuts(): void {
-    for (const accelerator of this.#registeredShortcuts) {
-      try {
-        this.#globalShortcut.unregister(accelerator);
-      } catch {
-        // 忽略注销异常
-      }
-    }
-    this.#registeredShortcuts.clear();
   }
 
   #startDiagnosticStage(
@@ -777,10 +610,6 @@ export class ScreenshotSession {
     this.#options.ipcMain.removeListener(OVERLAY_CHANNELS.confirm, this.#handleConfirm);
     this.#options.ipcMain.removeListener(OVERLAY_CHANNELS.cancel, this.#handleCancel);
     this.#options.ipcMain.removeListener(OVERLAY_CHANNELS.error, this.#handleError);
-    this.#options.ipcMain.removeListener(
-      OVERLAY_CHANNELS.textEditing,
-      this.#handleTextEditing
-    );
 
     for (const cleanup of this.#windowCleanups.splice(0)) {
       cleanup();

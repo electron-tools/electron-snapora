@@ -3,7 +3,6 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { OVERLAY_CHANNELS } from '../protocol/channels.js';
 import { SCREENSHOT_PROTOCOL_VERSION } from '../protocol/messages.js';
 import type {
-  OverlayShortcutPayload,
   ScreenshotCompletePayload,
   ScreenshotErrorPayload,
   ScreenshotFeedbackPayload,
@@ -15,8 +14,6 @@ import type {
 export interface ScreenshotOverlayApi {
   onInitialize(listener: (payload: ScreenshotInitializePayload) => void): () => void;
   onFeedback(listener: (payload: ScreenshotFeedbackPayload) => void): () => void;
-  onShortcut(listener: (payload: OverlayShortcutPayload) => void): () => void;
-  setTextEditing(active: boolean): void;
   confirm(payload: Omit<ScreenshotCompletePayload, 'protocolVersion'>): void;
   cancel(jobId: string): void;
   reportError(payload: Omit<ScreenshotErrorPayload, 'protocolVersion'>): void;
@@ -29,25 +26,6 @@ export interface ScreenshotOverlayApi {
 }
 
 const overlayApi: ScreenshotOverlayApi = {
-  onShortcut(listener) {
-    const handler = (
-      _event: Electron.IpcRendererEvent,
-      payload: OverlayShortcutPayload
-    ) => {
-      listener(payload);
-    };
-
-    ipcRenderer.on(OVERLAY_CHANNELS.shortcut, handler);
-    return () => {
-      ipcRenderer.removeListener(OVERLAY_CHANNELS.shortcut, handler);
-    };
-  },
-  setTextEditing(active) {
-    ipcRenderer.send(OVERLAY_CHANNELS.textEditing, {
-      protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
-      active,
-    });
-  },
   onInitialize(listener) {
     const handler = (
       _event: Electron.IpcRendererEvent,

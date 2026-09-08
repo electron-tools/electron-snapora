@@ -39,7 +39,6 @@ function createOverlay() {
     webContentsId: 7,
     load: vi.fn(async () => undefined),
     sendInitialize: vi.fn(),
-    sendShortcut: vi.fn(),
     prime: vi.fn(),
     reveal: vi.fn(),
     showCopyFeedback: vi.fn(),
@@ -506,77 +505,5 @@ describe('ScreenshotSession', () => {
       code: 'OVERLAY_LOAD_FAILED',
       message: 'load broke',
     });
-  });
-
-  it('registers session shortcuts on reveal, dispatches events, and unregisters on cancel', async () => {
-    const ipc = new EventEmitter();
-    const { overlay } = createOverlay();
-    const registered = new Map<string, () => void>();
-    const mockGlobalShortcut = {
-      register: vi.fn((accelerator: string, callback: () => void) => {
-        registered.set(accelerator, callback);
-        return true;
-      }),
-      unregister: vi.fn((accelerator: string) => {
-        registered.delete(accelerator);
-      }),
-      isRegistered: vi.fn((accelerator: string) => registered.has(accelerator)),
-    };
-
-    const session = new ScreenshotSession({
-      jobId: 'shortcut-test',
-      captureOptions: { display: 'cursor' },
-      captureAdapter: {
-        capture: vi.fn(async () => [frame]),
-      },
-      ipcMain: ipc as unknown as Pick<IpcMain, 'on' | 'removeListener'>,
-      globalShortcut: mockGlobalShortcut,
-      createOverlay: () => overlay,
-    });
-
-    const resultPromise = session.run();
-    await vi.waitFor(() => expect(overlay.load).toHaveBeenCalledOnce());
-    emitOverlayMessage(ipc, OVERLAY_CHANNELS.ready, {
-      protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
-    });
-    emitOverlayMessage(ipc, OVERLAY_CHANNELS.prepared, {
-      protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
-      jobId: 'shortcut-test',
-    });
-
-    expect(overlay.reveal).toHaveBeenCalledOnce();
-    expect(mockGlobalShortcut.register).toHaveBeenCalled();
-    expect(registered.has('Escape')).toBe(true);
-    expect(registered.has('r')).toBe(true);
-    expect(registered.has('CommandOrControl+Z')).toBe(true);
-
-    // 触发 'r' 快捷键回调 -> 应该转发给 overlay.sendShortcut
-    registered.get('r')?.();
-    expect(overlay.sendShortcut).toHaveBeenCalledWith({ key: 'r' });
-
-    // 触发 'Escape' 回调 -> 转发给 overlay.sendShortcut
-    registered.get('Escape')?.();
-    expect(overlay.sendShortcut).toHaveBeenCalledWith({ key: 'Escape' });
-
-    // 模拟开启文字编辑模式 -> 单字母快捷键应该被临时注销
-    emitOverlayMessage(ipc, OVERLAY_CHANNELS.textEditing, {
-      protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
-      active: true,
-    });
-    expect(registered.has('r')).toBe(false);
-    expect(registered.has('Escape')).toBe(true);
-
-    // 模拟关闭文字编辑模式 -> 单字母快捷键重新恢复
-    emitOverlayMessage(ipc, OVERLAY_CHANNELS.textEditing, {
-      protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
-      active: false,
-    });
-    expect(registered.has('r')).toBe(true);
-
-    // 取消任务 -> 所有快捷键全部被注销
-    session.cancel();
-    await expect(resultPromise).resolves.toEqual({ status: 'cancelled' });
-    expect(registered.size).toBe(0);
-    expect(mockGlobalShortcut.unregister).toHaveBeenCalled();
   });
 });

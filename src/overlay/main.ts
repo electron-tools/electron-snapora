@@ -660,7 +660,6 @@ function handleShortcut(event: {
 }
 
 window.addEventListener('keydown', handleShortcut);
-window.snaporaOverlay.onShortcut?.((payload) => handleShortcut(payload));
 window.snaporaOverlay.ready();
 
 function handleCanvasPointerDown(event: PointerEvent): void {
@@ -1181,7 +1180,6 @@ function openTextEditor(viewportPoint: Point, imagePoint: Point): void {
   pendingTextViewportPoint = viewportPoint;
   textEditor.value = '';
   textEditorContainer.hidden = false;
-  window.snaporaOverlay.setTextEditing?.(true);
   applyTextEditorPreset(style.textStyle, style.color, fontSize);
   textEditor.style.fontSize = `${fontSize}px`;
   resizeTextEditor();
@@ -1223,7 +1221,6 @@ function openTextEditorForElement(element: TextElement): void {
 
   textEditor.value = element.value;
   textEditorContainer.hidden = false;
-  window.snaporaOverlay.setTextEditing?.(true);
 
   annotationStore.setStyle({
     color: element.color,
@@ -1404,7 +1401,6 @@ function closeTextEditor(commit: boolean): void {
   pendingTextPoint = null;
   pendingTextViewportPoint = null;
   textEditorContainer.hidden = true;
-  window.snaporaOverlay.setTextEditing?.(false);
   textEditor.value = '';
   renderAnnotationCanvas();
 }

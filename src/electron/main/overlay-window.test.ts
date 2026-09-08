@@ -158,12 +158,12 @@ describe('OverlayWindow', () => {
       y: 0,
       width: 1920,
       height: 1080,
-      type: 'panel',
       fullscreenable: true,
       enableLargerThanScreen: true,
       hiddenInMissionControl: true,
       simpleFullscreen: true,
     });
+    expect(receivedOptions[0]?.type).toBeUndefined();
     expect(fake.setVisibleOnAllWorkspaces).toHaveBeenCalledWith(true, {
       visibleOnFullScreen: true,
       skipTransformProcessType: true,

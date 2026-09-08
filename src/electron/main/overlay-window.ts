@@ -1,10 +1,9 @@
-import { BrowserWindow } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import type { BrowserWindowConstructorOptions, WebContents } from 'electron';
 import type { ScreenshotOptions } from '../../types.js';
 
 import type {
   CaptureDisplay,
-  OverlayShortcutPayload,
   ScreenshotInitializePayload,
 } from '../protocol/messages.js';
 import { OVERLAY_CHANNELS } from '../protocol/channels.js';
@@ -55,7 +54,6 @@ export interface ScreenshotOverlayWindow {
   readonly rendererReady?: boolean;
   load(): Promise<void>;
   sendInitialize(payload: ScreenshotInitializePayload): void;
-  sendShortcut?(payload: OverlayShortcutPayload): void;
   prime(): void;
   reveal(): void;
   hide?(): void;
@@ -118,7 +116,9 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
         : {}),
       ...(this.#platform === 'darwin'
         ? {
-            type: 'panel',
+            // macOS 关键规范：严禁使用 type: 'panel'（NSPanel）。
+            // NSPanel 会导致窗口在系统级无法成为真正的 KeyWindow，
+            // 造成文字/水印输入框（textarea/input）假死无法输入。
             enableLargerThanScreen: true,
             hiddenInMissionControl: true,
             simpleFullscreen: true,
@@ -171,12 +171,6 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
     this.#window.webContents.send(OVERLAY_CHANNELS.initialize, payload);
   }
 
-  sendShortcut(payload: OverlayShortcutPayload): void {
-    if (!this.#window.isDestroyed()) {
-      this.#window.webContents.send(OVERLAY_CHANNELS.shortcut, payload);
-    }
-  }
-
   /** 先以全透明状态进入桌面合成器，隐藏 Windows/macOS 的窗口出场和大图首帧栅格化。 */
   prime(): void {
     if (!this.#window.isDestroyed() && this.#supportsInvisiblePriming) {
@@ -199,6 +193,17 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
     this.#raiseAboveOtherWindows();
     if (this.#supportsInvisiblePriming) {
       this.#window.setOpacity(1);
+    }
+    // macOS 关键逻辑：
+    // 当宿主应用在后台运行或处于未聚焦状态时呼出截图，必须显式激活应用进程焦点（steal: true），
+    // 使得全屏 Overlay 窗口成为系统的 KeyWindow，DOM 输入框（文字批注 textarea / 水印 input）
+    // 才能正常接收键盘焦点与按键输入，绝不发生输入失效或假死。
+    if (this.#platform === 'darwin') {
+      try {
+        app.focus?.({ steal: true });
+      } catch {
+        // 测试环境或无 app 上下文时安全降级
+      }
     }
     this.#window.show();
     this.#window.moveTop();
