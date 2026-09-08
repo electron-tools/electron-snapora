@@ -89,3 +89,136 @@ h1 {
     Consolas,
     monospace;
 }
+
+.shortcut-setting-card {
+  margin: 18px 0 24px;
+  padding: 14px 18px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.shortcut-mode-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* 展示态快捷键胶囊 (图 1) */
+.shortcut-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 6px 16px;
+  border-radius: 8px;
+  background: #f1f3f5;
+  border: 1px solid transparent;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+
+/* 编辑输入态快捷键胶囊 (图 2) */
+.shortcut-badge.editing {
+  background: #f8fafc;
+  border: 1px dashed #3b82f6;
+  color: #2563eb;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+  cursor: text;
+}
+
+/* 修改按钮 (图 1) */
+.shortcut-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.shortcut-edit-btn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #1e293b;
+}
+
+/* 确认按钮 (图 2) */
+.shortcut-confirm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 16px;
+  border-radius: 8px;
+  background: #1677ff;
+  border: 1px solid #1677ff;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.shortcut-confirm-btn:hover {
+  background: #4096ff;
+  border-color: #4096ff;
+}
+
+/* 取消按钮 ✕ (图 2) */
+.shortcut-cancel-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: #64748b;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.shortcut-cancel-btn:hover {
+  color: #0f172a;
+  background: #f1f5f9;
+}
+
+.shortcut-btn-icon {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.shortcut-status-hint {
+  font-size: 12px;
+  line-height: 1.4;
+  margin-top: 8px;
+  color: #ef4444;
+}
+

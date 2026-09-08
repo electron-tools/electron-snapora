@@ -23,6 +23,39 @@
         Select a region, annotate it, then copy and finish or save locally. Press Escape
         to cancel.
       </p>
+
+      <div class="shortcut-setting-card">
+        <!-- 默认展示态：显示当前快捷键 + 修改按钮 -->
+        <div id="shortcut-view-mode" class="shortcut-mode-row">
+          <div id="shortcut-display-badge" class="shortcut-badge" title="当前全局截图快捷键">
+            Ctrl + Shift + A
+          </div>
+          <button id="shortcut-edit-btn" class="shortcut-edit-btn" type="button">
+            <svg class="shortcut-btn-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+              <path d="M14 22h8"></path>
+            </svg>
+            <span>修改</span>
+          </button>
+        </div>
+
+        <!-- 编辑输入态：输入态虚线框 + 确认按钮 + 取消按钮 -->
+        <div id="shortcut-edit-mode" class="shortcut-mode-row hidden">
+          <div id="shortcut-record-badge" class="shortcut-badge editing" tabindex="0" title="请直接按下快捷键组合">
+            Alt + A
+          </div>
+          <button id="shortcut-save-btn" class="shortcut-confirm-btn" type="button">
+            <svg class="shortcut-btn-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            <span>确认</span>
+          </button>
+          <button id="shortcut-cancel-btn" class="shortcut-cancel-btn" type="button" aria-label="取消修改">✕</button>
+        </div>
+
+        <div id="shortcut-status-hint" class="shortcut-status-hint hidden"></div>
+      </div>
+
       <pre class="result" aria-live="polite">No screenshot task has run yet.</pre>
     </main>
     <script src="./renderer.js"></script>
