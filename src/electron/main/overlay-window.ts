@@ -117,6 +117,7 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
         : {}),
       ...(this.#platform === 'darwin'
         ? {
+            type: 'panel',
             enableLargerThanScreen: true,
             hiddenInMissionControl: true,
             simpleFullscreen: true,
