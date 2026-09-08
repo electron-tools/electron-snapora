@@ -40,6 +40,7 @@
 如果遇到问题或行为不及预期，请先检索 [已有 Issues](https://github.com/electron-tools/electron-snapora/issues)。若未找到匹配项，请提交 [新的 GitHub Issue](https://github.com/electron-tools/electron-snapora/issues/new) 或在 X 上联系 [@novratools](https://x.com/novratools)。
 
 有效的 Bug 报告建议包含：
+
 - `electron-snapora`、Electron、Node.js 版本以及操作系统环境；
 - 最小复现步骤或最小复现工程；
 - 预期行为与实际表现；
@@ -279,12 +280,12 @@ module.exports = {
 
 ## 支持基线与平台特性
 
-| 操作系统环境                                     | 状态                                                    |
-| ------------------------------------------------ | ------------------------------------------------------- |
-| Windows 11 x64, Electron 42.8/43.3               | 已通过全量自动化与手动验证                              |
-| Windows ARM64                                    | 等待硬件实测                                            |
-| macOS (Retina 屏与签名应用)                      | 代码与单测已就绪，等待正式签名验证                      |
-| Linux X11 / XWayland / native Wayland / PipeWire | 处于适配中                                              |
+| 操作系统环境                                     | 状态                               |
+| ------------------------------------------------ | ---------------------------------- |
+| Windows 11 x64, Electron 42.8/43.3               | 已通过全量自动化与手动验证         |
+| Windows ARM64                                    | 等待硬件实测                       |
+| macOS (Retina 屏与签名应用)                      | 代码与单测已就绪，等待正式签名验证 |
+| Linux X11 / XWayland / native Wayland / PipeWire | 处于适配中                         |
 
 ### macOS 权限配置
 
@@ -336,18 +337,18 @@ const snapora = setupElectronSnapora({
 
 ### 错误码速查表
 
-| 错误代码 | 说明 |
-| :--- | :--- |
-| `CAPTURE_BUSY` | 截图通道忙碌、同一发起方互斥或排队容量已满。 |
-| `INVALID_REQUEST` | 来源校验不通过、传入参数非法或请求格式错误。 |
-| `RESOURCE_LIMIT_EXCEEDED` | 图像像素尺寸或二进制大小超出安全阈值。 |
-| `PERMISSION_DENIED` | 操作系统屏幕录制权限被拒绝。 |
-| `DISPLAY_NOT_FOUND` | 未找到匹配的目标显示器或捕获源。 |
-| `CAPTURE_FAILED` | 屏幕捕获底层未能成功生成画面帧。 |
-| `OVERLAY_LOAD_FAILED` | 覆盖层静态资源缺失或渲染进程启动超时。 |
-| `EXPORT_FAILED` | 剪贴板写入、文件保存对话框或 PNG 编码失败。 |
-| `INVALID_RESULT` | 覆盖层返回了非法数据或未预期的生命周期消息。 |
-| `UNSUPPORTED_PLATFORM` | 当前操作系统或显示协议不受支持。 |
+| 错误代码                  | 说明                                         |
+| :------------------------ | :------------------------------------------- |
+| `CAPTURE_BUSY`            | 截图通道忙碌、同一发起方互斥或排队容量已满。 |
+| `INVALID_REQUEST`         | 来源校验不通过、传入参数非法或请求格式错误。 |
+| `RESOURCE_LIMIT_EXCEEDED` | 图像像素尺寸或二进制大小超出安全阈值。       |
+| `PERMISSION_DENIED`       | 操作系统屏幕录制权限被拒绝。                 |
+| `DISPLAY_NOT_FOUND`       | 未找到匹配的目标显示器或捕获源。             |
+| `CAPTURE_FAILED`          | 屏幕捕获底层未能成功生成画面帧。             |
+| `OVERLAY_LOAD_FAILED`     | 覆盖层静态资源缺失或渲染进程启动超时。       |
+| `EXPORT_FAILED`           | 剪贴板写入、文件保存对话框或 PNG 编码失败。  |
+| `INVALID_RESULT`          | 覆盖层返回了非法数据或未预期的生命周期消息。 |
+| `UNSUPPORTED_PLATFORM`    | 当前操作系统或显示协议不受支持。             |
 
 ## 开源协议与商标
 

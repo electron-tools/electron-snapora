@@ -52,26 +52,87 @@ const isMac = navigator.platform.toUpperCase().includes('MAC');
  */
 const CODE_TO_ACCELERATOR_KEY = {
   // 字母键
-  KeyA: 'A', KeyB: 'B', KeyC: 'C', KeyD: 'D', KeyE: 'E',
-  KeyF: 'F', KeyG: 'G', KeyH: 'H', KeyI: 'I', KeyJ: 'J',
-  KeyK: 'K', KeyL: 'L', KeyM: 'M', KeyN: 'N', KeyO: 'O',
-  KeyP: 'P', KeyQ: 'Q', KeyR: 'R', KeyS: 'S', KeyT: 'T',
-  KeyU: 'U', KeyV: 'V', KeyW: 'W', KeyX: 'X', KeyY: 'Y', KeyZ: 'Z',
+  KeyA: 'A',
+  KeyB: 'B',
+  KeyC: 'C',
+  KeyD: 'D',
+  KeyE: 'E',
+  KeyF: 'F',
+  KeyG: 'G',
+  KeyH: 'H',
+  KeyI: 'I',
+  KeyJ: 'J',
+  KeyK: 'K',
+  KeyL: 'L',
+  KeyM: 'M',
+  KeyN: 'N',
+  KeyO: 'O',
+  KeyP: 'P',
+  KeyQ: 'Q',
+  KeyR: 'R',
+  KeyS: 'S',
+  KeyT: 'T',
+  KeyU: 'U',
+  KeyV: 'V',
+  KeyW: 'W',
+  KeyX: 'X',
+  KeyY: 'Y',
+  KeyZ: 'Z',
 
   // 主键盘数字键
-  Digit0: '0', Digit1: '1', Digit2: '2', Digit3: '3', Digit4: '4',
-  Digit5: '5', Digit6: '6', Digit7: '7', Digit8: '8', Digit9: '9',
+  Digit0: '0',
+  Digit1: '1',
+  Digit2: '2',
+  Digit3: '3',
+  Digit4: '4',
+  Digit5: '5',
+  Digit6: '6',
+  Digit7: '7',
+  Digit8: '8',
+  Digit9: '9',
 
   // 小键盘数字键
-  Numpad0: 'num0', Numpad1: 'num1', Numpad2: 'num2', Numpad3: 'num3', Numpad4: 'num4',
-  Numpad5: 'num5', Numpad6: 'num6', Numpad7: 'num7', Numpad8: 'num8', Numpad9: 'num9',
-  NumpadAdd: 'numadd', NumpadSubtract: 'numsub', NumpadMultiply: 'nummult', NumpadDivide: 'numdiv', NumpadDecimal: 'numdec',
+  Numpad0: 'num0',
+  Numpad1: 'num1',
+  Numpad2: 'num2',
+  Numpad3: 'num3',
+  Numpad4: 'num4',
+  Numpad5: 'num5',
+  Numpad6: 'num6',
+  Numpad7: 'num7',
+  Numpad8: 'num8',
+  Numpad9: 'num9',
+  NumpadAdd: 'numadd',
+  NumpadSubtract: 'numsub',
+  NumpadMultiply: 'nummult',
+  NumpadDivide: 'numdiv',
+  NumpadDecimal: 'numdec',
 
   // 功能键
-  F1: 'F1', F2: 'F2', F3: 'F3', F4: 'F4', F5: 'F5', F6: 'F6',
-  F7: 'F7', F8: 'F8', F9: 'F9', F10: 'F10', F11: 'F11', F12: 'F12',
-  F13: 'F13', F14: 'F14', F15: 'F15', F16: 'F16', F17: 'F17', F18: 'F18',
-  F19: 'F19', F20: 'F20', F21: 'F21', F22: 'F22', F23: 'F23', F24: 'F24',
+  F1: 'F1',
+  F2: 'F2',
+  F3: 'F3',
+  F4: 'F4',
+  F5: 'F5',
+  F6: 'F6',
+  F7: 'F7',
+  F8: 'F8',
+  F9: 'F9',
+  F10: 'F10',
+  F11: 'F11',
+  F12: 'F12',
+  F13: 'F13',
+  F14: 'F14',
+  F15: 'F15',
+  F16: 'F16',
+  F17: 'F17',
+  F18: 'F18',
+  F19: 'F19',
+  F20: 'F20',
+  F21: 'F21',
+  F22: 'F22',
+  F23: 'F23',
+  F24: 'F24',
 
   // 控制键
   Space: 'Space',
@@ -235,7 +296,16 @@ if (
     // 若当前仅按下了修饰键（Ctrl/Alt/Shift/Meta），在虚线框中预览修饰键
     if (
       ['Control', 'Shift', 'Alt', 'Meta'].includes(event.key) ||
-      ['ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight'].includes(event.code)
+      [
+        'ControlLeft',
+        'ControlRight',
+        'ShiftLeft',
+        'ShiftRight',
+        'AltLeft',
+        'AltRight',
+        'MetaLeft',
+        'MetaRight',
+      ].includes(event.code)
     ) {
       hasCompleteKey = false;
       recordBadge.textContent = displayModifiers.join(' + ');
@@ -316,4 +386,3 @@ if (
     exitEditMode();
   });
 }
-

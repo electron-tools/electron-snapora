@@ -166,18 +166,18 @@ const snapora = setupElectronSnapora({
 
 ## エラーコード一覧
 
-| エラーコード | 内容 |
-| :--- | :--- |
-| `CAPTURE_BUSY` | 実行中タスクまたはキューが満杯です。 |
-| `INVALID_REQUEST` | リクエストの検証に失敗しました。 |
-| `RESOURCE_LIMIT_EXCEEDED` | 許容サイズを超過しました。 |
-| `PERMISSION_DENIED` | 画面録画権限が拒否されました。 |
-| `DISPLAY_NOT_FOUND` | 対象ディスプレイが見つかりません。 |
-| `CAPTURE_FAILED` | キャプチャに失敗しました。 |
-| `OVERLAY_LOAD_FAILED` | オーバーレイの読み込みに失敗しました。 |
-| `EXPORT_FAILED` | 画像出力または保存に失敗しました。 |
-| `INVALID_RESULT` | 不正な結果データです。 |
-| `UNSUPPORTED_PLATFORM` | 非対応プラットフォームです。 |
+| エラーコード              | 内容                                   |
+| :------------------------ | :------------------------------------- |
+| `CAPTURE_BUSY`            | 実行中タスクまたはキューが満杯です。   |
+| `INVALID_REQUEST`         | リクエストの検証に失敗しました。       |
+| `RESOURCE_LIMIT_EXCEEDED` | 許容サイズを超過しました。             |
+| `PERMISSION_DENIED`       | 画面録画権限が拒否されました。         |
+| `DISPLAY_NOT_FOUND`       | 対象ディスプレイが見つかりません。     |
+| `CAPTURE_FAILED`          | キャプチャに失敗しました。             |
+| `OVERLAY_LOAD_FAILED`     | オーバーレイの読み込みに失敗しました。 |
+| `EXPORT_FAILED`           | 画像出力または保存に失敗しました。     |
+| `INVALID_RESULT`          | 不正な結果データです。                 |
+| `UNSUPPORTED_PLATFORM`    | 非対応プラットフォームです。           |
 
 ## ライセンスと商標
 

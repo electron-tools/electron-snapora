@@ -561,17 +561,30 @@ textEditor.addEventListener('keydown', (event) => {
 textEditor.addEventListener('blur', () => closeTextEditor(true));
 textEditor.addEventListener('input', resizeTextEditor);
 
-window.addEventListener('keydown', (event) => {
+function handleShortcut(event: {
+  key: string;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+  shiftKey?: boolean;
+  altKey?: boolean;
+  preventDefault?: () => void;
+  stopPropagation?: () => void;
+  target?: EventTarget | null;
+}): void {
   if (selectionStore.getState().phase === 'exporting') {
     return;
   }
   if (event.key === 'Escape' && !colorPickerPopover.hidden) {
-    event.preventDefault();
+    event.preventDefault?.();
     closeColorPicker();
     colorControl.focus();
     return;
   }
   if (!textEditorContainer.hidden) {
+    if (event.key === 'Escape') {
+      event.preventDefault?.();
+      closeTextEditor(false);
+    }
     return;
   }
   const eventTarget = event.target;
@@ -580,14 +593,14 @@ window.addEventListener('keydown', (event) => {
     eventTarget.matches('input, select, textarea')
   ) {
     if (event.key === 'Escape') {
-      event.preventDefault();
+      event.preventDefault?.();
       eventTarget.blur();
     }
     return;
   }
   const commandKey = event.ctrlKey || event.metaKey;
   if (commandKey && event.key.toLowerCase() === 'z') {
-    event.preventDefault();
+    event.preventDefault?.();
     if (event.shiftKey) {
       annotationStore.redo();
     } else {
@@ -596,17 +609,17 @@ window.addEventListener('keydown', (event) => {
     return;
   }
   if (commandKey && event.key.toLowerCase() === 'y') {
-    event.preventDefault();
+    event.preventDefault?.();
     annotationStore.redo();
     return;
   }
   if (commandKey && event.key.toLowerCase() === 'c') {
-    event.preventDefault();
+    event.preventDefault?.();
     void confirmCapture('copy');
     return;
   }
   if (commandKey && event.key.toLowerCase() === 's') {
-    event.preventDefault();
+    event.preventDefault?.();
     void confirmCapture('save');
     return;
   }
@@ -626,25 +639,28 @@ window.addEventListener('keydown', (event) => {
       (candidate) => candidate.dataset.tool === tool && !candidate.hidden
     );
     if (tool && button) {
-      event.preventDefault();
+      event.preventDefault?.();
       annotationStore.setTool(tool);
       return;
     }
   }
   if (event.key === 'Delete' || event.key === 'Backspace') {
-    event.preventDefault();
+    event.preventDefault?.();
     annotationStore.deleteSelected();
     return;
   }
   if (event.key === 'Escape') {
     // 阻止默认事件冒泡至宿主或系统窗口层，避免 macOS 触发未处理按键的 NSBeep 拒绝提示音
-    event.preventDefault();
+    event.preventDefault?.();
     cancelCapture();
   } else if (event.key === 'Enter') {
-    event.preventDefault();
+    event.preventDefault?.();
     void confirmCapture();
   }
-});
+}
+
+window.addEventListener('keydown', handleShortcut);
+window.snaporaOverlay.onShortcut?.((payload) => handleShortcut(payload));
 window.snaporaOverlay.ready();
 
 function handleCanvasPointerDown(event: PointerEvent): void {
@@ -687,7 +703,9 @@ function handleCanvasPointerDown(event: PointerEvent): void {
   const annotationState = annotationStore.getState();
   const tolerance = getImageScale() * 8;
   const elements = getRenderableElements(annotationState);
-  const selected = elements.find((element) => element.id === annotationState.selectedElementId);
+  const selected = elements.find(
+    (element) => element.id === annotationState.selectedElementId
+  );
 
   // 1. 如果当前已有选中的标注元素，优先检查是否点击了其四个角 Resize 控制点（对齐 Lark：任意工具下均可直接拖拽控制点 resize）
   if (selected) {
@@ -921,11 +939,8 @@ function handleCanvasDoubleClick(event: MouseEvent): void {
   const textElements = (annotationStore.getState().document?.elements ?? []).filter(
     (element): element is TextElement => element.type === 'text'
   );
-  const hitText = hitTestElement(
-    textElements,
-    imagePoint,
-    getImageScale() * 8
-  ) as TextElement | undefined;
+  const hitText = hitTestElement(textElements, imagePoint, getImageScale() * 8) as
+    TextElement | undefined;
 
   if (hitText) {
     event.preventDefault();
@@ -1065,7 +1080,9 @@ function updateDirectMoveHover(viewportPoint: Point | null): void {
   const imagePoint = toImagePoint(viewportPoint);
   const elements = getRenderableElements(annotationState);
   const tolerance = getImageScale() * 8;
-  const selected = elements.find((element) => element.id === annotationState.selectedElementId);
+  const selected = elements.find(
+    (element) => element.id === annotationState.selectedElementId
+  );
 
   // 1. 优先检查是否悬浮在当前选中元素的四个 Resize 控制点上
   if (selected) {
@@ -1164,6 +1181,7 @@ function openTextEditor(viewportPoint: Point, imagePoint: Point): void {
   pendingTextViewportPoint = viewportPoint;
   textEditor.value = '';
   textEditorContainer.hidden = false;
+  window.snaporaOverlay.setTextEditing?.(true);
   applyTextEditorPreset(style.textStyle, style.color, fontSize);
   textEditor.style.fontSize = `${fontSize}px`;
   resizeTextEditor();
@@ -1197,12 +1215,15 @@ function openTextEditorForElement(element: TextElement): void {
   } else {
     pendingTextViewportPoint = {
       x: element.position.x / imageScale - layout.offsetToBaseline.x,
-      y: (element.position.y - element.metrics.ascent) / imageScale - layout.offsetToBaseline.y,
+      y:
+        (element.position.y - element.metrics.ascent) / imageScale -
+        layout.offsetToBaseline.y,
     };
   }
 
   textEditor.value = element.value;
   textEditorContainer.hidden = false;
+  window.snaporaOverlay.setTextEditing?.(true);
 
   annotationStore.setStyle({
     color: element.color,
@@ -1383,6 +1404,7 @@ function closeTextEditor(commit: boolean): void {
   pendingTextPoint = null;
   pendingTextViewportPoint = null;
   textEditorContainer.hidden = true;
+  window.snaporaOverlay.setTextEditing?.(false);
   textEditor.value = '';
   renderAnnotationCanvas();
 }

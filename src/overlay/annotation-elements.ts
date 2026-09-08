@@ -85,8 +85,14 @@ export function getTextEditorLayout(
 
   const contentHeight = Math.max(1, lineCount) * lineHeight;
 
-  const editorWidth = Math.max(minEditorWidth, Math.ceil(textWidth + editorPaddingX + 4 * scale));
-  const editorHeight = Math.max(minEditorHeight, Math.ceil(contentHeight + editorPaddingY));
+  const editorWidth = Math.max(
+    minEditorWidth,
+    Math.ceil(textWidth + editorPaddingX + 4 * scale)
+  );
+  const editorHeight = Math.max(
+    minEditorHeight,
+    Math.ceil(contentHeight + editorPaddingY)
+  );
 
   const containerWidth = editorWidth + containerChrome;
   const containerHeight = editorHeight + containerChrome;
@@ -511,7 +517,9 @@ export function getElementResizeHandles(
 /**
  * 获取几何包围盒的四个角控制点（nw, ne, se, sw）。
  */
-export function getResizeHandlePoints(bounds: Rect): Partial<Record<ResizeHandle, Point>> {
+export function getResizeHandlePoints(
+  bounds: Rect
+): Partial<Record<ResizeHandle, Point>> {
   const right = bounds.x + bounds.width;
   const bottom = bounds.y + bounds.height;
 

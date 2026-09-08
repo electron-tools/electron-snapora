@@ -1,16 +1,7 @@
 import type { Point, Rect, Size } from '../core/geometry/rect.js';
 
 export type ResizeHandle =
-  | 'n'
-  | 'ne'
-  | 'e'
-  | 'se'
-  | 's'
-  | 'sw'
-  | 'w'
-  | 'nw'
-  | 'start'
-  | 'end';
+  'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw' | 'start' | 'end';
 
 export interface ToolbarPosition extends Point {
   placement: 'above' | 'below' | 'inside';

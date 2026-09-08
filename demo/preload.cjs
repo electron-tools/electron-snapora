@@ -15,4 +15,3 @@ contextBridge.exposeInMainWorld('demoShortcutApi', {
   getShortcut: () => ipcRenderer.invoke('demo:get-shortcut'),
   setShortcut: (accelerator) => ipcRenderer.invoke('demo:set-shortcut', accelerator),
 });
-

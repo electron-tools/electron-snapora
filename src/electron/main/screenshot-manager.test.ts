@@ -439,7 +439,9 @@ describe('ScreenshotManager', () => {
       onClosed: vi.fn(() => vi.fn()),
       onRendererGone: vi.fn(() => vi.fn()),
     };
-    vi.spyOn(webContents, 'fromId').mockReturnValue({} as unknown as ReturnType<typeof webContents.fromId>);
+    vi.spyOn(webContents, 'fromId').mockReturnValue(
+      {} as unknown as ReturnType<typeof webContents.fromId>
+    );
     vi.spyOn(BrowserWindow, 'fromWebContents').mockReturnValue(fakeHost);
 
     const manager = new ScreenshotManager({

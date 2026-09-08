@@ -111,11 +111,7 @@ export function drawAnnotations(
         options.movingOutlineColor ?? '#0a84ff'
       );
     } else if (selected.type === 'arrow') {
-      drawArrowSelectionOutline(
-        context,
-        selected,
-        options.selectionHandleSize ?? 8
-      );
+      drawArrowSelectionOutline(context, selected, options.selectionHandleSize ?? 8);
     } else {
       drawSelectionOutline(
         context,
@@ -432,10 +428,7 @@ function drawMovingOutline(
  * 严格按照 .text-editor-container (border: 2px, padding: 4px) 与 .text-editor (padding: 6px 8px, min-width: 36px, min-height: 32px, line-height: 1.3)
  * 的 DOM 布局盒模型还原真实外框，确保选中态/拖拽态与输入态 100% 像素级对齐。
  */
-export function getTextFocusBounds(
-  element: TextElement,
-  handleSize: number
-): Rect {
+export function getTextFocusBounds(element: TextElement, handleSize: number): Rect {
   const scale = handleSize / 8;
 
   // 优先直接使用输入确认时永久保存的真实 DOM 容器外框（经平移后），保证 100% 像素级无缝对齐

@@ -166,18 +166,18 @@ const snapora = setupElectronSnapora({
 
 ## 오류 코드
 
-| 오류 코드 | 설명 |
-| :--- | :--- |
-| `CAPTURE_BUSY` | 캡처 작업이 실행 중이거나 대기열이 가득 찼습니다. |
-| `INVALID_REQUEST` | 요청 검증에 실패했습니다. |
-| `RESOURCE_LIMIT_EXCEEDED` | 허용 리소스 크기를 초과했습니다. |
-| `PERMISSION_DENIED` | 화면 녹화 권한이 거부되었습니다. |
-| `DISPLAY_NOT_FOUND` | 대상 디스플레이를 찾을 수 없습니다. |
-| `CAPTURE_FAILED` | 캡처 생성에 실패했습니다. |
-| `OVERLAY_LOAD_FAILED` | 오버레이 로드에 실패했습니다. |
-| `EXPORT_FAILED` | 이미지 출력 또는 저장에 실패했습니다. |
-| `INVALID_RESULT` | 잘못된 결과 데이터입니다. |
-| `UNSUPPORTED_PLATFORM` | 지원되지 않는 플랫폼입니다. |
+| 오류 코드                 | 설명                                              |
+| :------------------------ | :------------------------------------------------ |
+| `CAPTURE_BUSY`            | 캡처 작업이 실행 중이거나 대기열이 가득 찼습니다. |
+| `INVALID_REQUEST`         | 요청 검증에 실패했습니다.                         |
+| `RESOURCE_LIMIT_EXCEEDED` | 허용 리소스 크기를 초과했습니다.                  |
+| `PERMISSION_DENIED`       | 화면 녹화 권한이 거부되었습니다.                  |
+| `DISPLAY_NOT_FOUND`       | 대상 디스플레이를 찾을 수 없습니다.               |
+| `CAPTURE_FAILED`          | 캡처 생성에 실패했습니다.                         |
+| `OVERLAY_LOAD_FAILED`     | 오버레이 로드에 실패했습니다.                     |
+| `EXPORT_FAILED`           | 이미지 출력 또는 저장에 실패했습니다.             |
+| `INVALID_RESULT`          | 잘못된 결과 데이터입니다.                         |
+| `UNSUPPORTED_PLATFORM`    | 지원되지 않는 플랫폼입니다.                       |
 
 ## 라이선스 및 상표
 

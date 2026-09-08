@@ -166,18 +166,18 @@ Al empaquetar el proceso principal, mantén `electron-snapora` como external (co
 
 ## Tabla de códigos de error
 
-| Código | Significado |
-| :--- | :--- |
-| `CAPTURE_BUSY` | La tarea o la cola de captura está ocupada. |
-| `INVALID_REQUEST` | Error de validación en la solicitud o parámetros. |
-| `RESOURCE_LIMIT_EXCEEDED` | Se superaron los límites de tamaño o memoria. |
-| `PERMISSION_DENIED` | Permiso de grabación de pantalla denegado por el SO. |
-| `DISPLAY_NOT_FOUND` | No se encontró la pantalla objetivo. |
-| `CAPTURE_FAILED` | No se pudo capturar el fotograma de la pantalla. |
-| `OVERLAY_LOAD_FAILED` | Error al cargar los recursos del Overlay. |
-| `EXPORT_FAILED` | Falló la salida PNG, el portapapeles o el guardado. |
-| `INVALID_RESULT` | Datos de resultado no válidos. |
-| `UNSUPPORTED_PLATFORM` | Plataforma o protocolo de pantalla no compatible. |
+| Código                    | Significado                                          |
+| :------------------------ | :--------------------------------------------------- |
+| `CAPTURE_BUSY`            | La tarea o la cola de captura está ocupada.          |
+| `INVALID_REQUEST`         | Error de validación en la solicitud o parámetros.    |
+| `RESOURCE_LIMIT_EXCEEDED` | Se superaron los límites de tamaño o memoria.        |
+| `PERMISSION_DENIED`       | Permiso de grabación de pantalla denegado por el SO. |
+| `DISPLAY_NOT_FOUND`       | No se encontró la pantalla objetivo.                 |
+| `CAPTURE_FAILED`          | No se pudo capturar el fotograma de la pantalla.     |
+| `OVERLAY_LOAD_FAILED`     | Error al cargar los recursos del Overlay.            |
+| `EXPORT_FAILED`           | Falló la salida PNG, el portapapeles o el guardado.  |
+| `INVALID_RESULT`          | Datos de resultado no válidos.                       |
+| `UNSUPPORTED_PLATFORM`    | Plataforma o protocolo de pantalla no compatible.    |
 
 ## Licencia y marcas
 

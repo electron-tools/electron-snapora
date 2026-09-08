@@ -259,10 +259,17 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
             this.#desktopSourceIds.set(source.display_id, source.id);
           }
         }
-        if (sources.every((s) => !s.display_id) && sources.length === allDisplays.length) {
+        if (
+          sources.every((s) => !s.display_id) &&
+          sources.length === allDisplays.length
+        ) {
           sources.forEach((source, index) => {
             const displayItem = allDisplays[index];
-            if (displayItem && source.id && !this.#desktopSourceIds.has(String(displayItem.id))) {
+            if (
+              displayItem &&
+              source.id &&
+              !this.#desktopSourceIds.has(String(displayItem.id))
+            ) {
               this.#desktopSourceIds.set(String(displayItem.id), source.id);
             }
           });

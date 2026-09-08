@@ -113,3 +113,16 @@ export type ScreenshotOutputResponse =
   | { status: 'completed'; action: 'pin' }
   | { status: 'cancelled' }
   | { status: 'failed'; code: ScreenshotErrorCode; message: string };
+
+export interface OverlayShortcutPayload {
+  key: string;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+  shiftKey?: boolean;
+  altKey?: boolean;
+}
+
+export interface ScreenshotTextEditingPayload {
+  protocolVersion: typeof SCREENSHOT_PROTOCOL_VERSION;
+  active: boolean;
+}

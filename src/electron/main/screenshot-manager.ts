@@ -1,10 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import {
-  BrowserWindow,
-  ipcMain as electronIpcMain,
-  webContents,
-} from 'electron';
+import { BrowserWindow, ipcMain as electronIpcMain, webContents } from 'electron';
 import type { IpcMain } from 'electron';
 
 import type {

@@ -1,9 +1,6 @@
 const { join } = require('node:path');
 const { app, BrowserWindow, globalShortcut, ipcMain } = require('electron');
-const {
-  ScreenshotManager,
-  registerScreenshotIpc,
-} = require('electron-snapora/main');
+const { ScreenshotManager, registerScreenshotIpc } = require('electron-snapora/main');
 
 const screenshotManager = new ScreenshotManager();
 let unregisterScreenshotIpc;
@@ -96,7 +93,9 @@ app.whenReady().then(() => {
 
   // 启动自愈检测：防止持久化或旧变量残存非 ASCII 污染
   if (/[\u0080-\uFFFF]/.test(currentShortcut)) {
-    console.warn(`[Demo] 检测到非法快捷键配置 "${currentShortcut}"，自动自愈重置为默认值。`);
+    console.warn(
+      `[Demo] 检测到非法快捷键配置 "${currentShortcut}"，自动自愈重置为默认值。`
+    );
     currentShortcut = DEFAULT_SHORTCUT;
   }
   // 默认启动时立即生效注册快捷键
@@ -121,4 +120,3 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
-

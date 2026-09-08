@@ -4,6 +4,7 @@ import type { ScreenshotOptions } from '../../types.js';
 
 import type {
   CaptureDisplay,
+  OverlayShortcutPayload,
   ScreenshotInitializePayload,
 } from '../protocol/messages.js';
 import { OVERLAY_CHANNELS } from '../protocol/channels.js';
@@ -54,6 +55,7 @@ export interface ScreenshotOverlayWindow {
   readonly rendererReady?: boolean;
   load(): Promise<void>;
   sendInitialize(payload: ScreenshotInitializePayload): void;
+  sendShortcut?(payload: OverlayShortcutPayload): void;
   prime(): void;
   reveal(): void;
   hide?(): void;
@@ -168,6 +170,12 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
 
   sendInitialize(payload: ScreenshotInitializePayload): void {
     this.#window.webContents.send(OVERLAY_CHANNELS.initialize, payload);
+  }
+
+  sendShortcut(payload: OverlayShortcutPayload): void {
+    if (!this.#window.isDestroyed()) {
+      this.#window.webContents.send(OVERLAY_CHANNELS.shortcut, payload);
+    }
   }
 
   /** 先以全透明状态进入桌面合成器，隐藏 Windows/macOS 的窗口出场和大图首帧栅格化。 */

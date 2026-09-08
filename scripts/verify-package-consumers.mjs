@@ -79,10 +79,14 @@ try {
 
   console.log('Electron Snapora ESM and CommonJS tarball consumers passed.');
 } finally {
-  rmSync(temporaryRoot, {
-    recursive: true,
-    force: true,
-    maxRetries: 20,
-    retryDelay: 250,
-  });
+  try {
+    rmSync(temporaryRoot, {
+      recursive: true,
+      force: true,
+      maxRetries: 20,
+      retryDelay: 250,
+    });
+  } catch {
+    // Windows 临时目录释放锁不会影响测试结果
+  }
 }

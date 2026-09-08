@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.16] - 2026-09-08
+
+### Added
+
+- Add session-scoped global shortcut forwarding for overlay interactions (`Escape`, `Enter`, `r`, `o`, `a`, `p`, `t`, `m`, `w`, `v`, `Cmd/Ctrl+Z`, `Cmd/Ctrl+C`, `Cmd/Ctrl+S`), guaranteeing instantaneous keyboard responsiveness on macOS even when the host application is running in the background or minimized without stealing system-wide application focus.
+- Add `type: 'panel'` configuration for macOS overlay windows to support floating panel layer presentation across all virtual desktops and Spaces.
+- Add physical key code (`event.code`) to Electron Accelerator mapping in the demo shortcut recorder to reliably capture `Option` / `Alt` combinations across keyboard layouts.
+
+### Changed
+
+- Strictly condition host window refocusing on `wasHostFocused`, preventing the background host application from unexpectedly jumping to the front when cancelling or finishing a capture.
+- Remove all `app.hide()` invocations to prevent window flickering and maintain proper Dock icon state when the host application is minimized.
+
+### Fixed
+
+- Fix macOS overlay window failing to receive keyboard events (`Escape`, `R`, `O`, etc.) when capture is initiated while the host application is in the background.
+- Prevent Electron accelerator registration failures and unregistration deadlocks caused by macOS `Option` key generating non-ASCII diacritics (e.g. `Å`, `≈`, `∑`).
+- Resolve demo preload sandboxing issue by removing external `node:path` dependency in renderer processes and enforcing strict CSP compliance via CSS class toggling.
+
 ## [1.0.15] - 2026-09-07
 
 ### Fixed

@@ -83,14 +83,18 @@ try {
     'electron-vite'
   );
 
-  runPnpm(['exec', 'webpack', '--config', 'webpack.config.cjs'], consumerDirectory);
+  runPnpm(['exec', 'webpack', '--config', './webpack.config.cjs'], consumerDirectory);
   assertExternalized(join(consumerDirectory, 'out', 'webpack', 'main.cjs'), 'webpack');
   console.log('Electron Snapora electron-vite and webpack external checks passed.');
 } finally {
-  rmSync(temporaryRoot, {
-    recursive: true,
-    force: true,
-    maxRetries: 20,
-    retryDelay: 250,
-  });
+  try {
+    rmSync(temporaryRoot, {
+      recursive: true,
+      force: true,
+      maxRetries: 20,
+      retryDelay: 250,
+    });
+  } catch {
+    // Windows 临时目录释放锁不会影响测试结果
+  }
 }

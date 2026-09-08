@@ -32,6 +32,13 @@ export const ipcMain = {
   removeListener: unavailable,
 };
 
+export const globalShortcut = {
+  register: () => true,
+  unregister: () => undefined,
+  isRegistered: () => false,
+  unregisterAll: () => undefined,
+};
+
 export const webContents = {
   fromId: () => undefined,
 };

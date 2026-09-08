@@ -11,6 +11,8 @@ export const OVERLAY_CHANNELS = {
   cancel: 'electron-snapora:overlay:cancel',
   error: 'electron-snapora:overlay:error',
   output: 'electron-snapora:overlay:output',
+  shortcut: 'electron-snapora:overlay:shortcut',
+  textEditing: 'electron-snapora:overlay:text-editing',
 } as const;
 
 export const PINNED_CHANNELS = {
