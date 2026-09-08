@@ -1,5 +1,10 @@
 import { EventEmitter } from 'node:events';
-import type { IpcMain, IpcMainInvokeEvent } from 'electron';
+import {
+  BrowserWindow,
+  webContents,
+  type IpcMain,
+  type IpcMainInvokeEvent,
+} from 'electron';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ScreenshotResult } from '../../types.js';
@@ -341,5 +346,128 @@ describe('ScreenshotManager', () => {
       code: 'CAPTURE_FAILED',
       message: 'runner broke',
     });
+  });
+
+  it('restores host window focus when host was focused before capture', async () => {
+    const eventBus = new EventEmitter();
+    const ipcMain = Object.assign(eventBus, {
+      handle: vi.fn(),
+    }) as unknown as Pick<IpcMain, 'handle' | 'on' | 'removeListener'>;
+    const captureAdapter = {
+      prepare: vi.fn(async () => undefined),
+      capture: vi.fn(async () => [frame]),
+    };
+    const overlay: ScreenshotOverlayWindow = {
+      webContentsId: 88,
+      load: vi.fn(async () => undefined),
+      sendInitialize: vi.fn(),
+      prime: vi.fn(),
+      reveal: vi.fn(),
+      hide: vi.fn(),
+      destroy: vi.fn(),
+      onClosed: vi.fn(() => vi.fn()),
+      onRendererGone: vi.fn(() => vi.fn()),
+    };
+    const show = vi.fn();
+    const focus = vi.fn();
+    const fakeHost = {
+      isFocused: vi.fn(() => true),
+      isDestroyed: vi.fn(() => false),
+      show,
+      focus,
+    } as unknown as BrowserWindow;
+    vi.spyOn(webContents, 'fromId').mockReturnValue(
+      {} as unknown as ReturnType<typeof webContents.fromId>
+    );
+    vi.spyOn(BrowserWindow, 'fromWebContents').mockReturnValue(fakeHost);
+
+    const manager = new ScreenshotManager({
+      ipcMain,
+      captureAdapter,
+      createOverlay: () => overlay,
+    });
+
+    const capturePromise = manager.capture({}, { senderWebContentsId: 12 });
+    await vi.waitFor(() => expect(overlay.load).toHaveBeenCalledOnce());
+    const overlayEvent = { sender: { id: 88 } };
+    eventBus.emit(OVERLAY_CHANNELS.ready, overlayEvent, {
+      protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
+    });
+    eventBus.emit(OVERLAY_CHANNELS.prepared, overlayEvent, {
+      protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
+      jobId: manager.activeJobId,
+    });
+    eventBus.emit(OVERLAY_CHANNELS.cancel, overlayEvent, {
+      protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
+      jobId: manager.activeJobId,
+    });
+
+    await expect(capturePromise).resolves.toEqual({ status: 'cancelled' });
+    expect(overlay.hide).toHaveBeenCalledOnce();
+    expect(show).toHaveBeenCalledOnce();
+    expect(focus).toHaveBeenCalledOnce();
+
+    vi.restoreAllMocks();
+  });
+
+  it('does not touch or focus host window when host was not focused before capture', async () => {
+    const show = vi.fn();
+    const focus = vi.fn();
+    const fakeHost = {
+      isFocused: vi.fn(() => false),
+      isDestroyed: vi.fn(() => false),
+      show,
+      focus,
+    } as unknown as BrowserWindow;
+
+    const eventBus = new EventEmitter();
+    const ipcMain = Object.assign(eventBus, {
+      handle: vi.fn(),
+    }) as unknown as Pick<IpcMain, 'handle' | 'on' | 'removeListener'>;
+    const captureAdapter = {
+      prepare: vi.fn(async () => undefined),
+      capture: vi.fn(async () => [frame]),
+    };
+    const overlay: ScreenshotOverlayWindow = {
+      webContentsId: 88,
+      load: vi.fn(async () => undefined),
+      sendInitialize: vi.fn(),
+      prime: vi.fn(),
+      reveal: vi.fn(),
+      hide: vi.fn(),
+      destroy: vi.fn(),
+      onClosed: vi.fn(() => vi.fn()),
+      onRendererGone: vi.fn(() => vi.fn()),
+    };
+    vi.spyOn(webContents, 'fromId').mockReturnValue({} as unknown as ReturnType<typeof webContents.fromId>);
+    vi.spyOn(BrowserWindow, 'fromWebContents').mockReturnValue(fakeHost);
+
+    const manager = new ScreenshotManager({
+      ipcMain,
+      captureAdapter,
+      createOverlay: () => overlay,
+    });
+
+    const capturePromise = manager.capture({}, { senderWebContentsId: 99 });
+    await vi.waitFor(() => expect(overlay.load).toHaveBeenCalledOnce());
+    const overlayEvent = { sender: { id: 88 } };
+    eventBus.emit(OVERLAY_CHANNELS.ready, overlayEvent, {
+      protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
+    });
+    eventBus.emit(OVERLAY_CHANNELS.prepared, overlayEvent, {
+      protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
+      jobId: manager.activeJobId,
+    });
+    eventBus.emit(OVERLAY_CHANNELS.cancel, overlayEvent, {
+      protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
+      jobId: manager.activeJobId,
+    });
+
+    await expect(capturePromise).resolves.toEqual({ status: 'cancelled' });
+    expect(overlay.hide).toHaveBeenCalledOnce();
+    expect(show).not.toHaveBeenCalled();
+    expect(focus).not.toHaveBeenCalled();
+
+    vi.restoreAllMocks();
   });
 });

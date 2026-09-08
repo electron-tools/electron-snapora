@@ -261,6 +261,7 @@ async function initializeOverlay(payload: ScreenshotInitializePayload): Promise<
     // 图片解码后保留两次合成机会，但共享一个截止时间，避免透明窗口被节流时串行等待。
     screenFrame.getBoundingClientRect();
     await waitForCompositeFrames();
+    window.focus();
     window.snaporaOverlay.prepared(payload.jobId);
   } catch (error) {
     if (controller.signal.aborted) {
@@ -548,6 +549,7 @@ pinButton.addEventListener('click', () => void confirmCapture('pin'));
 
 textEditor.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
+    event.preventDefault();
     event.stopPropagation();
     closeTextEditor(false);
   } else if (event.key === 'Enter' && !event.shiftKey) {
@@ -578,6 +580,7 @@ window.addEventListener('keydown', (event) => {
     eventTarget.matches('input, select, textarea')
   ) {
     if (event.key === 'Escape') {
+      event.preventDefault();
       eventTarget.blur();
     }
     return;
@@ -634,6 +637,8 @@ window.addEventListener('keydown', (event) => {
     return;
   }
   if (event.key === 'Escape') {
+    // 阻止默认事件冒泡至宿主或系统窗口层，避免 macOS 触发未处理按键的 NSBeep 拒绝提示音
+    event.preventDefault();
     cancelCapture();
   } else if (event.key === 'Enter') {
     event.preventDefault();

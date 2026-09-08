@@ -5,6 +5,7 @@ function unavailable(): never {
 export const app = {
   whenReady: async () => undefined,
   focus: () => undefined,
+  hide: () => undefined,
 };
 
 export const desktopCapturer = {
@@ -32,12 +33,20 @@ export const ipcMain = {
 };
 
 export const webContents = {
-  fromId: unavailable,
+  fromId: () => undefined,
 };
 
 export class BrowserWindow {
   static getAllWindows(): BrowserWindow[] {
     return [];
+  }
+
+  static getFocusedWindow(): BrowserWindow | null {
+    return null;
+  }
+
+  static fromWebContents(): BrowserWindow | null {
+    return null;
   }
 
   constructor() {

@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
-import { BrowserWindow, ipcMain as electronIpcMain, webContents } from 'electron';
+import {
+  BrowserWindow,
+  ipcMain as electronIpcMain,
+  webContents,
+} from 'electron';
 import type { IpcMain } from 'electron';
 
 import type {
@@ -146,6 +150,23 @@ function createDefaultRunner(
       previousOverlay?.destroy();
       previousOverlay = undefined;
     }
+    // 记录发起截图前是否有已激活的窗口，供会话结算时进行精准焦点恢复
+    let hostWindow: BrowserWindow | null = null;
+    let wasHostFocused = false;
+    try {
+      const senderWebContents =
+        context.senderWebContentsId !== undefined
+          ? webContents.fromId(context.senderWebContentsId)
+          : undefined;
+      const senderWindow = senderWebContents
+        ? BrowserWindow.fromWebContents(senderWebContents)
+        : null;
+      hostWindow = senderWindow ?? BrowserWindow.getFocusedWindow();
+      wasHostFocused = hostWindow?.isFocused() ?? false;
+    } catch {
+      // 在测试环境或无窗口环境安全降级
+    }
+
     const windowSnapRegions = resolveWindowSnapRegions(
       managerOptions.getWindowSnapRegions ?? getVisibleBrowserWindowBounds
     );
@@ -249,6 +270,17 @@ function createDefaultRunner(
             return response;
           }
         ),
+      onSettled: () => {
+        // 截图会话结束后的焦点恢复机制：
+        // 仅当发起截图前宿主窗口就处于前台聚焦状态时，才在截图退出后恢复其前台焦点，
+        // 防止 macOS 窗口管理器将焦点误切到启动应用的其他窗口（如终端/Finder）导致宿主被遮盖；
+        // 注意：插件绝不能调用 app.hide()，因为 app 代表整个宿主应用（等同于 Cmd+H），
+        // 插件不能也无需越权去隐蔽宿主程序在系统中的显示状态。
+        if (wasHostFocused && hostWindow && !hostWindow.isDestroyed()) {
+          hostWindow.show();
+          hostWindow.focus();
+        }
+      },
     });
 
     return {

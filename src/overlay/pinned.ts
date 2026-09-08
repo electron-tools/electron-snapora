@@ -161,6 +161,7 @@ surface.addEventListener('pointerup', endDrag);
 surface.addEventListener('pointercancel', endDrag);
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
+    event.preventDefault();
     if (contextMenu.hidden) {
       window.snaporaPinned.close();
     } else {

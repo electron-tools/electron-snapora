@@ -169,6 +169,9 @@ describe('OverlayWindow', () => {
     });
     expect(fake.setBounds).not.toHaveBeenCalled();
     expect(fake.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver');
+    expect(fake.show).toHaveBeenCalledOnce();
+    expect(fake.focus).toHaveBeenCalledOnce();
+    expect(fake.webContentsFocus).toHaveBeenCalledOnce();
 
     expect(fake.moveTop).toHaveBeenCalledTimes(2);
   });
@@ -236,12 +239,14 @@ function createFakeWindow(id: number) {
   const setVisibleOnAllWorkspaces = vi.fn();
   const moveTop = vi.fn();
   const focus = vi.fn();
+  const webContentsFocus = vi.fn();
   const window = {
     webContents: {
       id,
       on: webContentsEvents.on.bind(webContentsEvents),
       removeListener: webContentsEvents.removeListener.bind(webContentsEvents),
       send,
+      focus: webContentsFocus,
     },
     destroy,
     hide,
@@ -277,5 +282,6 @@ function createFakeWindow(id: number) {
     setVisibleOnAllWorkspaces,
     moveTop,
     focus,
+    webContentsFocus,
   };
 }

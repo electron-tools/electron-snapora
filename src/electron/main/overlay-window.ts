@@ -32,7 +32,9 @@ export type OverlayBrowserWindow = Pick<
   | 'show'
   | 'showInactive'
 > & {
-  webContents: Pick<WebContents, 'id' | 'on' | 'removeListener' | 'send'>;
+  webContents: Pick<WebContents, 'id' | 'on' | 'removeListener' | 'send'> & {
+    focus?: () => void;
+  };
 };
 
 export type OverlayBrowserWindowFactory = (
@@ -192,12 +194,18 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
       app.focus({ steal: true });
     }
     this.#raiseAboveOtherWindows();
-    if (this.#primed) {
+    if (this.#supportsInvisiblePriming) {
       this.#window.setOpacity(1);
-      this.#window.focus();
-    } else {
+    }
+    if (!this.#primed || this.#platform === 'darwin') {
+      // macOS 下从 showInactive 状态唤醒无边框全屏窗口时，必须显式调用 show()，
+      // 才能触发 Cocoa makeKeyAndOrderFront 并将 WebContents 设为 First Responder；
+      // Windows 在 primed 状态下保持无需再次 show()，避免二次触发窗口绘制动画。
       this.#window.show();
     }
+    this.#window.focus();
+    // 确保 Chromium 的 WebContents 视图获取键盘输入焦点，避免按键事件被 Cocoa 作为未响应按键丢弃而触发系统 NSBeep 警报音。
+    this.#window.webContents.focus?.();
     this.#window.moveTop();
   }
 
