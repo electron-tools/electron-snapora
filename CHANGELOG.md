@@ -6,13 +6,13 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- 修复 macOS 下当宿主程序处于后台或最小化时呼出截图，文字批注（`textarea`）和水印输入框（`input`）无法获得焦点与输入的问题：
-  - 移除导致无法成为 KeyWindow 的 `type: 'panel'` 配置，回归标准全屏窗口并保持全桌面覆盖与置顶；
-  - 在 Overlay 窗口 `reveal()` 时针对 macOS 显式调用 `app.focus({ steal: true })`，确保全屏层成为系统级 KeyWindow 并正常路由键盘事件；
-  - 彻底清理全屏全局快捷键劫持机制，将按键分发完全交还 DOM 原生键盘事件处理。
-- 修复 macOS 后台截图退出后宿主主窗口意外被拉到前台的问题：
-  - 在截图会话开始前精准记录宿主应用激活状态（`wasAppActive`）与窗口焦点（`wasHostFocused`）；
-  - 若发起截图前宿主应用不在前台，截图退出时自动将应用退回后台（`app.hide()`），将系统焦点无缝归还给截图前的第三方软件，彻底防止宿主主窗口弹到最前。
+- Fix text annotation (`textarea`) and watermark (`input`) losing focus and becoming unresponsive to keyboard input on macOS when capture is triggered while the host application is in the background or minimized:
+  - Remove `type: 'panel'` configuration for macOS overlay windows to ensure the overlay can properly become the system `KeyWindow`.
+  - Explicitly invoke `app.focus({ steal: true })` upon overlay reveal on macOS to elevate the overlay layer to the active key window and correctly route keyboard/IME events without delay.
+  - Remove session global shortcut interceptors and restore clean, native DOM keydown event dispatching across all platforms.
+- Fix background host application unexpectedly jumping to the foreground after capture session settles on macOS:
+  - Accurately capture both application active state (`wasAppActive`) and host window focus (`wasHostFocused`) prior to starting capture.
+  - Automatically retreat application to background via `app.hide()` upon session settlement if the host was not originally active, seamlessly returning system focus to the previously active third-party application without pulling the host window forward.
 
 ## [1.0.16] - 2026-09-08
 
