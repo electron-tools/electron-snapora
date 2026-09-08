@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import type { BrowserWindowConstructorOptions, WebContents } from 'electron';
 import type { ScreenshotOptions } from '../../types.js';
 
@@ -186,6 +186,10 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
   reveal(): void {
     if (this.#window.isDestroyed()) {
       return;
+    }
+    if (this.#platform === 'darwin') {
+      // macOS 只有激活应用后，后台唤起的 Overlay 才能接收物理键盘事件。
+      app.focus({ steal: true });
     }
     this.#raiseAboveOtherWindows();
     if (this.#primed) {

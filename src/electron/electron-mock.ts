@@ -4,6 +4,7 @@ function unavailable(): never {
 
 export const app = {
   whenReady: async () => undefined,
+  focus: () => undefined,
 };
 
 export const desktopCapturer = {
