@@ -158,6 +158,7 @@ describe('OverlayWindow', () => {
       y: 0,
       width: 1920,
       height: 1080,
+      type: 'panel',
       fullscreenable: true,
       enableLargerThanScreen: true,
       hiddenInMissionControl: true,
@@ -169,7 +170,8 @@ describe('OverlayWindow', () => {
     });
     expect(fake.setBounds).not.toHaveBeenCalled();
     expect(fake.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver');
-    expect(fake.show).toHaveBeenCalledOnce();
+    expect(fake.show).not.toHaveBeenCalled();
+    expect(fake.showInactive).toHaveBeenCalledOnce();
     expect(fake.focus).toHaveBeenCalledOnce();
     expect(fake.webContentsFocus).toHaveBeenCalledOnce();
 

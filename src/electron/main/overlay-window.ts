@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { BrowserWindow } from 'electron';
 import type { BrowserWindowConstructorOptions, WebContents } from 'electron';
 import type { ScreenshotOptions } from '../../types.js';
 
@@ -190,24 +190,16 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
     if (this.#window.isDestroyed()) {
       return;
     }
-    if (this.#platform === 'darwin') {
-      // macOS 只有激活应用后，后台唤起的 Overlay 才能接收物理键盘事件。
-      app.focus({ steal: true });
-    }
     this.#raiseAboveOtherWindows();
     if (this.#supportsInvisiblePriming) {
       this.#window.setOpacity(1);
     }
-    if (!this.#primed || this.#platform === 'darwin') {
-      // macOS 下从 showInactive 状态唤醒无边框全屏窗口时，必须显式调用 show()，
-      // 才能触发 Cocoa makeKeyAndOrderFront 并将 WebContents 设为 First Responder；
-      // Windows 在 primed 状态下保持无需再次 show()，避免二次触发窗口绘制动画。
-      this.#window.show();
+    if (!this.#primed) {
+      this.#window.showInactive();
     }
-    this.#window.focus();
-    // 确保 Chromium 的 WebContents 视图获取键盘输入焦点，避免按键事件被 Cocoa 作为未响应按键丢弃而触发系统 NSBeep 警报音。
-    this.#window.webContents.focus?.();
     this.#window.moveTop();
+    this.#window.focus();
+    this.#window.webContents.focus?.();
   }
 
   /** 保留已加载的 renderer，但立即退出桌面合成和截图画面。 */
