@@ -404,7 +404,6 @@ describe('ScreenshotManager', () => {
 
     await expect(capturePromise).resolves.toEqual({ status: 'cancelled' });
     expect(overlay.hide).toHaveBeenCalledOnce();
-    expect(show).toHaveBeenCalledOnce();
     expect(focus).toHaveBeenCalledOnce();
 
     vi.restoreAllMocks();

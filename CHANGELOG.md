@@ -10,7 +10,9 @@ All notable changes to this project will be documented in this file.
   - 移除导致无法成为 KeyWindow 的 `type: 'panel'` 配置，回归标准全屏窗口并保持全桌面覆盖与置顶；
   - 在 Overlay 窗口 `reveal()` 时针对 macOS 显式调用 `app.focus({ steal: true })`，确保全屏层成为系统级 KeyWindow 并正常路由键盘事件；
   - 彻底清理全屏全局快捷键劫持机制，将按键分发完全交还 DOM 原生键盘事件处理。
-- 保持截图结束后的焦点恢复逻辑：若截图前宿主应用不在前台，截图退出后绝不把宿主窗口恢复或置顶，不调用 `app.hide()`，保证宿主程序状态稳定不闪烁。
+- 修复 macOS 后台截图退出后宿主主窗口意外被拉到前台的问题：
+  - 在截图会话开始前精准记录宿主应用激活状态（`wasAppActive`）与窗口焦点（`wasHostFocused`）；
+  - 若发起截图前宿主应用不在前台，截图退出时自动将应用退回后台（`app.hide()`），将系统焦点无缝归还给截图前的第三方软件，彻底防止宿主主窗口弹到最前。
 
 ## [1.0.16] - 2026-09-08
 
