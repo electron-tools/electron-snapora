@@ -14,12 +14,12 @@ let currentShortcut = DEFAULT_SHORTCUT;
 
 /** 注册全局截图快捷键 */
 function registerCurrentShortcut(accelerator) {
-  // 先注销旧快捷键
+  // 1. 安全注销旧快捷键，加装 try...catch 彻底防范旧快捷键格式非法导致的抛错死锁
   if (currentShortcut) {
     try {
       globalShortcut.unregister(currentShortcut);
-    } catch {
-      // 忽略注销失败
+    } catch (unregisterError) {
+      console.warn('[Demo] 忽略旧快捷键注销异常，避免死锁:', unregisterError);
     }
   }
 
@@ -27,6 +27,15 @@ function registerCurrentShortcut(accelerator) {
   currentShortcut = target || DEFAULT_SHORTCUT;
   if (!target) {
     return { success: true, shortcut: '' };
+  }
+
+  // 2. 非 ASCII 字符拦截防御（防止如 Alt+Å、Alt+≈ 等特殊字符直接打入底层导致 C++ 抛出 conversion failure 异常）
+  if (/[\u0080-\uFFFF]/.test(target)) {
+    return {
+      success: false,
+      shortcut: currentShortcut,
+      error: `快捷键 "${target}" 包含非法或非 ASCII 字符（如 macOS 变音符），请使用标准英文字母或数字。`,
+    };
   }
 
   try {
@@ -85,8 +94,13 @@ app.whenReady().then(() => {
     registerCurrentShortcut(accelerator)
   );
 
+  // 启动自愈检测：防止持久化或旧变量残存非 ASCII 污染
+  if (/[\u0080-\uFFFF]/.test(currentShortcut)) {
+    console.warn(`[Demo] 检测到非法快捷键配置 "${currentShortcut}"，自动自愈重置为默认值。`);
+    currentShortcut = DEFAULT_SHORTCUT;
+  }
   // 默认启动时立即生效注册快捷键
-  registerCurrentShortcut(DEFAULT_SHORTCUT);
+  registerCurrentShortcut(currentShortcut);
 
   createHostWindow();
 

@@ -47,6 +47,64 @@ const shortcutApi = window.demoShortcutApi;
 const isMac = navigator.platform.toUpperCase().includes('MAC');
 
 /**
+ * 物理键码（event.code）到 Electron Accelerator 标准键名的映射表
+ * 彻底避免 macOS 下按住 Option (Alt) 键导致 event.key 变成 Å、≈、∑、î 等非 ASCII 特殊符号的致命 bug
+ */
+const CODE_TO_ACCELERATOR_KEY = {
+  // 字母键
+  KeyA: 'A', KeyB: 'B', KeyC: 'C', KeyD: 'D', KeyE: 'E',
+  KeyF: 'F', KeyG: 'G', KeyH: 'H', KeyI: 'I', KeyJ: 'J',
+  KeyK: 'K', KeyL: 'L', KeyM: 'M', KeyN: 'N', KeyO: 'O',
+  KeyP: 'P', KeyQ: 'Q', KeyR: 'R', KeyS: 'S', KeyT: 'T',
+  KeyU: 'U', KeyV: 'V', KeyW: 'W', KeyX: 'X', KeyY: 'Y', KeyZ: 'Z',
+
+  // 主键盘数字键
+  Digit0: '0', Digit1: '1', Digit2: '2', Digit3: '3', Digit4: '4',
+  Digit5: '5', Digit6: '6', Digit7: '7', Digit8: '8', Digit9: '9',
+
+  // 小键盘数字键
+  Numpad0: 'num0', Numpad1: 'num1', Numpad2: 'num2', Numpad3: 'num3', Numpad4: 'num4',
+  Numpad5: 'num5', Numpad6: 'num6', Numpad7: 'num7', Numpad8: 'num8', Numpad9: 'num9',
+  NumpadAdd: 'numadd', NumpadSubtract: 'numsub', NumpadMultiply: 'nummult', NumpadDivide: 'numdiv', NumpadDecimal: 'numdec',
+
+  // 功能键
+  F1: 'F1', F2: 'F2', F3: 'F3', F4: 'F4', F5: 'F5', F6: 'F6',
+  F7: 'F7', F8: 'F8', F9: 'F9', F10: 'F10', F11: 'F11', F12: 'F12',
+  F13: 'F13', F14: 'F14', F15: 'F15', F16: 'F16', F17: 'F17', F18: 'F18',
+  F19: 'F19', F20: 'F20', F21: 'F21', F22: 'F22', F23: 'F23', F24: 'F24',
+
+  // 控制键
+  Space: 'Space',
+  Tab: 'Tab',
+  Backspace: 'Backspace',
+  Delete: 'Delete',
+  Insert: 'Insert',
+  Enter: 'Return',
+  NumpadEnter: 'Return',
+  ArrowUp: 'Up',
+  ArrowDown: 'Down',
+  ArrowLeft: 'Left',
+  ArrowRight: 'Right',
+  Home: 'Home',
+  End: 'End',
+  PageUp: 'PageUp',
+  PageDown: 'PageDown',
+
+  // 标点符号
+  Minus: '-',
+  Equal: '=',
+  BracketLeft: '[',
+  BracketRight: ']',
+  Backslash: '\\',
+  Semicolon: ';',
+  Quote: "'",
+  Comma: ',',
+  Period: '.',
+  Slash: '/',
+  Backquote: '`',
+};
+
+/**
  * 将 Electron Accelerator 格式转为展示文本（如 Ctrl + Shift + A）
  */
 function formatAcceleratorForDisplay(accelerator) {
@@ -174,23 +232,28 @@ if (
       displayModifiers.push('Shift');
     }
 
-    const key = event.key;
-
     // 若当前仅按下了修饰键（Ctrl/Alt/Shift/Meta），在虚线框中预览修饰键
-    if (['Control', 'Shift', 'Alt', 'Meta'].includes(key)) {
+    if (
+      ['Control', 'Shift', 'Alt', 'Meta'].includes(event.key) ||
+      ['ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight'].includes(event.code)
+    ) {
       hasCompleteKey = false;
       recordBadge.textContent = displayModifiers.join(' + ');
       return;
     }
 
-    // 格式化主键名以兼容 Electron Accelerator
-    let keyName = key;
-    if (key === ' ') {
-      keyName = 'Space';
-    } else if (key === '+') {
-      keyName = 'Plus';
-    } else if (key.length === 1) {
-      keyName = key.toUpperCase();
+    // 优先从物理键码解析，彻底屏蔽 macOS 下 Option 导致 event.key 变为 Å/≈ 等特殊符号的问题
+    let keyName = CODE_TO_ACCELERATOR_KEY[event.code];
+    if (!keyName) {
+      if (event.key === ' ') {
+        keyName = 'Space';
+      } else if (event.key === '+') {
+        keyName = 'Plus';
+      } else if (event.key.length === 1 && /^[\x20-\x7E]$/.test(event.key)) {
+        keyName = event.key.toUpperCase();
+      } else {
+        keyName = event.key;
+      }
     }
 
     const combination = [...modifiers, keyName].join('+');

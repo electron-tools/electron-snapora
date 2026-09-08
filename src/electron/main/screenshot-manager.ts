@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  app,
   BrowserWindow,
   ipcMain as electronIpcMain,
   webContents,
@@ -153,6 +154,7 @@ function createDefaultRunner(
     // 记录发起截图前是否有已激活的窗口，供会话结算时进行精准焦点恢复
     let hostWindow: BrowserWindow | null = null;
     let wasHostFocused = false;
+    let wasAppActive = false;
     try {
       const senderWebContents =
         context.senderWebContentsId !== undefined
@@ -163,6 +165,10 @@ function createDefaultRunner(
         : null;
       hostWindow = senderWindow ?? BrowserWindow.getFocusedWindow();
       wasHostFocused = hostWindow?.isFocused() ?? false;
+      wasAppActive =
+        senderWindow !== null ||
+        wasHostFocused ||
+        BrowserWindow.getFocusedWindow() !== null;
     } catch {
       // 在测试环境或无窗口环境安全降级
     }
@@ -272,13 +278,20 @@ function createDefaultRunner(
         ),
       onSettled: () => {
         // 截图会话结束后的焦点恢复机制：
-        // 仅当发起截图前宿主窗口就处于前台聚焦状态时，才在截图退出后恢复其前台焦点，
-        // 防止 macOS 窗口管理器将焦点误切到启动应用的其他窗口（如终端/Finder）导致宿主被遮盖；
-        // 注意：插件绝不能调用 app.hide()，因为 app 代表整个宿主应用（等同于 Cmd+H），
-        // 插件不能也无需越权去隐蔽宿主程序在系统中的显示状态。
+        // 1. 若截图前宿主处于前台活跃状态，则恢复其焦点，保持在前台；
+        // 2. 若在 macOS 下且截图前宿主应用不在前台（用户在第三方应用如 Chrome 中通过全局快捷键呼出），
+        //    由于全屏 OverlayWindow.show() 会将整个 Electron 应用激活，
+        //    此处会话结束时调用 app.hide() 让应用平滑退回后台，macOS 会自动将焦点交还给用户此前所在的第三方应用，
+        //    避免宿主主窗口突兀弹到最前遮挡第三方应用。
         if (wasHostFocused && hostWindow && !hostWindow.isDestroyed()) {
           hostWindow.show();
           hostWindow.focus();
+        } else if (!wasAppActive && process.platform === 'darwin') {
+          try {
+            app.hide?.();
+          } catch {
+            // 在测试环境或无窗口环境安全降级
+          }
         }
       },
     });
