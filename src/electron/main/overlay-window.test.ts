@@ -75,7 +75,7 @@ describe('OverlayWindow', () => {
       },
     });
     expect(capture?.loadFile).toHaveBeenCalledWith('dist/overlay/index.html');
-    expect(capture?.show).not.toHaveBeenCalled();
+    expect(capture?.show).toHaveBeenCalledOnce();
     expect(capture?.showInactive).toHaveBeenCalledOnce();
     expect(capture?.setBounds).toHaveBeenCalledWith(
       { x: -800, y: 0, width: 800, height: 600 },
@@ -170,7 +170,7 @@ describe('OverlayWindow', () => {
     });
     expect(fake.setBounds).not.toHaveBeenCalled();
     expect(fake.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver');
-    expect(fake.show).not.toHaveBeenCalled();
+    expect(fake.show).toHaveBeenCalledOnce();
     expect(fake.showInactive).toHaveBeenCalledOnce();
     expect(fake.focus).toHaveBeenCalledOnce();
     expect(fake.webContentsFocus).toHaveBeenCalledOnce();

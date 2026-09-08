@@ -74,7 +74,6 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
   readonly #bounds: CaptureDisplay['bounds'];
   readonly #platform: NodeJS.Platform;
   readonly #supportsInvisiblePriming: boolean;
-  #primed = false;
   #rendererReady = false;
   #loadPromise: Promise<void> | undefined;
   #feedbackWindow: OverlayBrowserWindow | undefined;
@@ -190,7 +189,6 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
         this.#window.setOpacity(1);
       }
       this.#window.moveTop();
-      this.#primed = true;
     }
   }
 
@@ -202,9 +200,7 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
     if (this.#supportsInvisiblePriming) {
       this.#window.setOpacity(1);
     }
-    if (!this.#primed) {
-      this.#window.showInactive();
-    }
+    this.#window.show();
     this.#window.moveTop();
     this.#window.focus();
     this.#window.webContents.focus?.();
@@ -220,7 +216,6 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
       this.#window.setOpacity(0);
     }
     this.#window.hide();
-    this.#primed = false;
   }
 
   /** 复制完成后隐藏全屏截图层，改用独立的小窗口显示鼠标穿透提示。 */

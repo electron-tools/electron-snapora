@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.17] - 2026-09-08
+
+### Fixed
+
+- Fix macOS overlay window failing to receive keyboard events (`Escape`, `R`, `O`, `Enter`, etc.) by properly making the `NSPanel` key window upon reveal without pulling the background host application forward.
+
 ## [1.0.16] - 2026-09-08
 
 ### Added
