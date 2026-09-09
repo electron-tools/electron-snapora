@@ -960,8 +960,11 @@ input {
 }
 
 [data-tooltip]::after {
+  box-sizing: border-box;
+  left: calc(50% + var(--tooltip-offset-x, 0px));
   bottom: calc(100% + 11px);
-  min-width: max-content;
+  width: max-content;
+  max-width: calc(100vw - 16px);
   padding: 7px 9px;
   border: 1px solid var(--snapora-color-tooltip-border);
   border-bottom-color: transparent;
@@ -973,7 +976,8 @@ input {
   font-size: 12px;
   font-weight: 500;
   line-height: 1;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 [data-tooltip][data-shortcut]::after {

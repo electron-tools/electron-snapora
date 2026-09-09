@@ -344,6 +344,15 @@ window.snaporaOverlay.onInitialize((payload) => {
   void initializeOverlay(payload);
 });
 window.addEventListener('pagehide', () => frameLoadController?.abort());
+for (const eventType of ['pointerover', 'focusin']) {
+  document.addEventListener(eventType, (event) => {
+    const target = event.target;
+    if (target instanceof Element) {
+      const button = target.closest<HTMLElement>('[data-tooltip]');
+      if (button) positionTooltipHorizontally(button);
+    }
+  });
+}
 window.snaporaOverlay.onFeedback((payload) => {
   if (payload.kind !== 'copy') {
     return;
@@ -1672,6 +1681,21 @@ function positionTooltip(toolbarPlacement: 'above' | 'below' | 'inside'): void {
             ? 'above'
             : 'below';
   toolbar.dataset.tooltipPlacement = placement;
+  for (const button of toolbar.querySelectorAll<HTMLElement>(
+    '[data-tooltip]:hover, [data-tooltip]:focus-visible'
+  )) {
+    positionTooltipHorizontally(button);
+  }
+}
+
+/** 只平移气泡，箭头仍指向按钮；使用实际宽度兼容快捷键和本地化文案。 */
+function positionTooltipHorizontally(button: HTMLElement): void {
+  const bounds = button.getBoundingClientRect();
+  const width = Number.parseFloat(getComputedStyle(button, '::after').width);
+  if (!Number.isFinite(width)) return;
+  const center = bounds.left + bounds.width / 2;
+  const left = Math.max(8, Math.min(center - width / 2, window.innerWidth - 8 - width));
+  button.style.setProperty('--tooltip-offset-x', `${left + width / 2 - center}px`);
 }
 
 /** 将预设面板限制在屏幕内，并让箭头始终指向当前点击的工具按钮。 */
