@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.19] - 2026-09-09
+
+### Added
+
+- Add native macOS previous frontmost process and window focus restoration demo helper (`demo/mac-window-focus.cjs`) using `ApplicationServices` PSN / AX fallback to reliably keep background host windows behind third-party applications during shortcut capture.
+- Add comprehensive suite tests for macOS window focus preservation (`demo/mac-window-focus.test.cjs`).
+
+### Changed
+
+- Streamline demo shortcut recording logic and clean up internal comments and documentation formatting across all test scenarios.
+
 ## [1.0.18] - 2026-09-09
 
 ### Fixed

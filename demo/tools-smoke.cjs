@@ -12,7 +12,7 @@ const { ScreenshotManager } = require('electron-snapora/main');
 
 app.disableHardwareAcceleration();
 
-// NativeImage 位图通道顺序由平台决定，先用已知红色像素定位 R/B 通道。
+// Locate the red and blue bitmap channels using a known red pixel.
 const redPixel = nativeImage
   .createFromDataURL(
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
@@ -76,7 +76,7 @@ async function waitForReveal(window) {
   }
 }
 
-/** Windows 剪贴板写入可能晚于 IPC 返回一个消息循环，短轮询避免瞬时空读。 */
+/** Poll briefly for clipboard data after the IPC call returns. */
 async function waitForClipboardImage(maximumWaitMs = 600) {
   const deadline = Date.now() + maximumWaitMs;
   do {
@@ -195,7 +195,7 @@ async function countRegionPixels(window, region) {
   `);
 }
 
-/** 读取指定区域内红色文字的可见像素边界，用于比较输入态和 Canvas 提交态的位置。 */
+/** Read red text pixel bounds to compare editor and canvas positions. */
 async function getRedPixelBounds(window, region) {
   const image = await window.webContents.capturePage(region);
   const { width, height } = image.getSize();

@@ -32,7 +32,7 @@ async function waitUntilOverlayVisible(window) {
 }
 
 app.on('browser-window-created', (_event, window) => {
-  // 等待透明预热之后的 Renderer 初始化完成，避免把预热 show 事件误当成可交互状态。
+  // Wait for renderer initialization after transparent priming.
   window.webContents.once('did-finish-load', async () => {
     const presentation = await window.webContents.executeJavaScript(`
       new Promise((resolve) => {

@@ -33,7 +33,7 @@ if (!screenshotApi) {
   });
 }
 
-// 快捷键设置逻辑（展示态与编辑输入态彻底解耦）
+// Bind the shortcut display and editing controls.
 const viewMode = document.getElementById('shortcut-view-mode');
 const editMode = document.getElementById('shortcut-edit-mode');
 const displayBadge = document.getElementById('shortcut-display-badge');
@@ -47,11 +47,11 @@ const shortcutApi = window.demoShortcutApi;
 const isMac = navigator.platform.toUpperCase().includes('MAC');
 
 /**
- * 物理键码（event.code）到 Electron Accelerator 标准键名的映射表
- * 彻底避免 macOS 下按住 Option (Alt) 键导致 event.key 变成 Å、≈、∑、î 等非 ASCII 特殊符号的致命 bug
+ * Map physical key codes to Electron accelerator names.
+ * Use physical codes to avoid Option-modified characters on macOS.
  */
 const CODE_TO_ACCELERATOR_KEY = {
-  // 字母键
+  // Map letter keys.
   KeyA: 'A',
   KeyB: 'B',
   KeyC: 'C',
@@ -79,7 +79,7 @@ const CODE_TO_ACCELERATOR_KEY = {
   KeyY: 'Y',
   KeyZ: 'Z',
 
-  // 主键盘数字键
+  // Map number-row keys.
   Digit0: '0',
   Digit1: '1',
   Digit2: '2',
@@ -91,7 +91,7 @@ const CODE_TO_ACCELERATOR_KEY = {
   Digit8: '8',
   Digit9: '9',
 
-  // 小键盘数字键
+  // Map numeric keypad keys.
   Numpad0: 'num0',
   Numpad1: 'num1',
   Numpad2: 'num2',
@@ -108,7 +108,7 @@ const CODE_TO_ACCELERATOR_KEY = {
   NumpadDivide: 'numdiv',
   NumpadDecimal: 'numdec',
 
-  // 功能键
+  // Map function keys.
   F1: 'F1',
   F2: 'F2',
   F3: 'F3',
@@ -134,7 +134,7 @@ const CODE_TO_ACCELERATOR_KEY = {
   F23: 'F23',
   F24: 'F24',
 
-  // 控制键
+  // Map control keys.
   Space: 'Space',
   Tab: 'Tab',
   Backspace: 'Backspace',
@@ -151,7 +151,7 @@ const CODE_TO_ACCELERATOR_KEY = {
   PageUp: 'PageUp',
   PageDown: 'PageDown',
 
-  // 标点符号
+  // Map punctuation keys.
   Minus: '-',
   Equal: '=',
   BracketLeft: '[',
@@ -166,7 +166,7 @@ const CODE_TO_ACCELERATOR_KEY = {
 };
 
 /**
- * 将 Electron Accelerator 格式转为展示文本（如 Ctrl + Shift + A）
+ * Format an Electron accelerator for display.
  */
 function formatAcceleratorForDisplay(accelerator) {
   if (!accelerator) {
@@ -199,14 +199,14 @@ if (
   cancelBtn &&
   statusHint
 ) {
-  // 当前生效的快捷键配置
+  // Track the currently registered shortcut.
   let currentAccelerator = 'CommandOrControl+Shift+A';
-  // 录制态中的临时快捷键
+  // Track the shortcut being recorded.
   let tempAccelerator = currentAccelerator;
-  // 是否捕获到了完整的主键
+  // Track whether a non-modifier key has been recorded.
   let hasCompleteKey = true;
 
-  // 初始化：拉取当前已注册的快捷键并显示在展示态胶囊中
+  // Fetch the registered shortcut and update the display badge.
   void shortcutApi.getShortcut().then((shortcut) => {
     if (shortcut) {
       currentAccelerator = shortcut;
@@ -215,7 +215,7 @@ if (
   });
 
   /**
-   * 进入输入态：隐藏展示态，显示输入态（虚线录制框 + 确认按钮 + 取消按钮）
+   * Show the recorder and start listening for shortcut keys.
    */
   function enterEditMode() {
     tempAccelerator = currentAccelerator;
@@ -231,7 +231,7 @@ if (
   }
 
   /**
-   * 退出输入态：隐藏输入态，恢复展示态（胶囊 + 修改按钮）
+   * Stop recording and restore the shortcut display.
    */
   function exitEditMode() {
     window.removeEventListener('keydown', handleRecordKeyDown, true);
@@ -243,13 +243,13 @@ if (
   }
 
   /**
-   * 录制按键
+   * Record the shortcut key combination.
    */
   function handleRecordKeyDown(event) {
     event.preventDefault();
     event.stopPropagation();
 
-    // 单按 Escape：取消修改退出
+    // Cancel editing when Escape is pressed without modifiers.
     if (
       event.key === 'Escape' &&
       !event.ctrlKey &&
@@ -261,7 +261,7 @@ if (
       return;
     }
 
-    // 单按 Enter：确认保存
+    // Save when Enter is pressed without modifiers.
     if (
       event.key === 'Enter' &&
       !event.ctrlKey &&
@@ -293,7 +293,7 @@ if (
       displayModifiers.push('Shift');
     }
 
-    // 若当前仅按下了修饰键（Ctrl/Alt/Shift/Meta），在虚线框中预览修饰键
+    // Preview modifier keys until a non-modifier key is pressed.
     if (
       ['Control', 'Shift', 'Alt', 'Meta'].includes(event.key) ||
       [
@@ -312,7 +312,7 @@ if (
       return;
     }
 
-    // 优先从物理键码解析，彻底屏蔽 macOS 下 Option 导致 event.key 变为 Å/≈ 等特殊符号的问题
+    // Resolve the physical key code before falling back to the key value.
     let keyName = CODE_TO_ACCELERATOR_KEY[event.code];
     if (!keyName) {
       if (event.key === ' ') {
@@ -335,7 +335,7 @@ if (
   }
 
   /**
-   * 点击确认：向主进程提交并生效
+   * Submit the recorded shortcut to the main process.
    */
   async function handleSave() {
     if (!hasCompleteKey || !tempAccelerator) {
@@ -347,7 +347,7 @@ if (
     saveBtn.disabled = true;
     try {
       const res = await shortcutApi.setShortcut(tempAccelerator);
-      // 无论注册成功还是失败，均更新并显示当前设置的快捷键
+      // Update the displayed shortcut from the registration response.
       currentAccelerator = res.shortcut || tempAccelerator;
       displayBadge.textContent = formatAcceleratorForDisplay(currentAccelerator);
 
@@ -355,7 +355,7 @@ if (
         statusHint.classList.add('hidden');
         resultOutput.textContent = `[快捷键已生效] 当前已注册全局快捷键: ${currentAccelerator}\n可在任意第三方应用或后台窗口下按下进行截图测试。`;
       } else {
-        // 注册失败时展示具体原因，但界面仍显示该快捷键
+        // Display the registration error alongside the selected shortcut.
         statusHint.textContent = res.error || '快捷键已被占用或注册失败';
         statusHint.classList.remove('hidden');
         resultOutput.textContent = `[快捷键注册失败]\n${res.error}`;
@@ -371,17 +371,17 @@ if (
     }
   }
 
-  // 1. 点击【修改】按钮：进入输入态
+  // Start recording when the edit button is clicked.
   editBtn.addEventListener('click', () => {
     enterEditMode();
   });
 
-  // 2. 点击【确认】按钮：保存并生效
+  // Save the shortcut when the save button is clicked.
   saveBtn.addEventListener('click', () => {
     void handleSave();
   });
 
-  // 3. 点击【取消】✕ 按钮：取消并返回展示态
+  // Cancel recording and restore the display when cancel is clicked.
   cancelBtn.addEventListener('click', () => {
     exitEditMode();
   });

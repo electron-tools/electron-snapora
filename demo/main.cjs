@@ -4,14 +4,62 @@ const { ScreenshotManager, registerScreenshotIpc } = require('electron-snapora/m
 
 const screenshotManager = new ScreenshotManager();
 let unregisterScreenshotIpc;
+const hostWindows = new Set();
+let isMacScreenshotInProgress = false;
 
-// 默认快捷键为 CommandOrControl+Shift+A（Windows/Linux: Ctrl+Shift+A, Mac: Cmd+Shift+A）
+async function triggerDemoScreenshot() {
+  if (process.platform !== 'darwin') {
+    return screenshotManager.capture({ display: 'cursor' });
+  }
+  if (isMacScreenshotInProgress || screenshotManager.activeJobId) return;
+  isMacScreenshotInProgress = true;
+  const windowsToRestore = [];
+  let previous = null;
+  try {
+    if (!app.isActive()) {
+      const { getFrontmostProcess } = require('./mac-window-focus.cjs');
+      previous = getFrontmostProcess();
+      // Temporarily disable focus only for registered host windows.
+      for (const win of hostWindows) {
+        if (!win.isDestroyed() && win.isFocusable()) {
+          try {
+            win.setFocusable(false);
+            windowsToRestore.push(win);
+          } catch {
+            // Skip windows being destroyed.
+          }
+        }
+      }
+    }
+    return await screenshotManager.capture({ display: 'cursor' });
+  } finally {
+    try {
+      if (previous && previous.pid !== process.pid) {
+        const { restoreFrontmostProcess } = require('./mac-window-focus.cjs');
+        await restoreFrontmostProcess(previous);
+      }
+    } finally {
+      for (const win of windowsToRestore) {
+        if (!win.isDestroyed()) {
+          try {
+            win.setFocusable(true);
+          } catch {
+            // Skip windows being destroyed.
+          }
+        }
+      }
+      isMacScreenshotInProgress = false;
+    }
+  }
+}
+
+// Use Cmd+Shift+A on macOS and Ctrl+Shift+A on Windows and Linux.
 const DEFAULT_SHORTCUT = 'CommandOrControl+Shift+A';
 let currentShortcut = DEFAULT_SHORTCUT;
 
-/** 注册全局截图快捷键 */
+/** Register the global capture shortcut. */
 function registerCurrentShortcut(accelerator) {
-  // 1. 安全注销旧快捷键，加装 try...catch 彻底防范旧快捷键格式非法导致的抛错死锁
+  // Unregister the previous shortcut before registering its replacement.
   if (currentShortcut) {
     try {
       globalShortcut.unregister(currentShortcut);
@@ -26,7 +74,7 @@ function registerCurrentShortcut(accelerator) {
     return { success: true, shortcut: '' };
   }
 
-  // 2. 非 ASCII 字符拦截防御（防止如 Alt+Å、Alt+≈ 等特殊字符直接打入底层导致 C++ 抛出 conversion failure 异常）
+  // Reject non-ASCII accelerator names before calling the native API.
   if (/[\u0080-\uFFFF]/.test(target)) {
     return {
       success: false,
@@ -38,7 +86,9 @@ function registerCurrentShortcut(accelerator) {
   try {
     const success = globalShortcut.register(target, () => {
       console.log(`[Demo] Triggering screenshot via global shortcut: ${target}`);
-      void screenshotManager.capture({ display: 'cursor' });
+      void triggerDemoScreenshot().catch((error) => {
+        console.error('[Demo] Screenshot failed:', error);
+      });
     });
 
     if (!success) {
@@ -72,6 +122,9 @@ function createHostWindow() {
     },
   });
 
+  hostWindows.add(hostWindow);
+  hostWindow.once('closed', () => hostWindows.delete(hostWindow));
+
   hostWindow.webContents.on('preload-error', (_event, preloadPath, error) => {
     console.error(`Failed to load demo preload: ${preloadPath}`, error);
   });
@@ -85,20 +138,20 @@ app.whenReady().then(() => {
     manager: screenshotManager,
   });
 
-  // 注册全局快捷键查询与动态修改接口
+  // Register handlers to read and update the global shortcut.
   ipcMain.handle('demo:get-shortcut', () => currentShortcut);
   ipcMain.handle('demo:set-shortcut', (_event, accelerator) =>
     registerCurrentShortcut(accelerator)
   );
 
-  // 启动自愈检测：防止持久化或旧变量残存非 ASCII 污染
+  // Reset invalid non-ASCII shortcut values before registration.
   if (/[\u0080-\uFFFF]/.test(currentShortcut)) {
     console.warn(
       `[Demo] 检测到非法快捷键配置 "${currentShortcut}"，自动自愈重置为默认值。`
     );
     currentShortcut = DEFAULT_SHORTCUT;
   }
-  // 默认启动时立即生效注册快捷键
+  // Register the current shortcut during startup.
   registerCurrentShortcut(currentShortcut);
 
   createHostWindow();

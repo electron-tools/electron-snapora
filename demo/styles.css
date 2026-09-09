@@ -109,7 +109,7 @@ h1 {
   display: none !important;
 }
 
-/* 展示态快捷键胶囊 (图 1) */
+/* Style the shortcut display badge. */
 .shortcut-badge {
   display: inline-flex;
   align-items: center;
@@ -126,7 +126,7 @@ h1 {
   user-select: none;
 }
 
-/* 编辑输入态快捷键胶囊 (图 2) */
+/* Style the shortcut recording badge. */
 .shortcut-badge.editing {
   background: #f8fafc;
   border: 1px dashed #3b82f6;
@@ -136,7 +136,7 @@ h1 {
   cursor: text;
 }
 
-/* 修改按钮 (图 1) */
+/* Style the edit button. */
 .shortcut-edit-btn {
   display: inline-flex;
   align-items: center;
@@ -161,7 +161,7 @@ h1 {
   color: #1e293b;
 }
 
-/* 确认按钮 (图 2) */
+/* Style the save button. */
 .shortcut-confirm-btn {
   display: inline-flex;
   align-items: center;
@@ -185,7 +185,7 @@ h1 {
   border-color: #4096ff;
 }
 
-/* 取消按钮 ✕ (图 2) */
+/* Style the cancel button. */
 .shortcut-cancel-btn {
   display: inline-flex;
   align-items: center;
