@@ -402,6 +402,21 @@ that display ID through capture and Overlay creation. If the monitor is disconne
 or scale changes during startup, the task fails with `DISPLAY_NOT_FOUND` and should be retried instead
 of displaying a screenshot on the wrong monitor.
 
+### macOS shortcuts and host window protection
+
+The host registers the global shortcut that starts a capture. Inside the capture overlay, Snapora handles keys such as Escape, R (rectangle), and T (text). On macOS, Snapora restores the overlay's focusability and requests application, window, and web-content focus when showing it. The host does not need to duplicate these focus calls or register Escape/R/T as global shortcuts.
+
+**Window protection is optional.** If your host already manages focus or prevents background windows from coming forward, follow these integration rules:
+
+- Operate only on windows owned by your host, using explicit window references or a collection maintained by the host. Do not apply `setFocusable(false)` to every window returned by `BrowserWindow.getAllWindows()`: that list also contains Snapora windows, including hidden overlays reused by later captures. Exclude overlays, pinned images, and copy feedback windows.
+- Keep host-specific macOS protection inside a `process.platform === 'darwin'` branch so Windows behavior stays unchanged. Check application activity with `app.isActive()`; a focused settings or meeting window also means the host is active, even if its main window is not focused.
+- Before changing window state, check `manager.activeJobId`. If you add asynchronous focus restoration around `capture()`, also guard the entire capture-and-restore operation against duplicate triggers.
+- Record the original window state and restore any changes in `finally`, including cancellation and failure paths. Restore only surviving windows that your operation changed. Avoid delayed callbacks from one capture changing the state of the next capture.
+
+Snapora does not call `app.hide()` when a capture ends: that would hide every application window, including the host and pinned images. It restores focus to the host window only if that window was focused before capture. Returning focus to a previously active external application is a host policy; Snapora does not provide automatic external-application restoration. Do not use `app.hide()` as a general cleanup step.
+
+If the overlay is visible but keys do not respond, inspect `app.isActive()`, the overlay's `isFocusable()` and `isFocused()`, `webContents.isFocused()`, and whether `before-input-event` reaches the overlay. A visible overlay does not prove keyboard focus, and `before-input-event` cannot receive keys that never reached that WebContents. If the first capture works but the second fails, check whether host protection disabled the reused overlay. Validate both first and repeated captures on a real Mac while another application is foreground; focus API calls alone do not prove successful keyboard delivery.
+
 ### Freeform selection
 
 Window snapping and attach behavior are intentionally disabled. The screenshot Overlay always uses

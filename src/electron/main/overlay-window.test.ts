@@ -87,6 +87,7 @@ describe('OverlayWindow', () => {
     expect(capture?.setAlwaysOnTop).toHaveBeenNthCalledWith(2, true, 'screen-saver');
     expect(capture?.moveTop).toHaveBeenCalledTimes(2);
     expect(capture?.focus).toHaveBeenCalledOnce();
+    expect(capture?.setFocusable).not.toHaveBeenCalled();
     expect(overlay.webContentsId).toBe(99);
 
     vi.useFakeTimers();
@@ -152,6 +153,10 @@ describe('OverlayWindow', () => {
 
     overlay.prime();
     overlay.reveal();
+    expect(fake.setFocusable).toHaveBeenCalledWith(true);
+    expect(fake.setFocusable.mock.invocationCallOrder[0]).toBeLessThan(
+      fake.focus.mock.invocationCallOrder[0]!
+    );
 
     expect(receivedOptions[0]).toMatchObject({
       x: 1440,
@@ -176,6 +181,11 @@ describe('OverlayWindow', () => {
     expect(fake.webContentsFocus).toHaveBeenCalledOnce();
 
     expect(fake.moveTop).toHaveBeenCalledTimes(2);
+    overlay.hide();
+    fake.setFocusable(false);
+    overlay.prime();
+    overlay.reveal();
+    expect(fake.setFocusable).toHaveBeenLastCalledWith(true);
   });
 
   it('does not access webContents while cleaning up a destroyed window', () => {
@@ -236,6 +246,7 @@ function createFakeWindow(id: number) {
   const showInactive = vi.fn();
   const setOpacity = vi.fn();
   const setBounds = vi.fn();
+  const setFocusable = vi.fn();
   const setIgnoreMouseEvents = vi.fn();
   const setAlwaysOnTop = vi.fn();
   const setVisibleOnAllWorkspaces = vi.fn();
@@ -257,6 +268,7 @@ function createFakeWindow(id: number) {
     on: windowEvents.on.bind(windowEvents),
     removeListener: windowEvents.removeListener.bind(windowEvents),
     setBounds,
+    setFocusable,
     setIgnoreMouseEvents,
     setAlwaysOnTop,
     setOpacity,
@@ -279,6 +291,7 @@ function createFakeWindow(id: number) {
     showInactive,
     setOpacity,
     setBounds,
+    setFocusable,
     setIgnoreMouseEvents,
     setAlwaysOnTop,
     setVisibleOnAllWorkspaces,

@@ -159,6 +159,9 @@ GitHub CLI 未登录时，在仓库的 Releases 页面选择对应 tag。Release
 8. 在实际发布提交上创建并推送 annotated Git tag。
 9. 创建同名 GitHub Release，正文使用对应 CHANGELOG 小节；确认 Releases 页面能直接看到 Added/Changed/Fixed 内容。
 
+## 废弃版本
+npm deprecate electron-snapora@1.0.17 "This version has macOS input focus issues, please upgrade to 1.0.18+"
+
 ## npm 本地登录
 
 npm login --registry=https://registry.npmjs.org/

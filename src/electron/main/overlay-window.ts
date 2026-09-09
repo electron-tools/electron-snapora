@@ -26,6 +26,7 @@ export type OverlayBrowserWindow = Pick<
   | 'removeListener'
   | 'setAlwaysOnTop'
   | 'setBounds'
+  | 'setFocusable'
   | 'setIgnoreMouseEvents'
   | 'setOpacity'
   | 'setVisibleOnAllWorkspaces'
@@ -194,16 +195,10 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
     if (this.#supportsInvisiblePriming) {
       this.#window.setOpacity(1);
     }
-    // macOS 关键逻辑：
-    // 当宿主应用在后台运行或处于未聚焦状态时呼出截图，必须显式激活应用进程焦点（steal: true），
-    // 使得全屏 Overlay 窗口成为系统的 KeyWindow，DOM 输入框（文字批注 textarea / 水印 input）
-    // 才能正常接收键盘焦点与按键输入，绝不发生输入失效或假死。
     if (this.#platform === 'darwin') {
-      try {
-        app.focus?.({ steal: true });
-      } catch {
-        // 测试环境或无 app 上下文时安全降级
-      }
+      // 复用窗口可能被宿主临时禁止聚焦；先恢复输入资格，再请求应用与窗口焦点。
+      this.#window.setFocusable(true);
+      app.focus({ steal: true });
     }
     this.#window.show();
     this.#window.moveTop();

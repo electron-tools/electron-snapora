@@ -164,6 +164,21 @@ const snapora = setupElectronSnapora({
 
 Al empaquetar el proceso principal, mantén `electron-snapora` como external (compatible con electron-vite, Webpack, electron-builder y Forge).
 
+## Atajos de macOS y protección de las ventanas del host
+
+El host registra el atajo global que inicia la captura. Dentro de la superposición, Snapora procesa Escape, R (rectángulo), T (texto) y las demás teclas de edición. En macOS, al mostrar la superposición, restaura su capacidad de recibir el foco y solicita el foco de la aplicación, la ventana y el contenido web. El host no necesita repetir estas llamadas ni registrar Escape/R/T como atajos globales.
+
+**La protección de ventanas del host es opcional.** Si el host ya gestiona el foco o impide que sus ventanas en segundo plano pasen al frente, respete estas reglas:
+
+- Modifique solo las ventanas propias del host mediante referencias explícitas o una colección mantenida por el host. No aplique `setFocusable(false)` a todas las ventanas devueltas por `BrowserWindow.getAllWindows()`: también incluye ventanas de Snapora, como las superposiciones ocultas que se reutilizan en capturas posteriores. Excluya las superposiciones, las imágenes fijadas y las notificaciones de copia.
+- Limite la protección específica de macOS a una rama `process.platform === 'darwin'` para mantener el comportamiento de Windows. Compruebe la actividad de la aplicación con `app.isActive()`; si una ventana de ajustes o de reunión tiene el foco, el host también está activo aunque su ventana principal no lo esté.
+- Compruebe `manager.activeJobId` antes de modificar el estado de las ventanas. Si añade una restauración asíncrona del foco alrededor de `capture()`, evite también las ejecuciones duplicadas durante toda la operación de captura y restauración.
+- Registre el estado original y restaure los cambios en `finally`, incluso tras cancelaciones o errores. Restaure solo las ventanas que sigan existiendo y que esta operación haya modificado. Evite que las llamadas diferidas de una captura alteren el estado de la siguiente.
+
+Snapora no llama a `app.hide()` al finalizar una captura, porque ocultaría todas las ventanas de la aplicación, incluidas las del host y las imágenes fijadas. Solo devuelve el foco a la ventana del host si esta lo tenía antes de capturar. Volver a la aplicación externa que estaba activa es una decisión del host; Snapora no proporciona restauración automática de aplicaciones externas. No utilice `app.hide()` como paso general de limpieza.
+
+Si la superposición es visible pero las teclas no responden, compruebe `app.isActive()`, `isFocusable()` e `isFocused()` de la superposición, `webContents.isFocused()` y si `before-input-event` llega a ella. La visibilidad no demuestra que exista foco de teclado, y `before-input-event` no puede recibir teclas que nunca llegaron a ese WebContents. Si la primera captura funciona pero la segunda falla, revise si la protección del host deshabilitó el foco de la superposición reutilizada. Valide la primera captura y las capturas consecutivas en un Mac real con otra aplicación en primer plano; las llamadas a las API de foco no bastan para confirmar la recepción del teclado.
+
 ## Tabla de códigos de error
 
 | Código                    | Significado                                          |

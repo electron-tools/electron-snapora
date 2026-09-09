@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { app, BrowserWindow, ipcMain as electronIpcMain, webContents } from 'electron';
+import { BrowserWindow, ipcMain as electronIpcMain, webContents } from 'electron';
 import type { IpcMain } from 'electron';
 
 import type {
@@ -146,13 +146,10 @@ function createDefaultRunner(
       previousOverlay?.destroy();
       previousOverlay = undefined;
     }
-    // 记录发起截图前宿主应用与窗口的激活状态：
-    // 用于在截图会话结束时进行精准的 macOS 焦点和层级归还
+    // 仅记录原本聚焦的宿主窗口，结束后恢复该窗口；外部应用恢复由宿主决定。
     let hostWindow: BrowserWindow | null = null;
     let wasHostFocused = false;
-    let wasAppActive = false;
     try {
-      wasAppActive = typeof app?.isActive === 'function' ? app.isActive() : false;
       const senderWebContents =
         context.senderWebContentsId !== undefined
           ? webContents.fromId(context.senderWebContentsId)
@@ -270,20 +267,9 @@ function createDefaultRunner(
           }
         ),
       onSettled: () => {
-        // 截图会话结束后的 macOS / 多平台焦点与层级精准恢复机制：
-        // 1. 若截图前宿主窗口就处于前台聚焦状态（wasHostFocused），退出截图后恢复宿主窗口聚焦；
-        // 2. 若截图前宿主应用并不在前台（例如后台全局快捷键呼出），因为在 reveal 时调用了 app.focus({ steal: true })，
-        //    在截图关闭时 macOS Window Server 会默认将属于该 App 的其他可见窗口置顶。
-        //    因此在 macOS 下必须调用 app.hide() 将应用进程退回后台，无缝将系统焦点归还给截图前的第三方应用，
-        //    防止宿主主窗口在截图结束后意外跳到最前台。
+        // app.hide() 会隐藏宿主、贴图和复制提示，不能用来替代外部应用焦点恢复。
         if (wasHostFocused && hostWindow && !hostWindow.isDestroyed()) {
           hostWindow.focus();
-        } else if (process.platform === 'darwin' && !wasAppActive) {
-          try {
-            app?.hide?.();
-          } catch {
-            // 安全降级
-          }
         }
       },
     });

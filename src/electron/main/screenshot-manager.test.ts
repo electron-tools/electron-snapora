@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import {
+  app,
   BrowserWindow,
   webContents,
   type IpcMain,
@@ -410,6 +411,8 @@ describe('ScreenshotManager', () => {
   });
 
   it('does not touch or focus host window when host was not focused before capture', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin');
+    const hideApp = vi.spyOn(app, 'hide');
     const show = vi.fn();
     const focus = vi.fn();
     const fakeHost = {
@@ -466,6 +469,7 @@ describe('ScreenshotManager', () => {
 
     await expect(capturePromise).resolves.toEqual({ status: 'cancelled' });
     expect(overlay.hide).toHaveBeenCalledOnce();
+    expect(hideApp).not.toHaveBeenCalled();
     expect(show).not.toHaveBeenCalled();
     expect(focus).not.toHaveBeenCalled();
 
