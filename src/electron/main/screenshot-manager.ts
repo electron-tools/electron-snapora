@@ -278,6 +278,12 @@ function createDefaultRunner(
         //    防止宿主主窗口在截图结束后意外跳到最前台。
         if (wasHostFocused && hostWindow && !hostWindow.isDestroyed()) {
           hostWindow.focus();
+        } else if (process.platform === 'darwin' && !wasAppActive) {
+          try {
+            app?.hide?.();
+          } catch {
+            // 安全降级
+          }
         }
       },
     });
