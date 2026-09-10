@@ -8,7 +8,7 @@ export interface ScreenshotBounds {
   height: number;
 }
 
-export type ScreenshotLocale = 'zh-CN' | 'en-US';
+export type ScreenshotLocale = 'en-US' | 'zh-CN' | 'ja-JP' | 'ko-KR' | 'es-ES';
 
 export interface ScreenshotMessages {
   preparing: string;
@@ -69,13 +69,19 @@ export interface ScreenshotTheme {
   warningColor?: string;
   warningForegroundColor?: string;
   selectionHandleColor?: string;
+  /** 复制成功提示的背景、文字、边框及图标颜色。 */
+  copyFeedbackBackground?: string;
+  copyFeedbackForeground?: string;
+  copyFeedbackBorderColor?: string;
+  copyFeedbackIconColor?: string;
+  copyFeedbackIconBackground?: string;
 }
 
 export interface ScreenshotOptions {
   display?: 'cursor' | 'primary' | string;
   tools?: ScreenshotTool[];
   defaultTool?: 'select' | ScreenshotTool;
-  /** 复制成功后是否显示提示，默认关闭。 */
+  /** 复制成功后是否显示提示，默认关闭；传 true 开启。 */
   showCopyFeedback?: boolean;
   locale?: ScreenshotLocale;
   messages?: ScreenshotMessageOverrides;

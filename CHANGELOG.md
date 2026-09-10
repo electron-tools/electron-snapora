@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.21] - 2026-09-10
+
+### Added
+
+- Add complete Japanese (`ja-JP`), Korean (`ko-KR`), and Spanish (`es-ES`) translations for screenshot controls, clipboard feedback, and pinned-window actions. English (`en-US`) remains the default and fallback language.
+- Add configurable copy confirmation colors through `ScreenshotTheme`: `copyFeedbackBackground`, `copyFeedbackForeground`, `copyFeedbackBorderColor`, `copyFeedbackIconColor`, and `copyFeedbackIconBackground`.
+
+### Changed
+
+- Extract all five built-in language resources into `src/i18n`, sharing locale validation and message resolution across the overlay and main process.
+- Restyle the optional clipboard confirmation with a white background, dark text, a pale green border, and a green checkmark on a pale green circle in both light and dark modes.
+- Enable clipboard confirmation for demo button and global shortcut captures. The library continues to require `showCopyFeedback: true` to display it.
+- Document copy confirmation colors, custom messages, and opt-in behavior in all five README languages.
+
+### Fixed
+
+- Account for line-height leading when converting text editor coordinates to Canvas baselines, addressing text shifting upward after confirmation across all text presets.
+- Share letter spacing between outlined text input, measurement, and Canvas rendering to keep wide glyphs such as `W` clear of the insertion caret.
+- Align editor wrapping and committed text layout, include wrapped lines in editor height calculations, and preserve emoji grapheme clusters when wrapping.
+- Recalculate text editor bounds when the font size or preset changes, and use a shared fill-background corner radius for editing and rendering.
+- Align all localized README examples with the supported locale configuration.
+
 ## [1.0.20] - 2026-09-09
 
 ### Fixed

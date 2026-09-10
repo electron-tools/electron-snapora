@@ -19,7 +19,10 @@ if (!screenshotApi) {
     resultOutput.textContent = 'Capturing…';
 
     try {
-      const result = await screenshotApi.capture({ display: 'cursor' });
+      const result = await screenshotApi.capture({
+        display: 'cursor',
+        showCopyFeedback: true,
+      });
       const summary =
         result.status === 'completed'
           ? { ...result, data: `${result.data.byteLength} PNG bytes` }

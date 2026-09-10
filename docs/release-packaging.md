@@ -115,7 +115,28 @@ GitHub CLI 未登录时，在仓库的 Releases 页面选择对应 tag。Release
 | 发布元数据                   | `pnpm verify:release-metadata` |
 | 完整发布门禁                 | `pnpm release:check`           |
 
-## 当前 tarball 基线
+## 1.0.21 发布准备（2026-09-10）
+
+- 版本：`package.json` 为 `1.0.21`，目标 tag 为 `v1.0.21`；英文发布说明见 `CHANGELOG.md`。
+- 范围：文字基线、描边字距、换行与重编几何修复；复制提示样式和五个主题颜色字段；五种语言 README 与 demo 配置。库的 `showCopyFeedback` 保持默认关闭。
+- Registry 只读查询：`latest=1.0.20`，`1.0.21` 查询返回无匹配版本。
+- 本地质量检查：Lint、TypeScript、149 项 Vitest、11 项 Node 测试、构建及发布元数据检查通过；包含五语字段完整性、默认英语、IPC locale 校验和自定义文案覆盖检查。
+- 完整 `pnpm release:check` 通过：ESM/CommonJS、electron-vite/Webpack、Windows Electron 42.8.0 / 43.3.0，以及 electron-builder ASAR/目录成品验证全部通过。
+- `npm publish --dry-run --ignore-scripts --json --registry=https://registry.npmjs.org/` 通过；生命周期门禁单独执行，未发布。
+- 包清单：63 个文件，压缩体积 280,114 bytes，解包体积 1,112,639 bytes；语言资源编入运行时，无需额外复制 JSON；未混入源码目录、测试、demo、内部文档或日志。
+- 包 SHA-1：`12d1d27750be9eef23617e7d912b6eaa8b71c507`。公开文件变更后需要重新审计包。
+
+发布前仍需确认：
+
+1. Mac 真机验证三种文字预设确认前后的基线、描边字符与光标，以及 Retina 缩放。
+2. 复制提示双击冒烟的颜色检查通过，但窗口尺寸断言失败：实际 `364×74`，预期上限 `360×72`。本轮不将此项标记为通过。
+3. 当前工作区尚未提交，不能用旧提交的 CI 代替本次验证；本机 GitHub CLI 未登录，未验证远端 CI。提交后须确认 Windows/macOS/Linux CI 通过。
+
+五语资源集中于 `src/i18n`，顺序为 `en-US`、`zh-CN`、`ja-JP`、`ko-KR`、`es-ES`；英语保持默认和回退基线。日、韩、西文 README 现在可直接使用对应 locale，`messages` 仍可覆盖内置文案。
+
+本轮未执行提交、push、npm 发布、tag 或 GitHub Release 创建。
+
+## 历史 tarball 基线（1.0.10）
 
 2026-08-27 对 `electron-snapora@1.0.10` 在 Windows 开发环境执行 `npm pack --dry-run` 和临时 tarball 检查得到：
 
@@ -160,6 +181,7 @@ GitHub CLI 未登录时，在仓库的 Releases 页面选择对应 tag。Release
 9. 创建同名 GitHub Release，正文使用对应 CHANGELOG 小节；确认 Releases 页面能直接看到 Added/Changed/Fixed 内容。
 
 ## 废弃版本
+
 npm deprecate electron-snapora@1.0.17 "This version has macOS input focus issues, please upgrade to 1.0.18+"
 
 ## npm 本地登录

@@ -5,7 +5,7 @@ import type { ScreenshotImageResult, ScreenshotOptions } from '../../types.js';
 import {
   DEFAULT_SCREENSHOT_LOCALE,
   resolveScreenshotMessages,
-} from '../../overlay/presentation.js';
+} from '../../i18n/index.js';
 import { PINNED_CHANNELS } from '../protocol/channels.js';
 import type { PinnedPoint } from '../preload/pinned-preload.js';
 import {

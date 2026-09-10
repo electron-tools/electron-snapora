@@ -1121,16 +1121,15 @@ input {
   max-width: calc(100vw - 16px);
   min-height: 48px;
   align-items: center;
-  gap: 6px;
-  padding: 10px 16px 10px 10px;
-  border: 1px solid var(--snapora-warning);
+  gap: 12px;
+  padding: 10px 16px;
+  border: 1px solid var(--snapora-copy-border, #dff3eb);
   border-radius: 12px;
-  color: var(--snapora-text);
-  background: var(--snapora-toolbar);
-  box-shadow: 0 12px 36px rgb(0 0 0 / 34%);
-  backdrop-filter: blur(16px);
+  color: var(--snapora-copy-foreground, #111);
+  background: var(--snapora-copy-background, #fff);
+  box-shadow: 0 4px 12px rgb(24 70 52 / 14%);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 400;
   line-height: 20px;
   white-space: nowrap;
   transform: translateX(-50%);
@@ -1146,21 +1145,21 @@ input {
 
 .copy-feedback-icon {
   display: grid;
-  width: 20px;
-  height: 20px;
-  flex: 0 0 20px;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
   place-items: center;
-  color: var(--snapora-warning);
-  background: transparent;
+  border-radius: 50%;
+  color: var(--snapora-copy-icon, #20b88a);
+  background: var(--snapora-copy-icon-background, #e4f8ef);
 }
 
 .copy-feedback-check {
   display: block;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   fill: currentColor;
   stroke: none;
-  transform: translateY(1px);
 }
 
 @keyframes snapora-feedback-in {

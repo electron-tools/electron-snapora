@@ -199,7 +199,9 @@ Pass manager settings through `setupElectronSnapora()` so the simple integration
 same as requirements grow.
 
 The post-capture clipboard confirmation is disabled by default. Enable it per capture when the
-host wants the standalone copy feedback window:
+host wants the standalone copy feedback window. It appears for 3 seconds with a white background,
+black text, a pale green border, and a green checkmark in both light and dark modes. Customize its
+text with `messages.copied` and its colors with the `copyFeedback*` theme fields below:
 
 ```ts
 await window.electronSnapora.capture({
@@ -210,12 +212,15 @@ await window.electronSnapora.capture({
 
 ### Theme and localization
 
-The overlay defaults to English (`en-US`) and a dark toolbar. A capture can select the built-in
-Chinese locale, override individual messages, and provide semantic theme colors:
+The overlay defaults to English (`en-US`) and a dark toolbar. Built-in languages are English (`en-US`),
+Simplified Chinese (`zh-CN`), Japanese (`ja-JP`), Korean (`ko-KR`), and Spanish (`es-ES`).
+Language resources live in `src/i18n`. A capture can select a locale, override individual messages,
+and provide semantic theme colors:
 
 ```ts
 await window.electronSnapora.capture({
   locale: 'zh-CN',
+  showCopyFeedback: true,
   messages: {
     confirm: '复制到聊天框',
     copied: '截图已复制',
@@ -231,6 +236,11 @@ await window.electronSnapora.capture({
     toolbarForeground: '#1d1b20',
     tooltipBackground: '#27272a',
     warningColor: '#f59e0b',
+    copyFeedbackBackground: '#ffffff',
+    copyFeedbackForeground: '#111111',
+    copyFeedbackBorderColor: '#dff3eb',
+    copyFeedbackIconColor: '#20b88a',
+    copyFeedbackIconBackground: '#e4f8ef',
   },
 });
 ```

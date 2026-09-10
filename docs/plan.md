@@ -21,6 +21,17 @@
 4. `pnpm lint`、`pnpm typecheck`、`pnpm test` 和 `pnpm build` 全部通过。
 5. 新增公共能力同步更新 README 或设计文档。
 
+## 1.0.21 发布准备
+
+- [x] 版本与英文 CHANGELOG 对齐；复制提示保持库默认关闭、demo 显式开启。
+- [x] 完整 `release:check` 通过，含质量、元数据、真实包消费、Electron 42/43 和 ASAR/目录成品检查。
+- [x] npm 发布 dry-run 与公开包内容审计通过，未执行发布。
+- [x] 多语言 README 主题配置和示例 locale 对齐。
+- [ ] Mac 文字排版真机验收及复制提示尺寸断言确认。
+- [ ] 发布提交的远端 CI 通过。
+
+详细记录见 [npm 打包与发布检查](./release-packaging.md)。
+
 ## M0：工程基础
 
 - [x] M0.1 克隆 Git 仓库并建立项目目录。

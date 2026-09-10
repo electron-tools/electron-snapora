@@ -9,7 +9,7 @@ let isMacScreenshotInProgress = false;
 
 async function triggerDemoScreenshot() {
   if (process.platform !== 'darwin') {
-    return screenshotManager.capture({ display: 'cursor' });
+    return screenshotManager.capture({ display: 'cursor', showCopyFeedback: true });
   }
   if (isMacScreenshotInProgress || screenshotManager.activeJobId) return;
   isMacScreenshotInProgress = true;
@@ -31,7 +31,10 @@ async function triggerDemoScreenshot() {
         }
       }
     }
-    return await screenshotManager.capture({ display: 'cursor' });
+    return await screenshotManager.capture({
+      display: 'cursor',
+      showCopyFeedback: true,
+    });
   } finally {
     try {
       if (previous && previous.pid !== process.pid) {

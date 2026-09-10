@@ -285,6 +285,8 @@ app.whenReady().then(async () => {
           text: feedback.textContent?.trim(),
           height: feedbackBounds.height,
           borderColor: feedbackStyle.borderTopColor,
+          background: feedbackStyle.backgroundColor,
+          foreground: feedbackStyle.color,
           whiteSpace: feedbackStyle.whiteSpace,
           bodyBackground: getComputedStyle(document.body).backgroundColor,
           screenDisplay: getComputedStyle(document.querySelector('.screen-frame')).display,
@@ -299,18 +301,23 @@ app.whenReady().then(async () => {
     if (
       !feedbackState.text.includes('clipboard') ||
       feedbackState.height > 50 ||
-      feedbackState.borderColor !== 'rgb(246, 189, 70)' ||
+      feedbackState.borderColor !== 'rgb(223, 243, 235)' ||
+      feedbackState.background !== 'rgb(255, 255, 255)' ||
+      feedbackState.foreground !== 'rgb(17, 17, 17)' ||
       feedbackState.whiteSpace !== 'nowrap' ||
       feedbackState.bodyBackground !== 'rgba(0, 0, 0, 0)' ||
       feedbackState.screenDisplay !== 'none' ||
       feedbackState.statusDisplay !== 'none' ||
-      feedbackState.iconBackground !== 'rgba(0, 0, 0, 0)' ||
-      feedbackState.checkFill !== 'rgb(246, 189, 70)' ||
+      feedbackState.iconBackground !== 'rgb(228, 248, 239)' ||
+      feedbackState.checkFill !== 'rgb(32, 184, 138)' ||
       feedbackState.checkStroke !== 'none' ||
       feedbackBounds.width > 360 ||
       feedbackBounds.height > 72
     ) {
-      console.error('Electron Snapora copy feedback was not isolated:', feedbackState);
+      console.error('Electron Snapora copy feedback was not isolated:', {
+        feedbackState,
+        feedbackBounds,
+      });
       process.exit(1);
       return;
     }

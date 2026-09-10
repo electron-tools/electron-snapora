@@ -20,6 +20,7 @@ import {
   type ScreenshotReadyPayload,
 } from './messages.js';
 import { HARD_SCREENSHOT_RESOURCE_LIMITS } from './limits.js';
+import { isScreenshotLocale } from '../../i18n/index.js';
 
 const SCREENSHOT_ERROR_CODES = new Set<ScreenshotErrorCode>([
   'CAPTURE_BUSY',
@@ -68,6 +69,11 @@ const SCREENSHOT_THEME_COLOR_KEYS = [
   'warningColor',
   'warningForegroundColor',
   'selectionHandleColor',
+  'copyFeedbackBackground',
+  'copyFeedbackForeground',
+  'copyFeedbackBorderColor',
+  'copyFeedbackIconColor',
+  'copyFeedbackIconBackground',
 ] as const satisfies ReadonlyArray<Exclude<keyof ScreenshotTheme, 'mode'>>;
 
 const SCREENSHOT_THEME_KEYS = new Set<string>(['mode', ...SCREENSHOT_THEME_COLOR_KEYS]);
@@ -209,7 +215,7 @@ export function parseScreenshotOptions(value: unknown): ScreenshotOptionsParseRe
   }
 
   if (value.locale !== undefined) {
-    if (value.locale !== 'zh-CN' && value.locale !== 'en-US') {
+    if (!isScreenshotLocale(value.locale)) {
       return { success: false, message: 'Screenshot locale is unsupported.' };
     }
     parsed.locale = value.locale;

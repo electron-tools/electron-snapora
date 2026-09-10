@@ -135,12 +135,23 @@ const snapora = setupElectronSnapora({
 
 ### 테마 및 현지화
 
+지원 언어는 영어(`en-US`, 기본값), 중국어 간체(`zh-CN`), 일본어(`ja-JP`), 한국어(`ko-KR`), 스페인어(`es-ES`)입니다. 언어 리소스는 `src/i18n`에 있습니다.
+
+복사 완료 알림은 기본적으로 꺼져 있습니다. `showCopyFeedback: true`로 켜면 흰색 배경, 검은색 글자, 연한 녹색 테두리와 녹색 체크 표시로 3초간 표시됩니다. 밝은 테마와 어두운 테마에서 같은 색상을 사용합니다. 문구는 `messages.copied`, 색상은 아래 `copyFeedback*` 필드로 변경할 수 있습니다.
+
 ```ts
 await window.electronSnapora.capture({
   locale: 'ko-KR',
+  showCopyFeedback: true,
+  messages: { copied: '클립보드에 복사되었습니다' },
   theme: {
     mode: 'dark',
     accentColor: '#0a84ff',
+    copyFeedbackBackground: '#ffffff',
+    copyFeedbackForeground: '#111111',
+    copyFeedbackBorderColor: '#dff3eb',
+    copyFeedbackIconColor: '#20b88a',
+    copyFeedbackIconBackground: '#e4f8ef',
   },
 });
 ```

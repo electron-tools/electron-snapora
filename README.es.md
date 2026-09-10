@@ -135,12 +135,23 @@ const snapora = setupElectronSnapora({
 
 ### Temas y localización
 
+Los idiomas incluidos son inglés (`en-US`, predeterminado), chino simplificado (`zh-CN`), japonés (`ja-JP`), coreano (`ko-KR`) y español (`es-ES`). Los recursos se encuentran en `src/i18n`.
+
+El aviso de copia está desactivado de forma predeterminada. Con `showCopyFeedback: true`, se muestra durante 3 segundos con fondo blanco, texto negro, borde verde claro y una marca de verificación verde, tanto en el tema claro como en el oscuro. Personaliza el texto con `messages.copied` y los colores con los campos `copyFeedback*` siguientes.
+
 ```ts
 await window.electronSnapora.capture({
   locale: 'es-ES',
+  showCopyFeedback: true,
+  messages: { copied: 'Copiado al portapapeles' },
   theme: {
     mode: 'dark',
     accentColor: '#0a84ff',
+    copyFeedbackBackground: '#ffffff',
+    copyFeedbackForeground: '#111111',
+    copyFeedbackBorderColor: '#dff3eb',
+    copyFeedbackIconColor: '#20b88a',
+    copyFeedbackIconBackground: '#e4f8ef',
   },
 });
 ```

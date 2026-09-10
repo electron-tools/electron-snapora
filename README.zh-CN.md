@@ -173,22 +173,31 @@ import { normalizeRect } from 'electron-snapora/core';
 
 ### 截图后复制提示
 
-截图完成并复制到剪贴板后的独立提示窗口默认关闭；如需开启，可在调用时传入：
+截图完成并复制到剪贴板后的独立提示窗口默认关闭，传入 `showCopyFeedback: true` 开启后显示 3 秒。提示默认采用白底黑字、浅绿色边框和绿色对号，深浅主题下保持一致。文案和颜色可以自定义：
 
 ```ts
 await window.electronSnapora.capture({
   display: 'cursor',
   showCopyFeedback: true,
+  messages: { copied: '已复制到剪贴板' },
+  theme: {
+    copyFeedbackBackground: '#ffffff',
+    copyFeedbackForeground: '#111111',
+    copyFeedbackBorderColor: '#dff3eb',
+    copyFeedbackIconColor: '#20b88a',
+    copyFeedbackIconBackground: '#e4f8ef',
+  },
 });
 ```
 
 ### 主题与国际化本地化
 
-截图层默认采用英文界面（`en-US`）与深色工具栏。调用时可切换内置中文语言包、自定义文案以及语义化主题色：
+截图层默认采用英文界面（`en-US`）与深色工具栏。内置语言依次为英语（`en-US`）、简体中文（`zh-CN`）、日语（`ja-JP`）、韩语（`ko-KR`）和西班牙语（`es-ES`），资源集中在 `src/i18n`。调用时可切换语言、自定义文案以及语义化主题色：
 
 ```ts
 await window.electronSnapora.capture({
   locale: 'zh-CN',
+  showCopyFeedback: true,
   messages: {
     confirm: '复制到聊天框',
     copied: '截图已复制',
@@ -204,6 +213,11 @@ await window.electronSnapora.capture({
     toolbarForeground: '#1d1b20',
     tooltipBackground: '#27272a',
     warningColor: '#f59e0b',
+    copyFeedbackBackground: '#ffffff',
+    copyFeedbackForeground: '#111111',
+    copyFeedbackBorderColor: '#dff3eb',
+    copyFeedbackIconColor: '#20b88a',
+    copyFeedbackIconBackground: '#e4f8ef',
   },
 });
 ```

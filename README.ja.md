@@ -135,12 +135,23 @@ const snapora = setupElectronSnapora({
 
 ### テーマとローカライズ
 
+対応言語は英語（`en-US`、既定）、簡体字中国語（`zh-CN`）、日本語（`ja-JP`）、韓国語（`ko-KR`）、スペイン語（`es-ES`）です。言語リソースは `src/i18n` にあります。
+
+コピー完了の通知は既定では無効です。`showCopyFeedback: true` で有効にすると、白い背景、黒い文字、薄緑の枠線、緑のチェックマークで 3 秒間表示されます。ライト・ダークの両テーマで同じ配色です。文言は `messages.copied`、色は以下の `copyFeedback*` フィールドで変更できます。
+
 ```ts
 await window.electronSnapora.capture({
   locale: 'ja-JP',
+  showCopyFeedback: true,
+  messages: { copied: 'クリップボードにコピーしました' },
   theme: {
     mode: 'dark',
     accentColor: '#0a84ff',
+    copyFeedbackBackground: '#ffffff',
+    copyFeedbackForeground: '#111111',
+    copyFeedbackBorderColor: '#dff3eb',
+    copyFeedbackIconColor: '#20b88a',
+    copyFeedbackIconBackground: '#e4f8ef',
   },
 });
 ```
