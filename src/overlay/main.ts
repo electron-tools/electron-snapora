@@ -26,6 +26,8 @@ import {
   getTextContrastColor,
   getTextEditorLayout,
   getTextFillColor,
+  getTextFillRadius,
+  getTextLetterSpacing,
   getTextStrokeWidth,
   hitTestElement,
   isDrawableElementValid,
@@ -344,6 +346,15 @@ window.snaporaOverlay.onInitialize((payload) => {
   void initializeOverlay(payload);
 });
 window.addEventListener('pagehide', () => frameLoadController?.abort());
+for (const eventType of ['pointerover', 'focusin']) {
+  document.addEventListener(eventType, (event) => {
+    const target = event.target;
+    if (target instanceof Element) {
+      const button = target.closest<HTMLElement>('[data-tooltip]');
+      if (button) positionTooltipHorizontally(button);
+    }
+  });
+}
 window.snaporaOverlay.onFeedback((payload) => {
   if (payload.kind !== 'copy') {
     return;
@@ -1247,11 +1258,20 @@ function resizeTextEditor(): void {
   }
   const editorStyle = window.getComputedStyle(textEditor);
   const fontSize = parseCssPixels(editorStyle.fontSize) || 14;
+  const textStyle = annotationStore.getState().style.textStyle;
   const textWidth = textEditor.value
-    ? measureTextLayout(annotationContext, textEditor.value, fontSize).width
+    ? measureTextLayout(annotationContext, textEditor.value, fontSize, textStyle).width
     : 0;
 
-  const lines = splitTextLines(textEditor.value);
+  const lines = splitTextLines(
+    wrapTextToWidth(
+      annotationContext,
+      textEditor.value,
+      fontSize,
+      Math.max(1, selection.width - 28),
+      textStyle
+    )
+  );
   const layout = getTextEditorLayout(textWidth, lines.length, fontSize, 1);
 
   let targetContainerWidth: number;
@@ -1260,7 +1280,9 @@ function resizeTextEditor(): void {
   if (
     editingTextElement &&
     editingTextElement.inputBounds &&
-    editingTextElement.value === textEditor.value
+    editingTextElement.value === textEditor.value &&
+    Math.abs(editingTextElement.fontSize / getImageScale() - fontSize) < 0.01 &&
+    (editingTextElement.textStyle ?? 'default') === textStyle
   ) {
     // 重新编辑且内容尚未变更时：尺寸与位置 100% 严格复用 inputBounds，0 变形 0 跳变
     const imageScale = getImageScale();
@@ -1331,12 +1353,29 @@ function closeTextEditor(commit: boolean): void {
         parseCssPixels(editorStyle.paddingRight)) *
         imageScale
     );
-    const value = wrapTextToWidth(annotationContext, rawValue, fontSize, contentWidth);
-    const metrics = measureTextLayout(annotationContext, value, fontSize);
+    const viewportFontSize = fontSize / imageScale;
+    const value = wrapTextToWidth(
+      annotationContext,
+      rawValue,
+      viewportFontSize,
+      contentWidth / imageScale,
+      state.style.textStyle
+    );
+    const viewportMetrics = measureTextLayout(
+      annotationContext,
+      value,
+      viewportFontSize,
+      state.style.textStyle
+    );
+    const metrics = {
+      width: viewportMetrics.width * imageScale,
+      ascent: viewportMetrics.ascent * imageScale,
+      descent: viewportMetrics.descent * imageScale,
+    };
     const baselineMetrics = measureTextBaselineMetrics(
       annotationContext,
       value,
-      fontSize
+      viewportFontSize
     );
     const surfaceBounds = surface.getBoundingClientRect();
     const editorBounds = textEditor.getBoundingClientRect();
@@ -1369,8 +1408,12 @@ function closeTextEditor(commit: boolean): void {
     );
     const position = calculateTextBaselinePosition(
       editorOrigin,
-      baselineMetrics,
-      contentOffset
+      {
+        ascent: baselineMetrics.ascent * imageScale,
+        descent: baselineMetrics.descent * imageScale,
+      },
+      contentOffset,
+      parseCssPixels(editorStyle.lineHeight) * imageScale
     );
     const element: TextElement = {
       id: previousEditingElement ? previousEditingElement.id : crypto.randomUUID(),
@@ -1672,6 +1715,21 @@ function positionTooltip(toolbarPlacement: 'above' | 'below' | 'inside'): void {
             ? 'above'
             : 'below';
   toolbar.dataset.tooltipPlacement = placement;
+  for (const button of toolbar.querySelectorAll<HTMLElement>(
+    '[data-tooltip]:hover, [data-tooltip]:focus-visible'
+  )) {
+    positionTooltipHorizontally(button);
+  }
+}
+
+/** 只平移气泡，箭头仍指向按钮；使用实际宽度兼容快捷键和本地化文案。 */
+function positionTooltipHorizontally(button: HTMLElement): void {
+  const bounds = button.getBoundingClientRect();
+  const width = Number.parseFloat(getComputedStyle(button, '::after').width);
+  if (!Number.isFinite(width)) return;
+  const center = bounds.left + bounds.width / 2;
+  const left = Math.max(8, Math.min(center - width / 2, window.innerWidth - 8 - width));
+  button.style.setProperty('--tooltip-offset-x', `${left + width / 2 - center}px`);
 }
 
 /** 将预设面板限制在屏幕内，并让箭头始终指向当前点击的工具按钮。 */
@@ -2124,6 +2182,8 @@ function applyTextEditorPreset(
   textEditor.dataset.textStyle = textStyle;
   textEditor.style.color = textFillColor;
   textEditor.style.caretColor = textFillColor;
+  textEditor.style.letterSpacing = `${getTextLetterSpacing(fontSize, textStyle)}px`;
+  textEditor.style.borderRadius = `${getTextFillRadius(fontSize)}px`;
   textEditor.style.backgroundColor = textStyle === 'fill' ? color : 'transparent';
   textEditor.style.textShadow = 'none';
   textEditor.style.paintOrder = 'stroke fill';
@@ -2165,7 +2225,18 @@ function commitSelectedElementStyle(style: AnnotationElementStyle): void {
     return;
   }
 
-  const updated = updateElementStyle(selected, style);
+  let updated = updateElementStyle(selected, style);
+  if (updated !== selected && updated.type === 'text') {
+    updated = {
+      ...updated,
+      metrics: measureTextLayout(
+        annotationContext,
+        updated.value,
+        updated.fontSize,
+        updated.textStyle
+      ),
+    };
+  }
   if (updated !== selected) {
     annotationStore.commitUpdate(selected, updated);
   }

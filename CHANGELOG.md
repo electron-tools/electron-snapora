@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.20] - 2026-09-09
+
+### Fixed
+
+- Clamp toolbar button tooltips horizontally within viewport boundaries (`positionTooltipHorizontally`), preventing tooltip bubble clipping when the selection toolbar is positioned near screen edges while keeping the pointer arrow aligned with the target button.
+- Clean up redundant shortcut attributes on confirmation and action buttons in overlay markup.
+- Add visual tooltip positioning and boundary smoke assertions (`demo/tooltip-smoke.cjs`).
+
 ## [1.0.19] - 2026-09-09
 
 ### Added

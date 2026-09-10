@@ -12,6 +12,8 @@ import {
   getTextContrastColor,
   getTextEditorLayout,
   getTextFillColor,
+  getTextFillRadius,
+  getTextLetterSpacing,
   getTextStrokeWidth,
   isElementResizable,
   splitTextLines,
@@ -228,7 +230,7 @@ function drawText(context: AnnotationDrawingContext, element: TextElement): void
       bounds.y,
       bounds.width,
       bounds.height,
-      Math.max(4, element.fontSize * 0.22)
+      getTextFillRadius(element.fontSize)
     );
     context.fill();
     context.fillStyle = textFillColor;
@@ -243,6 +245,7 @@ function drawText(context: AnnotationDrawingContext, element: TextElement): void
   }
 
   context.font = getTextCanvasFont(element.fontSize);
+  context.letterSpacing = `${getTextLetterSpacing(element.fontSize, textStyle)}px`;
   context.textBaseline = 'alphabetic';
   if (textStyle === 'outline') {
     context.strokeStyle = contrastColor;

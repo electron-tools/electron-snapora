@@ -49,11 +49,16 @@ type TextBaselineMetrics = Pick<TextLayoutMetrics, 'ascent' | 'descent'> &
 export function calculateTextBaselinePosition(
   editorOrigin: Point,
   metrics: TextBaselineMetrics,
-  contentOffset: Point
+  contentOffset: Point,
+  lineHeight = metrics.ascent + metrics.descent
 ): Point {
   return {
     x: editorOrigin.x + contentOffset.x,
-    y: editorOrigin.y + contentOffset.y + metrics.ascent,
+    y:
+      editorOrigin.y +
+      contentOffset.y +
+      metrics.ascent +
+      (lineHeight - metrics.ascent - metrics.descent) / 2,
   };
 }
 
@@ -113,6 +118,18 @@ export function getTextEditorLayout(
 
 export function getTextStrokeWidth(fontSize: number): number {
   return Math.max(1, Math.round(fontSize * 0.08));
+}
+
+/** 描边字形末端为原生插入光标留白；随字号等比缩放。 */
+export function getTextLetterSpacing(
+  fontSize: number,
+  textStyle: TextStyle = 'default'
+): number {
+  return textStyle === 'shadow' || textStyle === 'outline' ? fontSize * 0.12 : 0;
+}
+
+export function getTextFillRadius(fontSize: number): number {
+  return fontSize * 0.22;
 }
 
 /**
@@ -182,15 +199,19 @@ export function getTextCanvasFont(fontSize: number): string {
 
 /** 按 Canvas 实际测量宽度插入换行，确保最终文字不会超出选区。 */
 export function wrapTextToWidth(
-  context: Pick<CanvasRenderingContext2D, 'font' | 'measureText'>,
+  context: Pick<CanvasRenderingContext2D, 'font' | 'measureText'> &
+    Partial<Pick<CanvasRenderingContext2D, 'letterSpacing'>>,
   value: string,
   fontSize: number,
-  maximumWidth: number
+  maximumWidth: number,
+  textStyle: TextStyle = 'default'
 ): string {
   if (maximumWidth <= 0) {
     return value;
   }
   const previousFont = context.font;
+  const previousSpacing = context.letterSpacing ?? '0px';
+  context.letterSpacing = `${getTextLetterSpacing(fontSize, textStyle)}px`;
   context.font = getTextCanvasFont(fontSize);
   try {
     return splitTextLines(value)
@@ -201,7 +222,9 @@ export function wrapTextToWidth(
         const wrapped: string[] = [];
         let current = '';
         // ponytail: 输入上限为 500 字符；逐字测量优先保证中英文混排宽度准确。
-        for (const character of line) {
+        for (const { segment: character } of new Intl.Segmenter(undefined, {
+          granularity: 'grapheme',
+        }).segment(line)) {
           const candidate = current + character;
           if (current && context.measureText(candidate).width > maximumWidth) {
             wrapped.push(current);
@@ -216,6 +239,7 @@ export function wrapTextToWidth(
       .join('\n');
   } finally {
     context.font = previousFont;
+    context.letterSpacing = previousSpacing;
   }
 }
 
@@ -251,11 +275,15 @@ function getColorBrightness(color: string): number | undefined {
 
 /** 使用与 Canvas 渲染一致的字体测量文字，避免中文等全角字符被固定比例低估。 */
 export function measureTextLayout(
-  context: Pick<CanvasRenderingContext2D, 'font' | 'measureText'>,
+  context: Pick<CanvasRenderingContext2D, 'font' | 'measureText'> &
+    Partial<Pick<CanvasRenderingContext2D, 'letterSpacing'>>,
   value: string,
-  fontSize: number
+  fontSize: number,
+  textStyle: TextStyle = 'default'
 ): TextLayoutMetrics {
   const previousFont = context.font;
+  const previousSpacing = context.letterSpacing ?? '0px';
+  context.letterSpacing = `${getTextLetterSpacing(fontSize, textStyle)}px`;
   context.font = getTextCanvasFont(fontSize);
   try {
     const lineMetrics = splitTextLines(value).map((line) => context.measureText(line));
@@ -275,6 +303,7 @@ export function measureTextLayout(
     };
   } finally {
     context.font = previousFont;
+    context.letterSpacing = previousSpacing;
   }
 }
 
@@ -446,7 +475,11 @@ export function updateElementStyle(
             fillBounds
               ? { fillBounds }
               : {}),
-            ...(fontSize === element.fontSize && inputBounds ? { inputBounds } : {}),
+            ...(fontSize === element.fontSize &&
+            textStyle === currentTextStyle &&
+            inputBounds
+              ? { inputBounds }
+              : {}),
           };
     }
     case 'mosaic': {
