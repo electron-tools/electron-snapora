@@ -204,6 +204,7 @@ async function getRedPixelBounds(window, region) {
   let top = height;
   let right = -1;
   let bottom = -1;
+  let coloredPixels = 0;
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const index = (y * width + x) * 4;
@@ -212,6 +213,7 @@ async function getRedPixelBounds(window, region) {
       const red = bitmap[index + redChannelOffset];
       const alpha = bitmap[index + 3];
       if (red > 180 && red > green * 1.5 && red > blue * 1.5 && alpha > 128) {
+        coloredPixels += 1;
         left = Math.min(left, x);
         top = Math.min(top, y);
         right = Math.max(right, x);
@@ -219,7 +221,7 @@ async function getRedPixelBounds(window, region) {
       }
     }
   }
-  return right >= left ? { left, top, right, bottom } : null;
+  return right >= left ? { left, top, right, bottom, coloredPixels } : null;
 }
 
 async function assertToolDraws(window, tool, start, end, steps = 1) {
@@ -881,6 +883,57 @@ app.on('browser-window-created', (_event, window) => {
     window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Delete' });
     await nextFrame(window);
     await new Promise((resolve) => setTimeout(resolve, 50));
+    await activateTool(window, 'text');
+    await window.webContents.executeJavaScript(
+      `document.querySelector('[data-text-style="default"]')?.click()`
+    );
+    // 描边文字必须在输入和提交之间保持字距与基线；W 覆盖紧邻光标的宽字形。
+    await window.webContents.executeJavaScript(
+      `document.querySelector('[data-text-style="shadow"]')?.click()`
+    );
+    sendClick(window, textPoint);
+    await nextFrame(window);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await window.webContents.insertText('WWW');
+    await window.webContents.executeJavaScript(`
+      document.querySelector('.text-editor').dispatchEvent(new Event('input', { bubbles: true }));
+    `);
+    await nextFrame(window);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const shadowWithCaret = await getRedPixelBounds(window, textRegion);
+    await window.webContents.executeJavaScript(
+      `document.querySelector('.text-editor').style.caretColor = 'transparent'`
+    );
+    await nextFrame(window);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const shadowInputBounds = await getRedPixelBounds(window, textRegion);
+    if (
+      !shadowWithCaret ||
+      !shadowInputBounds ||
+      shadowInputBounds.coloredPixels - shadowWithCaret.coloredPixels > 2
+    ) {
+      throw new Error(
+        `Caret covered shadow text: ${JSON.stringify({ shadowWithCaret, shadowInputBounds })}`
+      );
+    }
+    window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' });
+    window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' });
+    await nextFrame(window);
+    const shadowCommittedBounds = await getRedPixelBounds(window, textRegion);
+    if (
+      !shadowInputBounds ||
+      !shadowCommittedBounds ||
+      ['left', 'top', 'right', 'bottom'].some(
+        (edge) => Math.abs(shadowInputBounds[edge] - shadowCommittedBounds[edge]) > 1
+      )
+    ) {
+      throw new Error(
+        `Shadow text layout changed: ${JSON.stringify({ shadowInputBounds, shadowCommittedBounds })}`
+      );
+    }
+    await window.webContents.executeJavaScript(
+      `document.querySelector('.undo-button')?.click()`
+    );
     await activateTool(window, 'text');
     await window.webContents.executeJavaScript(
       `document.querySelector('[data-text-style="default"]')?.click()`

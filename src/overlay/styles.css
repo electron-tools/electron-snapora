@@ -1049,6 +1049,8 @@ input {
 }
 
 .text-editor {
+  white-space: break-spaces;
+  word-break: break-all;
   position: relative;
   box-sizing: border-box;
   width: 100%;

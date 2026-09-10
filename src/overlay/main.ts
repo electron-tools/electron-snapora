@@ -26,6 +26,8 @@ import {
   getTextContrastColor,
   getTextEditorLayout,
   getTextFillColor,
+  getTextFillRadius,
+  getTextLetterSpacing,
   getTextStrokeWidth,
   hitTestElement,
   isDrawableElementValid,
@@ -1256,11 +1258,20 @@ function resizeTextEditor(): void {
   }
   const editorStyle = window.getComputedStyle(textEditor);
   const fontSize = parseCssPixels(editorStyle.fontSize) || 14;
+  const textStyle = annotationStore.getState().style.textStyle;
   const textWidth = textEditor.value
-    ? measureTextLayout(annotationContext, textEditor.value, fontSize).width
+    ? measureTextLayout(annotationContext, textEditor.value, fontSize, textStyle).width
     : 0;
 
-  const lines = splitTextLines(textEditor.value);
+  const lines = splitTextLines(
+    wrapTextToWidth(
+      annotationContext,
+      textEditor.value,
+      fontSize,
+      Math.max(1, selection.width - 28),
+      textStyle
+    )
+  );
   const layout = getTextEditorLayout(textWidth, lines.length, fontSize, 1);
 
   let targetContainerWidth: number;
@@ -1269,7 +1280,9 @@ function resizeTextEditor(): void {
   if (
     editingTextElement &&
     editingTextElement.inputBounds &&
-    editingTextElement.value === textEditor.value
+    editingTextElement.value === textEditor.value &&
+    Math.abs(editingTextElement.fontSize / getImageScale() - fontSize) < 0.01 &&
+    (editingTextElement.textStyle ?? 'default') === textStyle
   ) {
     // 重新编辑且内容尚未变更时：尺寸与位置 100% 严格复用 inputBounds，0 变形 0 跳变
     const imageScale = getImageScale();
@@ -1340,12 +1353,29 @@ function closeTextEditor(commit: boolean): void {
         parseCssPixels(editorStyle.paddingRight)) *
         imageScale
     );
-    const value = wrapTextToWidth(annotationContext, rawValue, fontSize, contentWidth);
-    const metrics = measureTextLayout(annotationContext, value, fontSize);
+    const viewportFontSize = fontSize / imageScale;
+    const value = wrapTextToWidth(
+      annotationContext,
+      rawValue,
+      viewportFontSize,
+      contentWidth / imageScale,
+      state.style.textStyle
+    );
+    const viewportMetrics = measureTextLayout(
+      annotationContext,
+      value,
+      viewportFontSize,
+      state.style.textStyle
+    );
+    const metrics = {
+      width: viewportMetrics.width * imageScale,
+      ascent: viewportMetrics.ascent * imageScale,
+      descent: viewportMetrics.descent * imageScale,
+    };
     const baselineMetrics = measureTextBaselineMetrics(
       annotationContext,
       value,
-      fontSize
+      viewportFontSize
     );
     const surfaceBounds = surface.getBoundingClientRect();
     const editorBounds = textEditor.getBoundingClientRect();
@@ -1378,8 +1408,12 @@ function closeTextEditor(commit: boolean): void {
     );
     const position = calculateTextBaselinePosition(
       editorOrigin,
-      baselineMetrics,
-      contentOffset
+      {
+        ascent: baselineMetrics.ascent * imageScale,
+        descent: baselineMetrics.descent * imageScale,
+      },
+      contentOffset,
+      parseCssPixels(editorStyle.lineHeight) * imageScale
     );
     const element: TextElement = {
       id: previousEditingElement ? previousEditingElement.id : crypto.randomUUID(),
@@ -2148,6 +2182,8 @@ function applyTextEditorPreset(
   textEditor.dataset.textStyle = textStyle;
   textEditor.style.color = textFillColor;
   textEditor.style.caretColor = textFillColor;
+  textEditor.style.letterSpacing = `${getTextLetterSpacing(fontSize, textStyle)}px`;
+  textEditor.style.borderRadius = `${getTextFillRadius(fontSize)}px`;
   textEditor.style.backgroundColor = textStyle === 'fill' ? color : 'transparent';
   textEditor.style.textShadow = 'none';
   textEditor.style.paintOrder = 'stroke fill';
@@ -2189,7 +2225,18 @@ function commitSelectedElementStyle(style: AnnotationElementStyle): void {
     return;
   }
 
-  const updated = updateElementStyle(selected, style);
+  let updated = updateElementStyle(selected, style);
+  if (updated !== selected && updated.type === 'text') {
+    updated = {
+      ...updated,
+      metrics: measureTextLayout(
+        annotationContext,
+        updated.value,
+        updated.fontSize,
+        updated.textStyle
+      ),
+    };
+  }
   if (updated !== selected) {
     annotationStore.commitUpdate(selected, updated);
   }
