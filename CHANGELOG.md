@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.22] - 2026-09-11
+
+### Fixed
+
+- Vertically center the first line of new text annotations on the click position and place the editor to its right, switching to the left when there is insufficient space while keeping the editor within the capture selection.
+- Keep toolbar panel shadows at a stable stacking level so hovering another tool no longer darkens the open preset panel.
+
 ## [1.0.21] - 2026-09-10
 
 ### Added

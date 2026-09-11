@@ -1317,12 +1317,18 @@ function resizeTextEditor(): void {
       selection.y + selection.height - targetContainerHeight
     );
   } else {
-    // 新建文字时：容器左上角紧贴点击点（留出 6px 容器 border+padding，让文字顶端对齐点击点）
+    // 新建文字：首行垂直居中于点击点，右侧放不下时整体翻到左侧。
+    const gap = 6;
+    const desiredLeft =
+      anchor.x + gap + targetContainerWidth <= selection.x + selection.width
+        ? anchor.x + gap
+        : anchor.x - gap - targetContainerWidth;
     left = Math.min(
-      Math.max(anchor.x - 6, selection.x),
+      Math.max(desiredLeft, selection.x),
       selection.x + selection.width - targetContainerWidth
     );
-    const desiredTop = anchor.y - 6;
+    const firstLineHeight = getTextEditorLayout(0, 1, fontSize, 1).containerHeight;
+    const desiredTop = anchor.y - firstLineHeight / 2;
     top = Math.min(
       Math.max(desiredTop, selection.y),
       selection.y + selection.height - targetContainerHeight

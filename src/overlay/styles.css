@@ -357,6 +357,11 @@ input {
   padding-left: var(--snapora-toolbar-group-padding);
 }
 
+/* Keep main-panel shadows at a stable level when moving between tool buttons. */
+.toolbar-panel:not(.preset-panel) {
+  z-index: 100;
+}
+
 /* backdrop-filter creates a stacking context; raise the hovered panel with its tooltip. */
 .toolbar-panel:has([data-tooltip]:hover),
 .toolbar-panel:has([data-tooltip]:focus-visible) {

@@ -810,9 +810,65 @@ app.on('browser-window-created', (_event, window) => {
       width: 220,
       height: 70,
     };
+    // Hovering a sibling tool must not move its panel shadow over the presets.
+    window.webContents.sendInputEvent({ type: 'mouseMove', x: 1, y: 1 });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const presetRect = await window.webContents.executeJavaScript(`(() => {
+      const r = document.querySelector('.preset-panel').getBoundingClientRect();
+      return { x: Math.ceil(r.x), y: Math.ceil(r.y), width: Math.floor(r.width), height: Math.floor(r.height) };
+    })()`);
+    const presetBeforeHover = (
+      await window.webContents.capturePage(presetRect)
+    ).toBitmap();
+    window.webContents.sendInputEvent({
+      type: 'mouseMove',
+      ...(await getToolCenter(window, 'rectangle')),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const presetAfterHover = (
+      await window.webContents.capturePage(presetRect)
+    ).toBitmap();
+    if (!presetBeforeHover.equals(presetAfterHover)) {
+      throw new Error('Hovering another tool changed the preset panel pixels.');
+    }
+
+    for (const preset of ['default', 'fill', 'shadow']) {
+      await window.webContents.executeJavaScript(
+        `document.querySelector('[data-text-style="${preset}"]').click()`
+      );
+      for (const side of ['right', 'left']) {
+        const point = {
+          x: side === 'right' ? textPoint.x : selectionEnd.x - 10,
+          y: textPoint.y,
+        };
+        sendClick(window, point);
+        await nextFrame(window);
+        for (const value of ['', '对齐 Text']) {
+          await window.webContents.executeJavaScript(`(() => {
+            const editor = document.querySelector('.text-editor');
+            editor.value = ${JSON.stringify(value)};
+            editor.dispatchEvent(new Event('input', { bubbles: true }));
+          })()`);
+          const bounds = await window.webContents.executeJavaScript(
+            `document.querySelector('.text-editor-container').getBoundingClientRect().toJSON()`
+          );
+          if (
+            Math.abs(bounds.y + bounds.height / 2 - point.y) > 1 ||
+            (side === 'right' ? bounds.left < point.x : bounds.right > point.x)
+          ) {
+            throw new Error(
+              `Text placement mismatch: ${JSON.stringify({ preset, side, value, point, bounds })}`
+            );
+          }
+        }
+        window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+        window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+        await nextFrame(window);
+      }
+    }
     const textPresetState = await window.webContents.executeJavaScript(`
       (() => {
-        const buttons = Array.from(document.querySelectorAll('[data-text-style]'));
+        const buttons = Array.from(document.querySelectorAll('button[data-text-style]'));
         document.querySelector('[data-text-style="fill"]')?.click();
         return buttons.map((button) => button.dataset.textStyle);
       })()
