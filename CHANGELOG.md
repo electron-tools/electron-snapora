@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.23] - 2026-09-14
+
+### Changed
+
+- Adjusted clipboard handling for Electron 44: replaced the deprecated synchronous `clipboard.writeImage` API with async `ClipboardItem` usage in `src/electron/main/image-output.ts`.
+- Updated documentation/comments to reflect the new async workflow.
+
 ## [1.0.22] - 2026-09-11
 
 ### Fixed

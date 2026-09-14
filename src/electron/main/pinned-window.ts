@@ -123,13 +123,18 @@ export class PinnedWindowManager {
     window.webContents.on('ipc-message', (_event, channel, ...args) => {
       const point = args[0];
       if (channel === PINNED_CHANNELS.copy) {
-        copyPngToClipboard(data);
-        // 避免在 Renderer→Main 的 ipc-message 调用栈内重入回发导致确认消息丢失。
-        setImmediate(() => {
-          if (!window.isDestroyed()) {
-            window.webContents.send(PINNED_CHANNELS.copied);
-          }
-        });
+        // 新版剪贴板写入是异步的，成功后才通知；失败保留贴图且不误报成功。
+        void copyPngToClipboard(data)
+          .then(() => {
+            setImmediate(() => {
+              if (!window.isDestroyed()) {
+                window.webContents.send(PINNED_CHANNELS.copied);
+              }
+            });
+          })
+          .catch((error: unknown) => {
+            console.error('Failed to copy pinned screenshot:', error);
+          });
       } else if (channel === PINNED_CHANNELS.save) {
         void savePngWithDialog(data, createSuggestedName(), window);
       } else if (channel === PINNED_CHANNELS.close) {

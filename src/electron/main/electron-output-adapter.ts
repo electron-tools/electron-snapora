@@ -19,7 +19,7 @@ export interface ElectronOutputAdapterOptions {
     suggestedName: string,
     senderWebContentsId: number
   ) => Promise<string | undefined>;
-  copyImage?: (data: Uint8Array) => void;
+  copyImage?: (data: Uint8Array) => void | Promise<void>;
   pinImage?: (
     result: ScreenshotOutputPayload['result'],
     options: ScreenshotOptions
@@ -67,7 +67,8 @@ export class ElectronOutputAdapter implements ScreenshotOutputExecutor {
     context: ScreenshotOutputContext
   ): Promise<ScreenshotOutputResponse> {
     if (payload.action === 'copy') {
-      this.#copyImage(payload.result.data);
+      // 异步剪贴板写入成功后才允许 Overlay 结束；失败交给输出路由处理。
+      await this.#copyImage(payload.result.data);
       return { status: 'completed', action: 'copy' };
     }
 
