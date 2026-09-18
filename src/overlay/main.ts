@@ -1459,10 +1459,11 @@ function parseCssPixels(value: string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function cancelCapture(): void {
+async function cancelCapture(): Promise<void> {
   const jobId = selectionStore.getState().payload?.jobId;
   if (jobId) {
     resetOverlaySession();
+    await waitForCompositeFrames();
     window.snaporaOverlay.cancel(jobId);
   }
 }
@@ -1526,12 +1527,13 @@ async function confirmCapture(
         : response.action === 'pin'
           ? { action: 'pin' as const }
           : { action: 'copy' as const };
+    // 在窗口仍可绘制时清空旧帧并等待合成，再通知主进程隐藏，避免复用时闪回旧图。
+    // 不把清理延迟到会话结束后，防止它清掉紧接着启动的新截图。
+    resetOverlaySession();
+    await waitForCompositeFrames();
     window.snaporaOverlay.confirm({
       jobId: state.payload.jobId,
       result: { ...result, output },
-    });
-    void waitForCompositeFrames().then(() => {
-      resetOverlaySession();
     });
   } catch (error) {
     selectionStore.dispatch({ type: 'export-failed' });

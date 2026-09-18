@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.24] - 2026-09-18
+
+### Fixed
+
+- Clear the previous screenshot and annotations before hiding the reusable overlay, allowing the cleared frame to render before confirmation or cancellation completes. This addresses the previous screenshot briefly flashing when starting another capture, especially after hiding the host window.
+- Remove deferred cleanup after capture completion so it cannot clear a newly started screenshot session. Successful captures still finish writing their output before clearing the overlay; failed outputs retain the current capture for retry.
+
 ## [1.0.23] - 2026-09-14
 
 ### Changed
