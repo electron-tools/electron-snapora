@@ -1,4 +1,11 @@
-import { app, desktopCapturer, screen, shell, systemPreferences } from 'electron';
+import {
+  app,
+  desktopCapturer,
+  powerMonitor,
+  screen,
+  shell,
+  systemPreferences,
+} from 'electron';
 
 import type { ScreenshotOptions } from '../../types.js';
 import type {
@@ -30,7 +37,23 @@ interface ScreenApi {
   getCursorScreenPoint(): { x: number; y: number };
   getDisplayNearestPoint(point: { x: number; y: number }): ElectronDisplayLike;
   getPrimaryDisplay(): ElectronDisplayLike;
+  on?(event: DisplayChangeEvent, listener: DisplayChangeListener): unknown;
+  removeListener?(event: DisplayChangeEvent, listener: DisplayChangeListener): unknown;
 }
+
+type DisplayChangeListener = (
+  event?: unknown,
+  display?: ElectronDisplayLike,
+  changedMetrics?: string[]
+) => void;
+
+type DisplayChangeEvent =
+  'display-added' | 'display-removed' | 'display-metrics-changed';
+const DISPLAY_CHANGE_EVENTS: DisplayChangeEvent[] = [
+  'display-added',
+  'display-removed',
+  'display-metrics-changed',
+];
 
 interface DesktopCaptureSource {
   id: string;
@@ -80,6 +103,9 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
   readonly #desktopSourceIds = new Map<string, string>();
   readonly #desktopSourceFallbacks = new Set<string>();
   #desktopSourceEnumeration: Promise<void> | undefined;
+  #sourceRevision = 0;
+  #watchingSources = false;
+  #disposed = false;
 
   constructor(options: ElectronCaptureAdapterOptions = {}) {
     this.#desktopCapturer = options.desktopCapturer ?? desktopCapturer;
@@ -101,6 +127,22 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
   async prepare(): Promise<void> {
     if (this.#platform === 'win32') {
       await this.#enumerateDesktopSources();
+    }
+  }
+
+  /** 释放默认 Manager 拥有的系统订阅；自定义适配器由宿主释放。 */
+  dispose(): void {
+    this.#disposed = true;
+    this.#sourceRevision++;
+    this.#desktopSourceIds.clear();
+    this.#desktopSourceFallbacks.clear();
+    if (this.#watchingSources) {
+      for (const event of DISPLAY_CHANGE_EVENTS) {
+        this.#screen.removeListener?.(event, this.#invalidateDesktopSources);
+      }
+      powerMonitor.removeListener('resume', this.#invalidateDesktopSources);
+      powerMonitor.removeListener('unlock-screen', this.#invalidateDesktopSources);
+      this.#watchingSources = false;
     }
   }
 
@@ -176,18 +218,7 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
     }
     await this.#ensurePermission();
 
-    const allDisplays = this.#screen.getAllDisplays();
-    const targetIdStr = String(display.id);
-    const source =
-      sources.find((candidate) => candidate.display_id === targetIdStr) ??
-      sources.find(
-        (candidate) =>
-          candidate.id === `screen:${targetIdStr}:0` ||
-          candidate.id.startsWith(`screen:${targetIdStr}:`)
-      ) ??
-      (sources.every((s) => !s.display_id) && sources.length === allDisplays.length
-        ? sources[allDisplays.findIndex((d) => d.id === display.id)]
-        : undefined);
+    const source = this.#findDisplaySource(sources, displayId);
     if (!source) {
       await this.#ensurePermission();
       throw new ScreenshotError(
@@ -241,44 +272,84 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
     return this.#desktopSourceIds.get(displayId);
   }
 
+  /** 屏幕配置变化才失效并预热，普通截图保留原有的 ID 缓存命中路径。 */
+  readonly #invalidateDesktopSources: DisplayChangeListener = (
+    _event,
+    _display,
+    changedMetrics
+  ): void => {
+    // 仅工作区变化不影响整屏来源，不重启枚举或清除已有降级状态。
+    if (
+      changedMetrics?.length &&
+      changedMetrics.every((metric) => metric === 'workArea')
+    )
+      return;
+    this.#sourceRevision++;
+    this.#desktopSourceIds.clear();
+    this.#desktopSourceFallbacks.clear();
+    void this.prepare().catch(() => undefined);
+  };
+
+  #watchDesktopSources(): void {
+    if (!this.#watchingSources && this.#screen.on && this.#screen.removeListener) {
+      for (const event of DISPLAY_CHANGE_EVENTS) {
+        this.#screen.on(event, this.#invalidateDesktopSources);
+      }
+      powerMonitor.on('resume', this.#invalidateDesktopSources);
+      powerMonitor.on('unlock-screen', this.#invalidateDesktopSources);
+      this.#watchingSources = true;
+    }
+  }
+
   #enumerateDesktopSources(): Promise<void> {
     this.#desktopSourceEnumeration ??= app
       .whenReady()
-      .then(() =>
-        this.#desktopCapturer.getSources({
-          types: ['screen'],
-          thumbnailSize: { width: 0, height: 0 },
-          fetchWindowIcons: false,
-        })
-      )
-      .then((sources) => {
-        this.#desktopSourceIds.clear();
-        const allDisplays = this.#screen.getAllDisplays();
-        for (const source of sources) {
-          if (source.display_id && source.id) {
-            this.#desktopSourceIds.set(source.display_id, source.id);
-          }
-        }
-        if (
-          sources.every((s) => !s.display_id) &&
-          sources.length === allDisplays.length
-        ) {
-          sources.forEach((source, index) => {
-            const displayItem = allDisplays[index];
-            if (
-              displayItem &&
-              source.id &&
-              !this.#desktopSourceIds.has(String(displayItem.id))
-            ) {
-              this.#desktopSourceIds.set(String(displayItem.id), source.id);
-            }
+      .then(async () => {
+        if (this.#disposed)
+          throw new Error('The screen capture adapter has been disposed.');
+        this.#watchDesktopSources();
+        while (!this.#disposed) {
+          const revision = this.#sourceRevision;
+          const sources = await this.#desktopCapturer.getSources({
+            types: ['screen'],
+            thumbnailSize: { width: 0, height: 0 },
+            fetchWindowIcons: false,
           });
+          // 先等旧请求结束再重取，避免 Electron 合并并发枚举并返回旧拓扑结果。
+          if (revision !== this.#sourceRevision) continue;
+          this.#desktopSourceIds.clear();
+          for (const display of this.#screen.getAllDisplays()) {
+            const displayId = String(display.id);
+            const source = this.#findDisplaySource(sources, displayId);
+            if (source?.id) this.#desktopSourceIds.set(displayId, source.id);
+          }
+          return;
         }
+        throw new Error('The screen capture adapter has been disposed.');
       })
       .finally(() => {
         this.#desktopSourceEnumeration = undefined;
       });
     return this.#desktopSourceEnumeration;
+  }
+
+  /** 两条采集路径按同一身份匹配；source.id 不是 Display.id，禁止按下标猜多屏。 */
+  #findDisplaySource(
+    sources: DesktopCaptureSource[],
+    displayId: string
+  ): DesktopCaptureSource | undefined {
+    const matches = sources.filter((source) => source.display_id === displayId);
+    if (matches.length === 1) return matches[0];
+    const displays = this.#screen.getAllDisplays();
+    if (
+      sources.length === 1 &&
+      !sources[0]?.display_id &&
+      displays.length === 1 &&
+      String(displays[0]?.id) === displayId
+    ) {
+      return sources[0];
+    }
+    return undefined;
   }
 
   #assertRequestedPixelSize(pixelSize: { width: number; height: number }): void {

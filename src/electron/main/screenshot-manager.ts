@@ -94,8 +94,10 @@ function createDefaultRunner(
 ): DefaultScreenshotRunner {
   const ipcMain = managerOptions.ipcMain ?? electronIpcMain;
   const resourceLimits = resolveScreenshotResourceLimits(managerOptions.resourceLimits);
-  const captureAdapter =
-    managerOptions.captureAdapter ?? new ElectronCaptureAdapter({ resourceLimits });
+  const ownedCaptureAdapter = managerOptions.captureAdapter
+    ? undefined
+    : new ElectronCaptureAdapter({ resourceLimits });
+  const captureAdapter = managerOptions.captureAdapter ?? ownedCaptureAdapter!;
   void captureAdapter.prepare?.().catch(() => undefined);
   const outputAdapter = managerOptions.outputAdapter ?? new ElectronOutputAdapter();
   const outputRouter = getScreenshotOutputRouter(ipcMain);
@@ -282,7 +284,10 @@ function createDefaultRunner(
 
   return {
     run,
-    dispose: disposeOverlays,
+    dispose() {
+      ownedCaptureAdapter?.dispose();
+      disposeOverlays();
+    },
   };
 }
 

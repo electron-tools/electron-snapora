@@ -1,3 +1,7 @@
+import { EventEmitter } from 'node:events';
+
+export const powerMonitor = new EventEmitter();
+
 function unavailable(): never {
   throw new Error('Electron runtime APIs are unavailable in unit tests.');
 }

@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.25] - 2026-10-17
+
+### Fixed
+
+- Refresh cached Windows display-to-capture-source mappings after display configuration changes, system resume, or screen unlock to address captures showing another monitor. Discard enumeration results invalidated by a configuration change before they complete.
+- Preserve the existing source-ID cache and shared prewarming request during normal captures. Work-area-only changes do not trigger source enumeration or reset the selected image fallback.
+- Match both desktop-stream and image capture sources by `display_id`, removing multi-monitor fallbacks based on array position or source ID numbers.
+- Release display and power event subscriptions when the default screenshot manager is disposed.
+
+### Compatibility
+
+- Ambiguous multi-monitor source mappings now fail with `DISPLAY_NOT_FOUND` instead of risking a capture from the wrong monitor. A single anonymous source remains supported when exactly one display is connected.
+- Custom `ElectronCaptureAdapter` instances remain host-owned and should be disposed by their owner. Custom `screen` implementations without change notifications retain caching; call and await `prepare()` after a display configuration change to refresh their mappings.
+
 ## [1.0.24] - 2026-09-18
 
 ### Fixed

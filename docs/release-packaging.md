@@ -1,5 +1,7 @@
 # npm 打包与发布检查
 
+Current candidate: [1.0.25 release preparation and checklist](./releases/1.0.25.md) (English).
+
 本文档供仓库维护者使用，不随 npm 包发布。面向使用者的安装、接入和宿主打包说明保留在根目录 `README.md`。
 
 ## 公开内容边界
