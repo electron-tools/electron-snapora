@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.27] - 2026-10-30
+
+### Documentation
+
+- Add five-language host upgrade checklists covering live multi-display selection, whole-window snapping, macOS permissions, and native helper packaging. Runtime behavior is unchanged from 1.0.26.
+
 ## [1.0.26] - 2026-10-30
 
 ### Added

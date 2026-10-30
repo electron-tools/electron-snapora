@@ -1,6 +1,6 @@
 # npm 打包与发布检查
 
-当前候选版本：[1.0.26 发布准备](./releases/1.0.26.md)。
+当前发布记录：[1.0.27 发布流程](./releases/1.0.27.md)。
 
 本文档供仓库维护者使用，不随 npm 包发布。面向使用者的安装、接入和宿主打包说明保留在根目录 `README.md`。
 
@@ -202,6 +202,8 @@ GitHub CLI 未登录时，在仓库的 Releases 页面选择对应 tag。Release
 9. 创建同名 GitHub Release，正文使用对应 CHANGELOG 小节；确认 Releases 页面能直接看到 Added/Changed/Fixed 内容。
 
 ## 废弃版本
+
+先发布并核验替代版本，再对旧版本执行 `deprecate`。它只添加安装提示，不删除包，也不允许覆盖发布同一版本。
 
 npm deprecate electron-snapora@1.0.17 "This version has macOS input focus issues, please upgrade to 1.0.18+"
 
