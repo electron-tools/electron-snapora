@@ -12,6 +12,12 @@ export {
   type ElectronCaptureAdapterOptions,
 } from './electron/main/electron-capture-adapter.js';
 export { ScreenshotError } from './electron/main/errors.js';
+export type { SnapGranularity } from './electron/main/snap-policy.js';
+export {
+  createMacSnapProvider,
+  type MacSnapProviderOptions,
+  type MacSnapPermissions,
+} from './electron/main/mac-snap-provider.js';
 export type { WindowsSnapGranularity } from './electron/main/windows-snap-policy.js';
 export {
   createWindowsSnapProvider,
@@ -73,6 +79,7 @@ export {
 } from './electron/protocol/limits.js';
 export type {
   CaptureDisplay,
+  CaptureExclusionContext,
   CapturedFrame,
   ScreenCaptureAdapter,
   ScreenshotCancelPayload,

@@ -8,6 +8,7 @@ const {
   ScreenshotManager,
   ElectronCaptureAdapter,
   createWindowsSnapProvider,
+  createMacSnapProvider,
   OVERLAY_CHANNELS,
 } = require('electron-snapora/main');
 app.setPath('userData', mkdtempSync(join(tmpdir(), 'snapora-live-')));
@@ -73,7 +74,17 @@ app
         if (captureBarrier) await captureBarrier;
         return originalCapture(...args);
       };
-      provider = createWindowsSnapProvider({ keepAlive: true, granularity: 'panel' });
+      provider =
+        process.platform === 'darwin'
+          ? createMacSnapProvider({ granularity: 'panel' })
+          : createWindowsSnapProvider({ keepAlive: true, granularity: 'panel' });
+      if (process.platform === 'darwin') {
+        const permissions = await provider.getPermissions();
+        assert.ok(
+          permissions.screenRecording && permissions.accessibility,
+          'First grant Screen Recording and Accessibility in pnpm run demo:mac. This test never prompts.'
+        );
+      }
       manager = new ScreenshotManager({
         captureAdapter: adapter,
         outputAdapter: {
@@ -271,7 +282,12 @@ app
       const directory = join(__dirname, '../../.pack-preview');
       mkdirSync(directory, { recursive: true });
       writeFileSync(
-        join(directory, 'live-selection-smoke.json'),
+        join(
+          directory,
+          process.platform === 'darwin'
+            ? 'mac-live-selection-smoke.json'
+            : 'live-selection-smoke.json'
+        ),
         JSON.stringify(evidence, null, 2)
       );
       console.log(JSON.stringify(evidence, null, 2));

@@ -1,22 +1,31 @@
 const { join } = require('node:path');
+const { release } = require('node:os');
 const { app, BrowserWindow, globalShortcut, ipcMain } = require('electron');
 const {
   ScreenshotManager,
   registerScreenshotIpc,
   createWindowsSnapProvider,
+  createMacSnapProvider,
 } = require('electron-snapora/main');
 
 let snapGranularity = 'panel';
-let interactionMode = process.platform === 'win32' ? 'live' : 'frozen';
+const liveSupported =
+  process.platform === 'win32' ||
+  (process.platform === 'darwin' && Number(release().split('.')[0]) >= 23);
+let interactionMode = liveSupported ? 'live' : 'frozen';
 const snapProvider =
   process.platform === 'win32'
     ? createWindowsSnapProvider({
         keepAlive: true,
         onDiagnostic: (event) => console.log('[Windows container snap]', event),
       })
-    : undefined;
+    : process.platform === 'darwin' && liveSupported
+      ? createMacSnapProvider({
+          onDiagnostic: (event) => console.log('[macOS container snap]', event),
+        })
+      : undefined;
 const screenshotManager = new ScreenshotManager({
-  ...(process.platform === 'win32'
+  ...(snapProvider
     ? {
         getWindowSnapRegions: (signal, onUpdate, context) =>
           snapProvider(signal, onUpdate, snapGranularity, context),
@@ -56,7 +65,8 @@ async function triggerDemoScreenshot() {
       }
     }
     return await screenshotManager.capture({
-      display: 'cursor',
+      display: interactionMode === 'live' ? 'all' : 'cursor',
+      interactionMode,
       showCopyFeedback: true,
     });
   } finally {
@@ -165,8 +175,8 @@ function createHostWindow() {
 }
 
 app.whenReady().then(() => {
-  void snapProvider?.prepare();
-  if (process.platform === 'win32')
+  void snapProvider?.prepare().catch((error) => console.warn('[Snap warmup]', error));
+  if (liveSupported)
     void screenshotManager
       .prepare({ display: 'all', interactionMode: 'live' })
       .catch((error) => console.warn('[Live selection warmup]', error));
@@ -185,18 +195,15 @@ app.whenReady().then(() => {
   };
   ipcMain.handle('demo:get-snap-granularity', (event) => {
     validateSnapSender(event);
-    return { supported: process.platform === 'win32', granularity: snapGranularity };
+    return { supported: Boolean(snapProvider), granularity: snapGranularity };
   });
   ipcMain.handle('demo:get-interaction', (event) => {
     validateSnapSender(event);
-    return { supported: process.platform === 'win32', mode: interactionMode };
+    return { supported: liveSupported, mode: interactionMode };
   });
   ipcMain.handle('demo:set-interaction', (event, mode) => {
     validateSnapSender(event);
-    if (
-      !['live', 'frozen'].includes(mode) ||
-      (mode === 'live' && process.platform !== 'win32')
-    )
+    if (!['live', 'frozen'].includes(mode) || (mode === 'live' && !liveSupported))
       throw new Error('Unsupported interaction mode.');
     if (screenshotManager.activeJobId)
       throw new Error('Wait for the current capture to finish.');
@@ -205,7 +212,7 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('demo:set-snap-granularity', (event, value) => {
     validateSnapSender(event);
-    if (process.platform !== 'win32' || !['window', 'panel', 'fine'].includes(value)) {
+    if (!snapProvider || !['window', 'panel', 'fine'].includes(value)) {
       throw new Error('Unsupported snap granularity.');
     }
     if (screenshotManager.activeJobId)
@@ -216,6 +223,15 @@ app.whenReady().then(() => {
   ipcMain.handle('demo:set-shortcut', (_event, accelerator) =>
     registerCurrentShortcut(accelerator)
   );
+  ipcMain.handle('demo:mac-permissions', async (event, prompt) => {
+    validateSnapSender(event);
+    if (typeof prompt !== 'boolean') throw new Error('Invalid permission request.');
+    if (process.platform !== 'darwin' || !snapProvider?.getPermissions)
+      return { supported: false };
+    if (screenshotManager.activeJobId)
+      throw new Error('Wait for the current capture to finish.');
+    return { supported: true, ...(await snapProvider.getPermissions(prompt)) };
+  });
 
   // Reset invalid non-ASCII shortcut values before registration.
   if (/[\u0080-\uFFFF]/.test(currentShortcut)) {
@@ -230,7 +246,7 @@ app.whenReady().then(() => {
   createHostWindow();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+    if (hostWindows.size === 0) {
       createHostWindow();
     }
   });

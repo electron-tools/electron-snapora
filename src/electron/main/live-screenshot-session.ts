@@ -73,8 +73,8 @@ export class LiveScreenshotSession {
 
   async #start(): Promise<void> {
     try {
-      if (process.platform !== 'win32')
-        throw new Error('Live selection is only available on Windows.');
+      if (!['win32', 'darwin'].includes(process.platform))
+        throw new Error('Live selection requires Windows or macOS.');
       const requested = this.#options.captureOptions.display ?? 'cursor';
       const displays = screen.getAllDisplays();
       this.#cursorDisplayId = String(
@@ -133,8 +133,10 @@ export class LiveScreenshotSession {
         const overlay = this.#options.createOverlay(display);
         if (
           !overlay.showSelection ||
-          !overlay.nativeHandle ||
-          overlay.nativeHandle === '0'
+          (process.platform === 'darwin'
+            ? !/^[1-9]\d*$/.test(overlay.captureWindowId ?? '') ||
+              Number(overlay.captureWindowId) > 0xffffffff
+            : !overlay.nativeHandle || overlay.nativeHandle === '0')
         ) {
           // The window has not entered the session map, so ordinary settlement cannot release it.
           overlay.destroy();
@@ -238,8 +240,15 @@ export class LiveScreenshotSession {
       update(
         await provider(this.#abort.signal, update, {
           excludedWindowHandles: [...this.#entries.values()].map(
-            (entry) => entry.overlay.nativeHandle!
+            (entry) => entry.overlay.nativeHandle ?? '0'
           ),
+          ...(process.platform === 'darwin'
+            ? {
+                excludedWindowIds: [...this.#entries.values()].map(
+                  (entry) => entry.overlay.captureWindowId!
+                ),
+              }
+            : {}),
         }),
         true
       );
@@ -276,18 +285,38 @@ export class LiveScreenshotSession {
     // The existing editor performs capture only now; no full-screen pixels were read while selecting.
     const editorOptions = { ...this.#options };
     delete editorOptions.getWindowSnapRegions;
+    const exclusion =
+      process.platform === 'darwin'
+        ? {
+            excludedWindowIds: [...this.#entries.values()].map(
+              (item) => item.overlay.captureWindowId!
+            ),
+          }
+        : undefined;
     this.#inner = new ScreenshotSession({
       ...editorOptions,
       captureOptions: { ...this.#options.captureOptions, display: entry.display.id },
       captureAdapter: {
         resolveTargetDisplay: () => entry.display,
         capture: (options, display, signal) =>
-          this.#options.captureAdapter.capture(options, display, signal),
+          exclusion
+            ? this.#options.captureAdapter.capture(options, display, signal, exclusion)
+            : this.#options.captureAdapter.capture(options, display, signal),
         ...(this.#options.captureAdapter.captureFallback
           ? {
-              captureFallback: this.#options.captureAdapter.captureFallback.bind(
-                this.#options.captureAdapter
-              ),
+              captureFallback: (options, display, signal) =>
+                exclusion
+                  ? this.#options.captureAdapter.captureFallback!(
+                      options,
+                      display,
+                      signal,
+                      exclusion
+                    )
+                  : this.#options.captureAdapter.captureFallback!(
+                      options,
+                      display,
+                      signal
+                    ),
             }
           : {}),
       },

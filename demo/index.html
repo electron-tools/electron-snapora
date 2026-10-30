@@ -25,7 +25,7 @@
           <option value="frozen">冻结画面 · 当前屏幕（旧模式）</option>
         </select>
         <p>实时模式可跨屏嗅探；在单块屏幕确定选区后采集并标注。</p>
-        <label for="snap-granularity">吸附粒度（Windows）</label>
+        <label for="snap-granularity">吸附粒度（Windows / macOS）</label>
         <select id="snap-granularity" aria-describedby="snap-description" disabled>
           <option value="window">窗口级 · 仅整窗</option>
           <option value="panel" selected>面板级 · 主要布局区域（默认）</option>
@@ -33,14 +33,21 @@
         </select>
         <p id="snap-description" role="status">正在读取设置…</p>
       </div>
+      <div id="mac-permissions" class="snap-setting" hidden>
+        <p id="mac-permission-status" role="status">正在检查 macOS 权限…</p>
+        <button id="mac-permission-request" type="button">
+          授权屏幕录制与辅助功能
+        </button>
+        <button id="mac-permission-refresh" type="button">刷新权限状态</button>
+      </div>
       <p class="hint">
         Select a region, annotate it, then copy and finish or save locally. Press Escape
         to cancel.
       </p>
       <p class="hint">
-        Windows prototype: hover to snap to an accessible container, click to select, or
-        drag to select freely. Global shortcut: Ctrl + Alt + Shift + S. UI Automation
-        discovery can take a few seconds.
+        Hover to snap to an accessible container, click to select, or drag to select
+        freely. Windows and macOS use the same selection controls; available containers
+        depend on the target app's accessibility support.
       </p>
 
       <div class="shortcut-setting-card">

@@ -12,6 +12,7 @@ import type {
   CaptureDisplay,
   CapturedFrame,
   ScreenCaptureAdapter,
+  CaptureExclusionContext,
 } from '../protocol/messages.js';
 import {
   findCapturedFrameLimitViolation,
@@ -24,6 +25,7 @@ import {
   NativeWindowsScreenCapture,
   type WindowsScreenCapture,
 } from './windows-screen-capture.js';
+import { NativeMacScreenCapture, type MacScreenCapture } from './mac-screen-capture.js';
 
 interface ElectronDisplayLike {
   id: number;
@@ -89,6 +91,9 @@ const MAC_SCREEN_CAPTURE_SETTINGS_URL =
   'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture';
 
 export interface ElectronCaptureAdapterOptions {
+  /** Stable signed helper path, or a custom ScreenCaptureKit adapter. */
+  macHelperPath?: string;
+  macCapture?: MacScreenCapture;
   /** Inject the cursor-free Windows live capture process (primarily for tests). */
   windowsCapture?: WindowsScreenCapture;
   desktopCapturer?: DesktopCapturerApi;
@@ -117,8 +122,12 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
   #watchingSources = false;
   #disposed = false;
   #windowsCapture: WindowsScreenCapture | undefined;
+  #macCapture: MacScreenCapture | undefined;
+  readonly #macHelperPath: string | undefined;
 
   constructor(options: ElectronCaptureAdapterOptions = {}) {
+    this.#macCapture = options.macCapture;
+    this.#macHelperPath = options.macHelperPath;
     this.#windowsCapture = options.windowsCapture;
     this.#desktopCapturer = options.desktopCapturer ?? desktopCapturer;
     this.#screen = options.screen ?? screen;
@@ -137,6 +146,10 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
   }
 
   async prepare(options: ScreenshotOptions = {}): Promise<void> {
+    if (this.#platform === 'darwin' && options.interactionMode === 'live') {
+      await this.#nativeMacCapture().prepare();
+      return;
+    }
     if (this.#platform === 'win32' && options.interactionMode === 'live') {
       await this.#nativeCapture().prepare();
       return;
@@ -150,6 +163,7 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
   dispose(): void {
     this.#disposed = true;
     this.#windowsCapture?.dispose();
+    this.#macCapture?.dispose();
     this.#sourceRevision++;
     this.#desktopSourceIds.clear();
     this.#desktopSourceFallbacks.clear();
@@ -166,29 +180,41 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
   async capture(
     options: ScreenshotOptions = {},
     targetDisplay?: CaptureDisplay,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    context?: CaptureExclusionContext
   ): Promise<CapturedFrame[]> {
-    return this.#capture(options, targetDisplay, this.#platform === 'win32', signal);
+    return this.#capture(
+      options,
+      targetDisplay,
+      this.#platform === 'win32',
+      signal,
+      context
+    );
   }
 
   async captureFallback(
     options: ScreenshotOptions,
     targetDisplay: CaptureDisplay,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    context?: CaptureExclusionContext
   ): Promise<CapturedFrame[]> {
     this.#desktopSourceFallbacks.add(targetDisplay.id);
     this.#desktopSourceIds.delete(targetDisplay.id);
-    return this.#capture(options, targetDisplay, false, signal);
+    return this.#capture(options, targetDisplay, false, signal, context);
   }
 
   async #capture(
     options: ScreenshotOptions,
     targetDisplay: CaptureDisplay | undefined,
     returnDesktopSource: boolean,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    context?: CaptureExclusionContext
   ): Promise<CapturedFrame[]> {
     signal?.throwIfAborted();
-    await this.#ensurePermission();
+    // Live macOS capture is authorized by its native backend. Host TCC state only
+    // governs Electron's frozen path and must not veto an independently authorized helper.
+    if (!(this.#platform === 'darwin' && options.interactionMode === 'live'))
+      await this.#ensurePermission();
     signal?.throwIfAborted();
 
     // Session 预加载 Overlay 后必须继续使用同一个显示器，不能再次按鼠标位置解析。
@@ -201,19 +227,33 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
     };
     this.#assertRequestedPixelSize(pixelSize);
 
-    if (this.#platform === 'win32' && options.interactionMode === 'live') {
-      const bounds = this.#screen.dipToScreenRect?.(null, display.bounds);
-      if (!bounds)
-        throw new ScreenshotError(
-          'CAPTURE_FAILED',
-          'Physical display coordinates are unavailable.'
+    if (
+      ['win32', 'darwin'].includes(this.#platform) &&
+      options.interactionMode === 'live'
+    ) {
+      let dataUrl: string;
+      if (this.#platform === 'darwin') {
+        dataUrl = await this.#nativeMacCapture().capture(
+          this.#toCaptureDisplay(display),
+          context?.excludedWindowIds ?? [],
+          this.#resourceLimits.maxCaptureDataUrlBytes,
+          this.#resourceLimits.maxCapturePixels,
+          signal
         );
-      this.#assertRequestedPixelSize(bounds);
-      const dataUrl = await this.#nativeCapture().capture(
-        bounds,
-        this.#resourceLimits.maxCaptureDataUrlBytes,
-        signal
-      );
+      } else {
+        const bounds = this.#screen.dipToScreenRect?.(null, display.bounds);
+        if (!bounds)
+          throw new ScreenshotError(
+            'CAPTURE_FAILED',
+            'Physical display coordinates are unavailable.'
+          );
+        this.#assertRequestedPixelSize(bounds);
+        dataUrl = await this.#nativeCapture().capture(
+          bounds,
+          this.#resourceLimits.maxCaptureDataUrlBytes,
+          signal
+        );
+      }
       signal?.throwIfAborted();
       // Read only the PNG header; decoding a full desktop image here would block main-process input.
       const header = Buffer.from(
@@ -336,6 +376,12 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
     if (this.#disposed)
       throw new ScreenshotError('CAPTURE_FAILED', 'Capture adapter is disposed.');
     return (this.#windowsCapture ??= new NativeWindowsScreenCapture());
+  }
+
+  #nativeMacCapture(): MacScreenCapture {
+    if (this.#disposed)
+      throw new ScreenshotError('CAPTURE_FAILED', 'Capture adapter is disposed.');
+    return (this.#macCapture ??= new NativeMacScreenCapture(this.#macHelperPath));
   }
 
   /** 屏幕配置变化才失效并预热，普通截图保留原有的 ID 缓存命中路径。 */

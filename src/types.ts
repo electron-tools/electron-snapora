@@ -89,7 +89,7 @@ export interface ScreenshotTheme {
 
 export interface ScreenshotOptions {
   display?: 'cursor' | 'primary' | string;
-  /** Windows live selection captures only after selection; frozen preserves the original flow. */
+  /** Windows/macOS live selection captures only after selection; frozen preserves the original flow. */
   interactionMode?: 'frozen' | 'live';
   tools?: ScreenshotTool[];
   defaultTool?: 'select' | ScreenshotTool;
@@ -103,6 +103,8 @@ export interface ScreenshotOptions {
 /** Native handles of our own interaction overlays; never exclude the entire host process. */
 export interface ScreenshotSnapContext {
   excludedWindowHandles: string[];
+  /** macOS CGWindowIDs; NSView pointers from getNativeWindowHandle are not window IDs. */
+  excludedWindowIds?: string[];
 }
 
 export type ScreenshotErrorCode =

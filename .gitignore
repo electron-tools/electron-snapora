@@ -1,4 +1,5 @@
 node_modules/
+src/electron/native/snapora-macos*
 .pnpm-store/
 dist/
 coverage/

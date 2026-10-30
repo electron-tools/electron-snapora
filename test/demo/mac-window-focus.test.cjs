@@ -40,6 +40,7 @@ function fixture(platform = 'darwin', active = false) {
     process: { platform, pid: 1 },
     require(name) {
       if (name === 'node:path') return { join };
+      if (name === 'node:os') return { release: () => '23.0.0' };
       if (name === 'electron')
         return {
           app: { isActive: () => active, whenReady: () => ({ then() {} }), on() {} },
@@ -50,6 +51,7 @@ function fixture(platform = 'darwin', active = false) {
       if (name === 'electron-snapora/main')
         return {
           createWindowsSnapProvider: () => async () => [],
+          createMacSnapProvider: () => async () => [],
           ScreenshotManager: function () {
             return manager;
           },

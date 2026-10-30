@@ -26,6 +26,8 @@ vi.mock('electron', async (importOriginal) => ({
     getPrimaryDisplay: vi.fn(),
   }),
 }));
+vi.mock('node:os', () => ({ release: () => '10.0.22631' }));
+const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
 const displays = [
   { id: 1, bounds: { x: -800, y: 0, width: 800, height: 600 }, scaleFactor: 1 },
   { id: 2, bounds: { x: 0, y: 0, width: 1000, height: 700 }, scaleFactor: 1.5 },
@@ -52,6 +54,7 @@ function fixture(pendingCapture = false) {
   const overlays = displays.map((display): ScreenshotOverlayWindow => ({
     webContentsId: display.id + 10,
     nativeHandle: String(display.id + 100),
+    captureWindowId: String(display.id + 200),
     rendererReady: true,
     load: vi.fn(async () => {}),
     sendInitialize: vi.fn(),
@@ -109,6 +112,7 @@ function fixture(pendingCapture = false) {
 }
 
 beforeEach(() => {
+  Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
   vi.useFakeTimers();
   vi.mocked(screen.getAllDisplays).mockReturnValue(displays as never);
   vi.mocked(screen.getPrimaryDisplay).mockReturnValue(displays[0] as never);
@@ -116,12 +120,47 @@ beforeEach(() => {
   vi.mocked(screen.getCursorScreenPoint).mockReturnValue({ x: -400, y: 100 });
 });
 afterEach(() => {
+  Object.defineProperty(process, 'platform', originalPlatform);
   vi.useRealTimers();
   vi.clearAllMocks();
   (screen as unknown as EventEmitter).removeAllListeners();
 });
 
 describe('live multi-display lifecycle', () => {
+  it('passes all macOS CGWindowIDs to discovery and post-selection capture, never NSView handles', async () => {
+    Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+    const f = fixture();
+    const result = f.session.run();
+    await f.ready();
+    expect(f.provider).toHaveBeenCalledWith(
+      expect.any(AbortSignal),
+      expect.any(Function),
+      { excludedWindowHandles: ['101', '102'], excludedWindowIds: ['201', '202'] }
+    );
+    expect(f.capture).not.toHaveBeenCalled();
+    f.emit(OVERLAY_CHANNELS.selected, 1, { displayId: '2', selection: rect });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f.capture).toHaveBeenCalledWith(
+      expect.objectContaining({ display: '2' }),
+      expect.objectContaining({ id: '2' }),
+      expect.any(AbortSignal),
+      { excludedWindowIds: ['201', '202'] }
+    );
+    f.session.cancel();
+    expect(await result).toEqual({ status: 'cancelled' });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('rejects macOS custom overlays that expose an NSView but no CGWindowID', async () => {
+    Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+    const f = fixture();
+    delete (f.overlays[0] as { captureWindowId?: string }).captureWindowId;
+    expect(await f.session.run()).toMatchObject({
+      status: 'failed',
+      code: 'OVERLAY_LOAD_FAILED',
+    });
+    expect(f.overlays[0]!.destroy).toHaveBeenCalledOnce();
+  });
   it('destroys an unsupported overlay even when validation fails before session registration', async () => {
     const f = fixture();
     delete (f.overlays[0] as { nativeHandle?: string }).nativeHandle;

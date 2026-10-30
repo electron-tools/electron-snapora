@@ -52,7 +52,7 @@ if (snapApi && snapSelect && snapDescription) {
       snapSelect.disabled = !supported;
       snapDescription.textContent = supported
         ? `${snapDescriptions[granularity]} 按钮和全局快捷键均从下一次截图生效。`
-        : '当前平台暂不支持 Windows 容器吸附。';
+        : '容器吸附需要 Windows 或 macOS 14+。';
     })
     .catch((error) => {
       snapDescription.textContent = String(error);
@@ -119,6 +119,39 @@ const statusHint = document.getElementById('shortcut-status-hint');
 
 const shortcutApi = window.demoShortcutApi;
 const isMac = navigator.platform.toUpperCase().includes('MAC');
+
+// Permission status comes from the actual native helper; host status alone is insufficient.
+const permissionPanel = document.getElementById('mac-permissions');
+if (isMac && permissionPanel && window.demoMacPermissions) {
+  permissionPanel.hidden = false;
+  const status = document.getElementById('mac-permission-status');
+  const request = document.getElementById('mac-permission-request');
+  const refresh = document.getElementById('mac-permission-refresh');
+  const check = async (prompt) => {
+    request.disabled = true;
+    refresh.disabled = true;
+    try {
+      const permissions = await (prompt
+        ? window.demoMacPermissions.request()
+        : window.demoMacPermissions.get());
+      status.textContent = permissions.supported
+        ? `屏幕录制：${permissions.screenRecording ? '已授权' : '未授权'}；辅助功能：${permissions.accessibility ? '已授权' : '未授权（仅窗口吸附）'}。授权后可刷新状态，必要时重启 demo。`
+        : '实时选择与容器吸附需要 macOS 14+。';
+    } catch (error) {
+      status.textContent = String(error);
+    } finally {
+      request.disabled = false;
+      refresh.disabled = false;
+    }
+  };
+  request.addEventListener('click', () => {
+    void check(true);
+  });
+  refresh.addEventListener('click', () => {
+    void check(false);
+  });
+  void check(false);
+}
 
 /**
  * Map physical key codes to Electron accelerator names.

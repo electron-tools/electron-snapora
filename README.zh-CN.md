@@ -418,9 +418,9 @@ demo 预热并复用一个隔离工作进程；每次截图读取新的窗口边
 开发测试集中在 `test/`，按 `core/`、`electron/`、`overlay/`、`demo/`、`scripts/` 保留模块层级。
 `pnpm run test` 运行全部单元测试；`pnpm run demo:granularity-smoke` 在 Windows 验证实际 demo 的切换和截图链路。
 
-### 多屏实时选择、选后采集（Windows 原型）
+### 多屏实时选择、选后采集
 
-Windows demo 默认“实时选择 · 多屏 · 选后采集”，可切换“冻结画面 · 当前屏幕”比较旧模式。
+Windows 和 macOS 14+ demo 默认“实时选择 · 多屏 · 选后采集”，可切换“冻结画面 · 当前屏幕”比较旧模式。
 启动后可在各屏嗅探/框选，选区始终限制在起点屏幕。有效选区提交后才采集所选屏幕的一帧，进入原有标注与导出；其他屏幕退出交互。Esc 取消整个会话。
 
 显式启用：
@@ -438,13 +438,25 @@ const result = await manager.capture({ display: 'all', interactionMode: 'live' }
 动态粒度示例：`(signal, update, context) => snapProvider(signal, update, granularity, context)`；否则实时刷新会识别到自己的截图层。
 
 库默认仍为 `cursor + frozen`；`all + frozen` 返回 `INVALID_REQUEST`，不支持的系统请求 live/all 返回 `UNSUPPORTED_PLATFORM`。
-实时模式要求 Windows 10 2004 或更新版本，当前真机验证为 Electron 43.3.0、双屏 150%/100%。选择阶段页面继续更新，图片取自选定后的帧。
+实时模式要求 Windows 10 2004+ 或 macOS 14+。目前真机验证仅覆盖 Windows / Electron 43.3.0、双屏 150%/100%；macOS 实现与测试入口已加入，尚待 Mac 编译和实机验证。选择阶段页面继续更新，图片取自选定后的帧。
 单击只固定候选并进入编辑，不会直接完成或复制。窗口内未命中容器的空白处回退整窗；没有窗口候选的桌面空白处回退当前整屏。拖动仍可自由框选。
 选区确定后立即显示工具栏，无须等待图片。等待期间可以选择工具、取消或提前确认；确认只在图片就绪后执行一次，绘制需等采集完成。`pnpm run demo:live-toolbar-smoke` 验证这段交互及主按钮 hover 颜色。
-实时模式改用独立 Windows GDI 屏幕拷贝进程：系统光标始终正常显示和移动，采集像素不包含光标和受保护交互层，只拷贝所选显示器。原型在预热时使用系统 .NET Framework 编译器编译随包提供的 C# 源码，不使用 PowerShell，也不下载可执行文件；编译/采集失败返回 `CAPTURE_FAILED`，不回退到会夹带光标的桌面流。冻结模式保留既有 Electron 桌面流/图片路径。显示拓扑/缩放改变时结束会话并返回 `DISPLAY_NOT_FOUND`。
+Windows 实时模式使用独立 GDI 屏幕拷贝进程：系统光标始终正常显示和移动，采集像素不包含光标和受保护交互层，只拷贝所选显示器。原型在预热时使用系统 .NET Framework 编译器编译随包提供的 C# 源码，不使用 PowerShell，也不下载可执行文件；编译/采集失败返回 `CAPTURE_FAILED`，不回退到会夹带光标的桌面流。冻结模式保留既有 Electron 桌面流/图片路径。显示拓扑/缩放改变时结束会话并返回 `DISPLAY_NOT_FOUND`。
 
 `pnpm run demo:capture-exclusion-smoke` 检查实际屏幕像素；`pnpm run demo:live-selection-smoke` 需要两块真实显示器，验证跨屏嗅探、延后采集、PNG 导出和取消。详细方案与实测限制见 [多屏实时选择](docs/multi-display-live-selection-plan.md)。
 `pnpm run demo:live-click-smoke` 从真实 demo 按钮验证单击选区、候选为空时整屏选择，以及桌面流被拒绝时仍可独立完成原生采集。`pnpm run demo:live-cursor-smoke` 同时检查 Windows 系统光标可见标志，以及指针位于选区内外时的底图像素。
+
+### macOS 容器吸附与原生采集
+
+在 macOS 14+ 安装 Xcode Command Line Tools 后运行 `pnpm run demo:mac`：先编译固定路径的 Swift helper，再构建并启动 demo。正式分发应携带签名后的 helper，用户机器不需要编译器。demo 中点击“授权屏幕录制与辅助功能”，授权后刷新状态，必要时重启 demo。
+
+`createMacSnapProvider({ granularity: 'panel' })` 的接法与 Windows provider 相同；支持 `window / panel / fine`、增量更新、`prepare()` 和 `dispose()`，额外提供 `getPermissions()` 与显式提示用的 `getPermissions(true)`。未授予辅助功能时保留窗口吸附和手动框选；实时采集需要屏幕录制权限。
+
+每轮优先探测鼠标所在窗口，容器只在祖先可见范围内吸附，并优先读取滚动列表的可见子项。实时采集以原生后端权限为准；冻结模式仍使用 Electron 宿主权限。`pnpm run test:native:mac` 编译 helper 并运行原生遍历回归，无须截图或权限授权；当前 Windows 环境尚未执行这组 Swift 测试。
+
+macOS 使用 CoreGraphics 窗口边界与 AX 容器树，ScreenCaptureKit 按 CGWindowID 排除本次截图层，关闭采集光标；不排除整个宿主进程。原生 helper 默认在 `dist/native/snapora-macos`，ASAR 安装包需 unpack 此文件。自定义路径通过 `createMacSnapProvider({ executablePath })` 和 `new ElectronCaptureAdapter({ macHelperPath })` 分别指定；自定义 adapter 由宿主释放。
+
+`pnpm run demo:mac-live-smoke` 在已授权、接好两块显示器的 Mac 上验证跨屏悬停、AX 面板、选后画面、截图层排除、导出和取消。当前 Windows 开发环境未执行 Swift 编译或 Mac 实机测试，不能据此认定 Lark、Chrome、Ping 的 macOS 效果已验收。构建、打包和验收说明见 [macOS 实施记录](docs/macos-container-snap.md)。
 
 ## 开源协议与商标
 

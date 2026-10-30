@@ -46,6 +46,11 @@ export interface CapturedDesktopSourceFrame {
 
 export type CapturedFrame = CapturedImageFrame | CapturedDesktopSourceFrame;
 
+/** Trusted main-process context, never accepted from renderer capture options. */
+export interface CaptureExclusionContext {
+  excludedWindowIds: string[];
+}
+
 export interface ScreenCaptureAdapter {
   /** 可选的后台预热，用于把昂贵的来源枚举移出用户点击路径。 */
   prepare?(options?: ScreenshotOptions): Promise<void>;
@@ -58,13 +63,15 @@ export interface ScreenCaptureAdapter {
     options: ScreenshotOptions,
     targetDisplay?: CaptureDisplay,
     /** Ends queued/native work when the owning screenshot session settles. */
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    context?: CaptureExclusionContext
   ): Promise<CapturedFrame[]>;
   /** Renderer 无法读取 desktop-source 时，可返回旧式图片帧完成本次截图。 */
   captureFallback?(
     options: ScreenshotOptions,
     targetDisplay: CaptureDisplay,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    context?: CaptureExclusionContext
   ): Promise<CapturedFrame[]>;
 }
 

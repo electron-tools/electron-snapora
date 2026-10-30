@@ -121,7 +121,7 @@ await window.electronSnapora.capture({
 `interactionMode: 'live'` 表示选后采集；`frozen` 保留现有先冻结再选择的行为。
 首版实现 Windows `all + live` 和单屏 `live`；`all + frozen` 暂不实现，参数校验明确拒绝，避免默默退成单屏。
 默认仍是 `cursor + frozen`，demo 显式启用 `all + live`，保留旧单屏模式用于比较。旧调用方无须改动，Ping 不接入。
-新参数同时更新公共类型、IPC 白名单、运行时校验和中英文文档。非 Windows 请求 live/all 明确返回不支持；不静默更改调用者的采集时机。
+新参数同时更新公共类型、IPC 白名单、运行时校验和中英文文档。后续已加入 macOS 14+ 原生实现（见 [macOS 实施记录](macos-container-snap.md)，尚待 Mac 编译及实机验证）；Windows 10 2004+ / macOS 14+ 以外的系统请求 live/all 返回不支持，不静默更改调用者的采集时机。
 
 ## 实施顺序与验收
 

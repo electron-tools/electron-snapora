@@ -139,7 +139,11 @@ function createDefaultRunner(
     const cached = liveOverlays.get(display.id);
     if (cached?.matchesDisplay(display)) return cached;
     cached?.destroy();
-    const overlay = new OverlayWindow({ ...managerOptions.overlayOptions, display });
+    const overlay = new OverlayWindow({
+      ...managerOptions.overlayOptions,
+      display,
+      liveSelection: true,
+    });
     liveOverlays.set(display.id, overlay);
     return overlay;
   };
@@ -183,12 +187,15 @@ function createDefaultRunner(
     if (disposed) return Promise.resolve({ status: 'cancelled' });
     if (
       (captureOptions.interactionMode === 'live' || captureOptions.display === 'all') &&
-      (process.platform !== 'win32' || Number(release().split('.')[2]) < 19041)
+      !(
+        (process.platform === 'win32' && Number(release().split('.')[2]) >= 19041) ||
+        (process.platform === 'darwin' && Number(release().split('.')[0]) >= 23)
+      )
     )
       return Promise.resolve({
         status: 'failed',
         code: 'UNSUPPORTED_PLATFORM',
-        message: 'Live multi-display capture requires Windows 10 2004 or newer.',
+        message: 'Live multi-display capture requires Windows 10 2004+ or macOS 14+.',
       });
     if (captureOptions.display === 'all' && captureOptions.interactionMode !== 'live')
       return Promise.resolve({
@@ -365,7 +372,7 @@ function createDefaultRunner(
       await captureAdapter.prepare?.(options);
       if (
         disposed ||
-        process.platform !== 'win32' ||
+        !['win32', 'darwin'].includes(process.platform) ||
         options.interactionMode !== 'live' ||
         createCustomOverlay
       )

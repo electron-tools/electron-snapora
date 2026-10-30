@@ -37,6 +37,7 @@ export type OverlayBrowserWindow = Pick<
 > & {
   setContentProtection?: (enabled: boolean) => void;
   getNativeWindowHandle?: () => Buffer;
+  getMediaSourceId?: () => string;
   webContents: Pick<WebContents, 'id' | 'on' | 'removeListener' | 'send'> & {
     focus?: () => void;
   };
@@ -48,6 +49,8 @@ export type OverlayBrowserWindowFactory = (
 
 export interface OverlayWindowOptions {
   display: CaptureDisplay;
+  /** macOS live windows stay transparent and screen-sized without entering simple fullscreen. */
+  liveSelection?: boolean;
   resources?: OverlayResources;
   createWindow?: OverlayBrowserWindowFactory;
   platform?: NodeJS.Platform;
@@ -61,6 +64,8 @@ export interface ScreenshotOverlayWindow {
   sendInitialize(payload: ScreenshotInitializePayload): void;
   sendSnapRegions?(payload: ScreenshotSnapRegionsPayload): void;
   readonly nativeHandle?: string;
+  /** macOS CGWindowID used by ScreenCaptureKit and CG window enumeration. */
+  readonly captureWindowId?: string | undefined;
   showSelection?(payload: ScreenshotSelectionPayload, focus: boolean): void;
   prime(): void;
   reveal(): void;
@@ -81,6 +86,7 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
   readonly #platform: NodeJS.Platform;
   readonly #supportsInvisiblePriming: boolean;
   #rendererReady = false;
+  #liveSelection = false;
   #loadPromise: Promise<void> | undefined;
   #feedbackWindow: OverlayBrowserWindow | undefined;
   #feedbackTimer: ReturnType<typeof setTimeout> | undefined;
@@ -95,6 +101,7 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
     const { bounds } = this.#display;
     this.#bounds = bounds;
     this.#platform = options.platform ?? process.platform;
+    this.#liveSelection = options.liveSelection ?? false;
     this.#supportsInvisiblePriming = ['win32', 'darwin'].includes(this.#platform);
 
     this.#window = this.#createWindow({
@@ -113,12 +120,18 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
       fullscreenable: this.#platform === 'darwin',
       skipTaskbar: true,
       alwaysOnTop: true,
-      transparent: this.#platform === 'win32',
+      transparent:
+        this.#platform === 'win32' ||
+        (this.#platform === 'darwin' && this.#liveSelection),
       show: false,
       opacity: this.#supportsInvisiblePriming ? 0 : 1,
       paintWhenInitiallyHidden: true,
       autoHideMenuBar: true,
-      backgroundColor: this.#platform === 'win32' ? '#00000000' : '#000000',
+      backgroundColor:
+        this.#platform === 'win32' ||
+        (this.#platform === 'darwin' && this.#liveSelection)
+          ? '#00000000'
+          : '#000000',
       ...(this.#platform === 'win32'
         ? { roundedCorners: false, thickFrame: false }
         : {}),
@@ -129,7 +142,7 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
             // 造成文字/水印输入框（textarea/input）假死无法输入。
             enableLargerThanScreen: true,
             hiddenInMissionControl: true,
-            simpleFullscreen: true,
+            simpleFullscreen: !this.#liveSelection,
           }
         : {}),
       webPreferences: {
@@ -162,11 +175,25 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
       : '0';
   }
 
+  get captureWindowId(): string | undefined {
+    const id = /^window:([1-9]\d*):\d+$/.exec(
+      this.#window.getMediaSourceId?.() ?? ''
+    )?.[1];
+    return id && Number(id) <= 0xffffffff ? id : undefined;
+  }
+
   /** Display the live UI without a captured bitmap; protect it before its first composition. */
   showSelection(payload: ScreenshotSelectionPayload, focus: boolean): void {
-    if (this.#platform !== 'win32' || !this.#window.setContentProtection)
-      throw new Error('Live selection requires Windows capture exclusion.');
-    this.#window.setContentProtection(true);
+    if (this.#platform === 'win32' && this.#window.setContentProtection) {
+      this.#window.setContentProtection(true);
+    } else if (
+      this.#platform !== 'darwin' ||
+      !this.captureWindowId ||
+      !this.#liveSelection
+    ) {
+      throw new Error('Live selection requires native window capture exclusion.');
+    }
+    this.#liveSelection = true;
     this.#window.webContents.send(OVERLAY_CHANNELS.selectInitialize, payload);
     this.prime();
     if (focus) this.reveal();
@@ -208,7 +235,7 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
     if (!this.#window.isDestroyed() && this.#supportsInvisiblePriming) {
       this.#raiseAboveOtherWindows();
       this.#window.showInactive();
-      if (this.#platform !== 'darwin') {
+      if (this.#platform !== 'darwin' || this.#liveSelection) {
         // Windows 会在首次显示时把无边框窗口压到 workArea；显示后重设 bounds 才能覆盖任务栏。
         this.#window.setBounds(this.#bounds, false);
         // 窗口保持输入有效但内容透明，确保 cursor:none 能在首帧前接管系统光标。

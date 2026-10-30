@@ -544,9 +544,9 @@ Tests live under `test/`, grouped by `core/`, `electron/`, `overlay/`, `demo/`, 
 Run `pnpm run test` for unit tests, and `pnpm run demo:granularity-smoke` on Windows to
 exercise the actual demo selector and capture pipeline.
 
-### Live selection across displays (Windows prototype)
+### Live selection across displays
 
-The Windows demo defaults to live multi-display selection, with the old frozen single-display mode available for comparison.
+The Windows and macOS 14+ demos default to live multi-display selection, with the old frozen single-display mode available for comparison.
 Move between displays to hover or select; a drag stays within its starting display. Pixels are acquired only after committing a selection, then the selected display enters the existing editor. Escape cancels the whole session.
 
 ```ts
@@ -562,15 +562,27 @@ Direct `getWindowSnapRegions: snapProvider` assignment is supported. Wrappers mu
 It carries the overlay handles to exclude from native discovery.
 
 Existing calls default to `cursor + frozen`. `all + frozen` is rejected with `INVALID_REQUEST`; unsupported systems return `UNSUPPORTED_PLATFORM` for live/all.
-Live mode requires Windows 10 2004 or newer; the tested environment is Electron 43.3.0 with 150%/100% displays.
+Live mode requires Windows 10 2004+ or macOS 14+. Hardware validation currently covers Windows / Electron 43.3.0 with 150%/100% displays; macOS compilation and hardware validation are still pending.
 The desktop remains live while selecting; the image reflects a frame acquired after selection. The selected screen's full frame allows later resizing; export crops the selection.
 One click locks the candidate and opens the editor; it does not finish or copy. Window whitespace selects the window when no container matches; desktop gaps select the current screen. Dragging still creates a custom rectangle.
 The toolbar appears as soon as the selection is fixed. Tools can be chosen while pixels load; confirmation is queued once until the frame is ready. Drawing starts after acquisition. `pnpm run demo:live-toolbar-smoke` checks this handoff and primary-button hover colors.
-Live mode uses an isolated Windows GDI screen-copy worker: the real system cursor stays visible and responsive, while the captured pixels omit the cursor and the protected interaction overlay. Only the selected monitor is copied. The prototype compiles its bundled C# source with the OS .NET Framework compiler during warmup (no PowerShell or downloaded executable); compilation/capture failure returns `CAPTURE_FAILED`, without falling back to a cursor-embedded stream. Frozen mode retains its existing Electron stream/image path. Display geometry changes end the session with `DISPLAY_NOT_FOUND`.
+On Windows, live mode uses an isolated GDI screen-copy worker: the real system cursor stays visible and responsive, while the captured pixels omit the cursor and the protected interaction overlay. Only the selected monitor is copied. The prototype compiles its bundled C# source with the OS .NET Framework compiler during warmup (no PowerShell or downloaded executable); compilation/capture failure returns `CAPTURE_FAILED`, without falling back to a cursor-embedded stream. Frozen mode retains its existing Electron stream/image path. Display geometry changes end the session with `DISPLAY_NOT_FOUND`.
 
 Run `pnpm run demo:capture-exclusion-smoke` for pixel checks, or `pnpm run demo:live-selection-smoke` with two real monitors for multi-display selection, deferred capture, PNG export and cancellation.
 `pnpm run demo:live-click-smoke` checks single-click selection, empty-candidate full-screen selection and independence from a denied desktop stream through the real demo. `pnpm run demo:live-cursor-smoke` checks the Windows system-cursor visibility flag and captured pixels with the pointer inside/outside the selection.
 See [the implementation plan and validation record](docs/multi-display-live-selection-plan.md) for limitations.
+
+### macOS native backend
+
+On macOS 14+ with Xcode Command Line Tools, run `pnpm run demo:mac` to build the Swift helper and launch the demo. Grant Screen Recording and Accessibility from the demo permission button, then refresh status or restart the demo if needed. Startup does not request permissions or read pixels.
+
+Use `createMacSnapProvider({ granularity: 'panel' })` with the same manager integration as the Windows provider. It supports `window`, `panel`, `fine`, streaming updates, `prepare()`, `dispose()` and `getPermissions(prompt = false)`. Without Accessibility permission, window snapping and manual selection remain available. Live capture requires Screen Recording permission.
+
+Each query prioritizes the window under the pointer. AX traversal prefers visible children and clips descendants to their ancestor viewports. Live capture relies on its native backend's permission result; frozen capture retains Electron host permission checks. `pnpm run test:native:mac` compiles the helper and runs native traversal regressions without capturing pixels or prompting for permissions. These Swift tests have not run in the current Windows environment.
+
+CoreGraphics supplies window bounds, AX supplies containers, and ScreenCaptureKit captures the selected display with the cursor disabled and only the session's CGWindowIDs excluded. Ship the signed `dist/native/snapora-macos` executable outside ASAR (unpack it); end users do not need Xcode. Custom paths use the provider's `executablePath` and `ElectronCaptureAdapter`'s `macHelperPath`. Hosts own disposal of custom adapters.
+
+`pnpm run demo:mac-live-smoke` exercises two real displays, AX panels, deferred pixels, overlay exclusion, export and cancellation on an authorized Mac. Swift compilation and Mac hardware tests could not run in the current Windows environment. See [the macOS implementation and validation guide](docs/macos-container-snap.md) for packaging and the outstanding Lark/Chrome/Ping checks.
 
 ## License and trademarks
 

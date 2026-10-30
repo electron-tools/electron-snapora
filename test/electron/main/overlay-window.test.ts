@@ -3,12 +3,63 @@ import type { BrowserWindowConstructorOptions } from 'electron';
 import { describe, expect, it, vi } from 'vitest';
 
 import { OVERLAY_CHANNELS } from '../../../src/electron/protocol/channels.js';
+import { SCREENSHOT_PROTOCOL_VERSION } from '../../../src/electron/protocol/messages.js';
 import {
   OverlayWindow,
   type OverlayBrowserWindow,
 } from '../../../src/electron/main/overlay-window.js';
 
 describe('OverlayWindow', () => {
+  it('shows transparent macOS live windows without fullscreen resizing or hiding the unfocused screen', () => {
+    const fake = createFakeWindow(90);
+    fake.window.getMediaSourceId = () => 'window:4321:0';
+    fake.window.getNativeWindowHandle = () => Buffer.from('ffffffffffffffff', 'hex');
+    let received: BrowserWindowConstructorOptions | undefined;
+    const overlay = new OverlayWindow({
+      platform: 'darwin',
+      liveSelection: true,
+      display: {
+        id: '2',
+        bounds: { x: -800, y: -200, width: 800, height: 600 },
+        scaleFactor: 2,
+      },
+      resources: { htmlPath: 'overlay.html', preloadPath: 'preload.cjs' },
+      resourceExists: () => true,
+      createWindow: (options) => {
+        received = options;
+        return fake.window;
+      },
+    });
+    expect(overlay.captureWindowId).toBe('4321');
+    overlay.showSelection(
+      {
+        protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
+        jobId: 'mac',
+        display: {
+          id: '2',
+          bounds: { x: -800, y: -200, width: 800, height: 600 },
+          scaleFactor: 2,
+        },
+        options: { interactionMode: 'live' },
+        windowSnapRegions: [],
+      },
+      false
+    );
+    expect(received).toMatchObject({
+      transparent: true,
+      backgroundColor: '#00000000',
+      simpleFullscreen: false,
+    });
+    expect(fake.setBounds).toHaveBeenCalledWith(
+      { x: -800, y: -200, width: 800, height: 600 },
+      false
+    );
+    expect(fake.setOpacity).toHaveBeenLastCalledWith(1);
+    expect(fake.focus).not.toHaveBeenCalled();
+    fake.window.getMediaSourceId = () => 'window:0:0';
+    expect(() => overlay.showSelection({} as never, true)).toThrow(/exclusion/);
+    overlay.destroy();
+  });
   it('creates a hidden and isolated window for the target display', async () => {
     const receivedOptions: BrowserWindowConstructorOptions[] = [];
     const windows: ReturnType<typeof createFakeWindow>[] = [];
