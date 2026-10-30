@@ -1,5 +1,6 @@
 // Geometry/traversal shared by the AX adapter and permission-free native regression tests.
 import Foundation
+import CoreGraphics
 
 struct MacSnapWindow {
     let id: UInt32
