@@ -504,11 +504,11 @@ thrown by the application's logger are isolated and never change the screenshot 
 This branch provides an opt-in `createWindowsSnapProvider`. A plain `ScreenshotManager`
 still uses free selection. The Windows demo defaults to **panel** and includes a selector:
 
-| `granularity`       | Candidates                                                                   |
-| ------------------- | ---------------------------------------------------------------------------- |
-| `'window'`          | Whole application windows; skips internal UI Automation traversal            |
-| `'panel'` (default) | Major panels and sidebars; filters small groups, list items and deep nesting |
-| `'fine'`            | Fine UIA containers, including smaller groups and list items                 |
+| `granularity`       | Candidates                                                          |
+| ------------------- | ------------------------------------------------------------------- |
+| `'window'`          | Whole application windows; skips internal UI Automation traversal   |
+| `'panel'` (default) | Outermost major panels and sidebars; excludes nested content blocks |
+| `'fine'`            | Fine UIA containers, including smaller groups and list items        |
 
 ```ts
 import { app } from 'electron';
@@ -535,12 +535,42 @@ prewarmed/reusable provider. `pnpm run demo:snap-benchmark` measures cold and wa
 Run `pnpm run demo`. On Windows, press **Ctrl + Alt + Shift + S** to capture another app.
 The selected mode applies to the next button or global-shortcut capture; restarting the
 demo resets it to panel. Panel filtering is heuristic and depends on each app's accessibility tree.
-This is a source-demo prototype, not yet validated for packaged distribution or mixed-DPI
-cross-monitor windows. See `docs/windows-container-snap-prototype.md` in the source checkout.
+This is a source-demo prototype. Selecting independently on two displays and snapping a window
+spanning 150%/100% displays have been verified. Packaged distribution and other display layouts
+remain unverified. Run `pnpm run demo:mixed-dpi-snap-smoke` for the spanning-window regression.
+See `docs/windows-container-snap-prototype.md` in the source checkout.
 
 Tests live under `test/`, grouped by `core/`, `electron/`, `overlay/`, `demo/`, and `scripts/`.
 Run `pnpm run test` for unit tests, and `pnpm run demo:granularity-smoke` on Windows to
 exercise the actual demo selector and capture pipeline.
+
+### Live selection across displays (Windows prototype)
+
+The Windows demo defaults to live multi-display selection, with the old frozen single-display mode available for comparison.
+Move between displays to hover or select; a drag stays within its starting display. Pixels are acquired only after committing a selection, then the selected display enters the existing editor. Escape cancels the whole session.
+
+```ts
+await Promise.all([
+  snapProvider.prepare(),
+  manager.prepare({ display: 'all', interactionMode: 'live' }),
+]);
+const result = await manager.capture({ display: 'all', interactionMode: 'live' });
+```
+
+Direct `getWindowSnapRegions: snapProvider` assignment is supported. Wrappers must forward the third callback argument:
+`(signal, update, context) => snapProvider(signal, update, granularity, context)`.
+It carries the overlay handles to exclude from native discovery.
+
+Existing calls default to `cursor + frozen`. `all + frozen` is rejected with `INVALID_REQUEST`; unsupported systems return `UNSUPPORTED_PLATFORM` for live/all.
+Live mode requires Windows 10 2004 or newer; the tested environment is Electron 43.3.0 with 150%/100% displays.
+The desktop remains live while selecting; the image reflects a frame acquired after selection. The selected screen's full frame allows later resizing; export crops the selection.
+One click locks the candidate and opens the editor; it does not finish or copy. Window whitespace selects the window when no container matches; desktop gaps select the current screen. Dragging still creates a custom rectangle.
+The toolbar appears as soon as the selection is fixed. Tools can be chosen while pixels load; confirmation is queued once until the frame is ready. Drawing starts after acquisition. `pnpm run demo:live-toolbar-smoke` checks this handoff and primary-button hover colors.
+Live mode uses an isolated Windows GDI screen-copy worker: the real system cursor stays visible and responsive, while the captured pixels omit the cursor and the protected interaction overlay. Only the selected monitor is copied. The prototype compiles its bundled C# source with the OS .NET Framework compiler during warmup (no PowerShell or downloaded executable); compilation/capture failure returns `CAPTURE_FAILED`, without falling back to a cursor-embedded stream. Frozen mode retains its existing Electron stream/image path. Display geometry changes end the session with `DISPLAY_NOT_FOUND`.
+
+Run `pnpm run demo:capture-exclusion-smoke` for pixel checks, or `pnpm run demo:live-selection-smoke` with two real monitors for multi-display selection, deferred capture, PNG export and cancellation.
+`pnpm run demo:live-click-smoke` checks single-click selection, empty-candidate full-screen selection and independence from a denied desktop stream through the real demo. `pnpm run demo:live-cursor-smoke` checks the Windows system-cursor visibility flag and captured pixels with the pointer inside/outside the selection.
+See [the implementation plan and validation record](docs/multi-display-live-selection-plan.md) for limitations.
 
 ## License and trademarks
 

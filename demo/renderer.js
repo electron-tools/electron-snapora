@@ -14,9 +14,31 @@ const snapDescription = document.getElementById('snap-description');
 const snapApi = window.demoSnapApi;
 let selectedGranularity = 'panel';
 let snapSupported = false;
+const interactionSelect = document.getElementById('interaction-mode');
+let interactionMode = 'frozen';
+if (interactionSelect && window.demoInteractionApi) {
+  void window.demoInteractionApi.get().then(({ supported, mode }) => {
+    interactionMode = mode;
+    interactionSelect.value = mode;
+    interactionSelect.disabled = !supported;
+  });
+  interactionSelect.addEventListener('change', async () => {
+    interactionSelect.disabled = true;
+    captureButton.disabled = true;
+    try {
+      interactionMode = await window.demoInteractionApi.set(interactionSelect.value);
+    } catch (error) {
+      resultOutput.textContent = String(error);
+    } finally {
+      interactionSelect.value = interactionMode;
+      interactionSelect.disabled = !snapSupported;
+      captureButton.disabled = false;
+    }
+  });
+}
 const snapDescriptions = {
   window: '仅识别整个应用窗口，不探测内部控件。',
-  panel: '保留主要内容区和侧栏，过滤小容器、列表行和深层嵌套。',
+  panel: '只吸附完整主内容区和侧栏，不再细分消息卡片或内部子区域。',
   fine: '保留更细的可访问性容器，便于选择卡片和列表项。',
 };
 
@@ -59,11 +81,15 @@ if (!screenshotApi) {
   captureButton.addEventListener('click', async () => {
     captureButton.disabled = true;
     if (snapSelect) snapSelect.disabled = true;
+    if (interactionSelect) interactionSelect.disabled = true;
     resultOutput.textContent = 'Capturing…';
 
     try {
+      if (window.demoInteractionApi)
+        interactionMode = (await window.demoInteractionApi.get()).mode;
       const result = await screenshotApi.capture({
-        display: 'cursor',
+        display: interactionMode === 'live' ? 'all' : 'cursor',
+        interactionMode,
         showCopyFeedback: true,
       });
       const summary =
@@ -76,6 +102,7 @@ if (!screenshotApi) {
     } finally {
       captureButton.disabled = false;
       if (snapSelect) snapSelect.disabled = !snapSupported;
+      if (interactionSelect) interactionSelect.disabled = !snapSupported;
     }
   });
 }

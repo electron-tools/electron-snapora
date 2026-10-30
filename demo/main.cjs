@@ -7,6 +7,7 @@ const {
 } = require('electron-snapora/main');
 
 let snapGranularity = 'panel';
+let interactionMode = process.platform === 'win32' ? 'live' : 'frozen';
 const snapProvider =
   process.platform === 'win32'
     ? createWindowsSnapProvider({
@@ -17,8 +18,8 @@ const snapProvider =
 const screenshotManager = new ScreenshotManager({
   ...(process.platform === 'win32'
     ? {
-        getWindowSnapRegions: (signal, onUpdate) =>
-          snapProvider(signal, onUpdate, snapGranularity),
+        getWindowSnapRegions: (signal, onUpdate, context) =>
+          snapProvider(signal, onUpdate, snapGranularity, context),
       }
     : {}),
 });
@@ -28,7 +29,11 @@ let isMacScreenshotInProgress = false;
 
 async function triggerDemoScreenshot() {
   if (process.platform !== 'darwin') {
-    return screenshotManager.capture({ display: 'cursor', showCopyFeedback: true });
+    return screenshotManager.capture({
+      display: interactionMode === 'live' ? 'all' : 'cursor',
+      interactionMode,
+      showCopyFeedback: true,
+    });
   }
   if (isMacScreenshotInProgress || screenshotManager.activeJobId) return;
   isMacScreenshotInProgress = true;
@@ -146,7 +151,11 @@ function createHostWindow() {
   });
 
   hostWindows.add(hostWindow);
-  hostWindow.once('closed', () => hostWindows.delete(hostWindow));
+  hostWindow.once('closed', () => {
+    hostWindows.delete(hostWindow);
+    // Prewarmed hidden selection windows must not keep a closed demo alive.
+    if (hostWindows.size === 0 && process.platform !== 'darwin') app.quit();
+  });
 
   hostWindow.webContents.on('preload-error', (_event, preloadPath, error) => {
     console.error(`Failed to load demo preload: ${preloadPath}`, error);
@@ -157,6 +166,10 @@ function createHostWindow() {
 
 app.whenReady().then(() => {
   void snapProvider?.prepare();
+  if (process.platform === 'win32')
+    void screenshotManager
+      .prepare({ display: 'all', interactionMode: 'live' })
+      .catch((error) => console.warn('[Live selection warmup]', error));
   unregisterScreenshotIpc = registerScreenshotIpc({
     ipcMain,
     manager: screenshotManager,
@@ -173,6 +186,22 @@ app.whenReady().then(() => {
   ipcMain.handle('demo:get-snap-granularity', (event) => {
     validateSnapSender(event);
     return { supported: process.platform === 'win32', granularity: snapGranularity };
+  });
+  ipcMain.handle('demo:get-interaction', (event) => {
+    validateSnapSender(event);
+    return { supported: process.platform === 'win32', mode: interactionMode };
+  });
+  ipcMain.handle('demo:set-interaction', (event, mode) => {
+    validateSnapSender(event);
+    if (
+      !['live', 'frozen'].includes(mode) ||
+      (mode === 'live' && process.platform !== 'win32')
+    )
+      throw new Error('Unsupported interaction mode.');
+    if (screenshotManager.activeJobId)
+      throw new Error('Wait for the current capture to finish.');
+    interactionMode = mode;
+    return mode;
   });
   ipcMain.handle('demo:set-snap-granularity', (event, value) => {
     validateSnapSender(event);

@@ -35,6 +35,70 @@ function createDesktopCapturer(displayId = '10') {
 }
 
 describe('ElectronCaptureAdapter', () => {
+  it('prewarms without pixels and captures live Windows bounds through the cursor-free worker', async () => {
+    const header = Buffer.alloc(24);
+    header.write('IHDR', 12);
+    header.writeUInt32BE(1600, 16);
+    header.writeUInt32BE(1199, 20);
+    const native = {
+      prepare: vi.fn(async () => undefined),
+      capture: vi.fn(async () => 'data:image/png;base64,' + header.toString('base64')),
+      dispose: vi.fn(),
+    };
+    const physical = { x: -1600, y: 200, width: 1600, height: 1200 };
+    const screen = { ...createScreen(), dipToScreenRect: vi.fn(() => physical) };
+    const desktopCapturer = createDesktopCapturer();
+    const adapter = new ElectronCaptureAdapter({
+      screen,
+      desktopCapturer,
+      platform: 'win32',
+      windowsCapture: native,
+    });
+    await adapter.prepare({ interactionMode: 'live' });
+    expect(native.prepare).toHaveBeenCalledOnce();
+    expect(native.capture).not.toHaveBeenCalled();
+    expect(desktopCapturer.getSources).not.toHaveBeenCalled();
+    const signal = new AbortController().signal;
+    const [frame] = await adapter.capture(
+      { interactionMode: 'live' },
+      undefined,
+      signal
+    );
+    expect(screen.dipToScreenRect).toHaveBeenCalledWith(null, primaryDisplay.bounds);
+    expect(native.capture).toHaveBeenCalledWith(physical, expect.any(Number), signal);
+    expect(frame).toMatchObject({
+      kind: 'image',
+      pixelSize: { width: 1600, height: 1199 },
+    });
+    native.capture.mockResolvedValue('data:image/png;base64,broken');
+    await expect(adapter.capture({ interactionMode: 'live' })).rejects.toMatchObject({
+      code: 'CAPTURE_FAILED',
+    });
+    adapter.dispose();
+    expect(native.dispose).toHaveBeenCalledOnce();
+  });
+
+  it('fails live capture without falling back to a cursor-embedded desktop stream', async () => {
+    const native = {
+      prepare: vi.fn(async () => undefined),
+      capture: vi.fn(async () => {
+        throw new Error('GDI unavailable');
+      }),
+      dispose: vi.fn(),
+    };
+    const desktopCapturer = createDesktopCapturer();
+    const adapter = new ElectronCaptureAdapter({
+      screen: { ...createScreen(), dipToScreenRect: () => primaryDisplay.bounds },
+      desktopCapturer,
+      platform: 'win32',
+      windowsCapture: native,
+    });
+    await expect(adapter.capture({ interactionMode: 'live' })).rejects.toThrow(
+      'GDI unavailable'
+    );
+    expect(desktopCapturer.getSources).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
   afterEach(() => vi.restoreAllMocks());
 
   it('waits for Electron app readiness before desktop source prewarming', async () => {

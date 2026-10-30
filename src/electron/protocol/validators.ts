@@ -47,6 +47,7 @@ const SCREENSHOT_TOOLS = new Set<ScreenshotTool>([
 
 const SCREENSHOT_OPTION_KEYS = new Set([
   'display',
+  'interactionMode',
   'tools',
   'defaultTool',
   'showCopyFeedback',
@@ -156,6 +157,13 @@ export function parseScreenshotOptions(value: unknown): ScreenshotOptionsParseRe
   }
 
   const parsed: ScreenshotOptions = {};
+  if (value.interactionMode !== undefined) {
+    if (value.interactionMode !== 'live' && value.interactionMode !== 'frozen')
+      return { success: false, message: 'Unsupported screenshot interactionMode.' };
+    parsed.interactionMode = value.interactionMode;
+  }
+  if (value.display === 'all' && value.interactionMode !== 'live')
+    return { success: false, message: 'All-display selection requires live mode.' };
   if (value.display !== undefined) {
     if (!isBoundedString(value.display, 128)) {
       return {

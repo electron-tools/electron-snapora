@@ -1,10 +1,17 @@
 import { randomUUID } from 'node:crypto';
+import { release } from 'node:os';
 
-import { BrowserWindow, ipcMain as electronIpcMain, webContents } from 'electron';
+import {
+  BrowserWindow,
+  ipcMain as electronIpcMain,
+  webContents,
+  screen,
+} from 'electron';
 import type { IpcMain } from 'electron';
 
 import type {
   ScreenshotSnapRegion,
+  ScreenshotSnapContext,
   ScreenshotOptions,
   ScreenshotResult,
 } from '../../types.js';
@@ -22,13 +29,18 @@ import {
   type ScreenshotOutputExecutor,
 } from './electron-output-adapter.js';
 import { toScreenshotFailure } from './errors.js';
-import { OverlayWindow, type OverlayWindowOptions } from './overlay-window.js';
+import { LiveScreenshotSession } from './live-screenshot-session.js';
+import {
+  OverlayWindow,
+  type OverlayWindowOptions,
+  type ScreenshotOverlayWindow,
+} from './overlay-window.js';
 import { getScreenshotOutputRouter } from './output-action-router.js';
 import {
   ScreenshotSession,
   type ScreenshotOverlayFactory,
 } from './screenshot-session.js';
-import type { ScreenCaptureAdapter } from '../protocol/messages.js';
+import type { ScreenCaptureAdapter, CaptureDisplay } from '../protocol/messages.js';
 import {
   resolveScreenshotResourceLimits,
   type ScreenshotResourceLimitOptions,
@@ -73,7 +85,8 @@ export interface ScreenshotManagerOptions {
   /** Publish fresh window bounds first to unblock capture, then refine containers until aborted. */
   getWindowSnapRegions?: (
     signal: AbortSignal,
-    onUpdate?: (regions: ScreenshotSnapRegion[]) => void
+    onUpdate?: (regions: ScreenshotSnapRegion[]) => void,
+    context?: ScreenshotSnapContext
   ) => ScreenshotSnapRegion[] | Promise<ScreenshotSnapRegion[]>;
 }
 
@@ -89,6 +102,7 @@ const DEFAULT_MAX_QUEUED_CAPTURES = 8;
 
 interface DefaultScreenshotRunner {
   run: ScreenshotRunner;
+  prepare(options: ScreenshotOptions): Promise<void>;
   dispose(): void;
 }
 
@@ -110,6 +124,25 @@ function createDefaultRunner(
     ((display) => new OverlayWindow({ ...managerOptions.overlayOptions, display }));
   let previousOverlay: ReturnType<ScreenshotOverlayFactory> | undefined;
   let reusableOverlay: OverlayWindow | undefined;
+  const liveOverlays = new Map<string, OverlayWindow>();
+  const customLiveOverlays = new Map<ScreenshotOverlayWindow, () => void>();
+  // Custom windows are not in the built-in cache, but still belong to this runner.
+  const disposeCustomLiveOverlays = (): void => {
+    for (const [overlay, unsubscribe] of customLiveOverlays) {
+      customLiveOverlays.delete(overlay);
+      unsubscribe();
+      overlay.destroy();
+    }
+  };
+  let disposed = false;
+  const liveOverlay = (display: CaptureDisplay) => {
+    const cached = liveOverlays.get(display.id);
+    if (cached?.matchesDisplay(display)) return cached;
+    cached?.destroy();
+    const overlay = new OverlayWindow({ ...managerOptions.overlayOptions, display });
+    liveOverlays.set(display.id, overlay);
+    return overlay;
+  };
   let removeReusableOverlayOwner: (() => void) | undefined;
 
   const disposeOverlays = (): void => {
@@ -120,6 +153,9 @@ function createDefaultRunner(
       previousOverlay?.destroy();
     }
     reusableOverlay = undefined;
+    disposeCustomLiveOverlays();
+    for (const overlay of liveOverlays.values()) overlay.destroy();
+    liveOverlays.clear();
     previousOverlay = undefined;
   };
 
@@ -144,6 +180,24 @@ function createDefaultRunner(
   };
 
   const run: ScreenshotRunner = (jobId, captureOptions, context) => {
+    if (disposed) return Promise.resolve({ status: 'cancelled' });
+    if (
+      (captureOptions.interactionMode === 'live' || captureOptions.display === 'all') &&
+      (process.platform !== 'win32' || Number(release().split('.')[2]) < 19041)
+    )
+      return Promise.resolve({
+        status: 'failed',
+        code: 'UNSUPPORTED_PLATFORM',
+        message: 'Live multi-display capture requires Windows 10 2004 or newer.',
+      });
+    if (captureOptions.display === 'all' && captureOptions.interactionMode !== 'live')
+      return Promise.resolve({
+        status: 'failed',
+        code: 'INVALID_REQUEST',
+        message: 'All-display capture requires live selection.',
+      });
+    disposeCustomLiveOverlays();
+    for (const overlay of liveOverlays.values()) overlay.hide();
     // 连续截图前先隐藏缓存窗口和复制提示，避免它们被下一帧屏幕采集写入图片。
     if (reusableOverlay) {
       reusableOverlay.hide();
@@ -176,7 +230,11 @@ function createDefaultRunner(
           : { senderWebContentsId: context.senderWebContentsId }),
       });
     };
-    const session = new ScreenshotSession({
+    const Session =
+      captureOptions.interactionMode === 'live'
+        ? LiveScreenshotSession
+        : ScreenshotSession;
+    const session = new Session({
       jobId,
       captureOptions,
       captureAdapter,
@@ -185,6 +243,21 @@ function createDefaultRunner(
         ? { getWindowSnapRegions: managerOptions.getWindowSnapRegions }
         : {}),
       createOverlay: (display) => {
+        if (captureOptions.interactionMode === 'live') {
+          trackReusableOverlayOwner(context.senderWebContentsId);
+          if (!createCustomOverlay) return liveOverlay(display);
+          const overlay = createCustomOverlay(display);
+          if (!customLiveOverlays.has(overlay)) {
+            customLiveOverlays.set(
+              overlay,
+              overlay.onClosed(() => {
+                customLiveOverlays.get(overlay)?.();
+                customLiveOverlays.delete(overlay);
+              })
+            );
+          }
+          return overlay;
+        }
         if (reusableOverlay?.matchesDisplay(display)) {
           previousOverlay = reusableOverlay;
           trackReusableOverlayOwner(context.senderWebContentsId);
@@ -270,7 +343,9 @@ function createDefaultRunner(
             return response;
           }
         ),
-      onSettled: () => {
+      onSettled: (result) => {
+        // Successful copy feedback may still use the custom window; keep it until the next run/dispose.
+        if (result.status !== 'completed') disposeCustomLiveOverlays();
         // app.hide() 会隐藏宿主、贴图和复制提示，不能用来替代外部应用焦点恢复。
         if (wasHostFocused && hostWindow && !hostWindow.isDestroyed()) {
           hostWindow.focus();
@@ -286,7 +361,37 @@ function createDefaultRunner(
 
   return {
     run,
+    async prepare(options) {
+      await captureAdapter.prepare?.(options);
+      if (
+        disposed ||
+        process.platform !== 'win32' ||
+        options.interactionMode !== 'live' ||
+        createCustomOverlay
+      )
+        return;
+      const requested = options.display ?? 'cursor';
+      const id =
+        requested === 'cursor'
+          ? screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id
+          : requested === 'primary'
+            ? screen.getPrimaryDisplay().id
+            : requested;
+      const targets = screen
+        .getAllDisplays()
+        .filter((display) => requested === 'all' || String(display.id) === String(id));
+      await Promise.all(
+        targets.map((display) =>
+          liveOverlay({
+            id: String(display.id),
+            bounds: display.bounds,
+            scaleFactor: display.scaleFactor,
+          }).load()
+        )
+      );
+    },
     dispose() {
+      disposed = true;
       ownedCaptureAdapter?.dispose();
       disposeOverlays();
     },
@@ -304,6 +409,7 @@ export class ScreenshotManager {
   readonly #queue: QueuedCapture[] = [];
   readonly #onDiagnostic: ScreenshotDiagnosticListener | undefined;
   readonly #disposeRunner: (() => void) | undefined;
+  readonly #prepareRunner: ((options: ScreenshotOptions) => Promise<void>) | undefined;
   #activeJobId: string | undefined;
   #activeSenderWebContentsId: number | undefined;
   #cancelActive: (() => boolean) | undefined;
@@ -327,6 +433,7 @@ export class ScreenshotManager {
     const defaultRunner = options.runner ? undefined : createDefaultRunner(options);
     this.#runner = options.runner ?? defaultRunner!.run;
     this.#disposeRunner = defaultRunner?.dispose;
+    this.#prepareRunner = defaultRunner?.prepare;
     this.#onDiagnostic = options.onDiagnostic;
   }
 
@@ -340,7 +447,13 @@ export class ScreenshotManager {
 
   /** 释放默认 runner 缓存的隐藏窗口；setupElectronSnapora.unregister() 会自动调用。 */
   dispose(): void {
+    this.cancel();
     this.#disposeRunner?.();
+  }
+
+  /** Preload geometry-only live overlays; never acquire desktop pixels during warmup. */
+  async prepare(options: ScreenshotOptions = {}): Promise<void> {
+    await this.#prepareRunner?.(options);
   }
 
   /** 不传 sender ID 时供主进程直接取消；传入时只允许取消该页面创建的任务。 */

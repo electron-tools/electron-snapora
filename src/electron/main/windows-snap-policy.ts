@@ -39,6 +39,7 @@ export function filterWindowsSnapRegions(
       .filter(
         (r) =>
           r.kind === 'container' &&
+          r.displayId === window.displayId &&
           r.windowZOrder === window.windowZOrder &&
           r.sourceProcessId === window.sourceProcessId &&
           PANEL_TYPES.has(r.controlType ?? '') &&
@@ -51,12 +52,13 @@ export function filterWindowsSnapRegions(
       .sort((a, b) => area(b) - area(a));
     const retained: WindowsSnapCandidate[] = [];
     for (const region of eligible) {
-      // Collapse near-identical wrappers; keep at most two materially smaller panel levels.
+      // Collapse near-identical wrappers, then keep only the outermost meaningful layout panels.
+      // Message cards / nested groups belong to fine mode, even when they occupy a large area.
       const ancestors = [window, ...retained].filter((parent) =>
         contains(parent, region)
       );
       if (ancestors.some((parent) => area(region) >= area(parent) * 0.9)) continue;
-      if (ancestors.length > 2) continue;
+      if (ancestors.length > 1) continue;
       retained.push(region);
     }
     panels.push(...retained);

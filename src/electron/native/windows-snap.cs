@@ -47,16 +47,25 @@ namespace Snapora {
             Console.Out.Flush();
             string command;
             while ((command = Console.ReadLine()) != null) {
-                if (command != "window" && command != "panel" && command != "fine") continue;
-                Run(budgetMs, command == "window");
+                var parts = command.Split('|');
+                if (parts[0] != "window" && parts[0] != "panel" && parts[0] != "fine") continue;
+                var excluded = new HashSet<long>();
+                if (parts.Length == 2) foreach (var handle in parts[1].Split(',')) {
+                    long value;
+                    if (long.TryParse(handle, out value)) excluded.Add(value);
+                }
+                Run(budgetMs, parts[0] == "window", excluded);
             }
         }
 
-        public static void Run(int budgetMs, bool windowsOnly) {
+        public static void Run(int budgetMs, bool windowsOnly) { Run(budgetMs, windowsOnly, null); }
+
+        public static void Run(int budgetMs, bool windowsOnly, HashSet<long> excluded) {
             // UIA rectangles are physical pixels; avoid DPI virtualization in Win32 enumeration too.
             SetThreadDpiAwarenessContext(new IntPtr(-4));
             var windows = new List<Window>();
             EnumWindows(delegate(IntPtr hwnd, IntPtr unused) {
+                if (excluded != null && excluded.Contains(hwnd.ToInt64())) return true;
                 int cloaked;
                 NativeRect r;
                 if (!IsWindowVisible(hwnd) || IsIconic(hwnd) ||

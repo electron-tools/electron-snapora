@@ -2,6 +2,8 @@ import type { IpcMain, IpcMainEvent } from 'electron';
 
 import type {
   ScreenshotSnapRegion,
+  ScreenshotSnapContext,
+  ScreenshotBounds,
   ScreenshotOptions,
   ScreenshotResult,
 } from '../../types.js';
@@ -63,10 +65,12 @@ export interface ScreenshotSessionOptions {
   resourceLimits?: ScreenshotResourceLimitOptions;
   onDiagnostic?: ScreenshotDiagnosticListener;
   windowSnapRegions?: ScreenshotSnapRegion[];
+  initialSelection?: ScreenshotBounds;
   /** First update unblocks capture; later updates refine hover candidates for this job only. */
   getWindowSnapRegions?: (
     signal: AbortSignal,
-    onUpdate?: (regions: ScreenshotSnapRegion[]) => void
+    onUpdate?: (regions: ScreenshotSnapRegion[]) => void,
+    context?: ScreenshotSnapContext
   ) => ScreenshotSnapRegion[] | Promise<ScreenshotSnapRegion[]>;
 }
 
@@ -181,9 +185,14 @@ export class ScreenshotSession {
       frames = targetDisplay
         ? await this.#options.captureAdapter.capture(
             this.#options.captureOptions,
-            targetDisplay
+            targetDisplay,
+            this.#snapAbort.signal
           )
-        : await this.#options.captureAdapter.capture(this.#options.captureOptions);
+        : await this.#options.captureAdapter.capture(
+            this.#options.captureOptions,
+            undefined,
+            this.#snapAbort.signal
+          );
       if (this.#settled) {
         return;
       }
@@ -369,6 +378,9 @@ export class ScreenshotSession {
       jobId: this.#options.jobId,
       options: this.#options.captureOptions,
       frames: this.#frames,
+      ...(this.#options.initialSelection
+        ? { initialSelection: this.#options.initialSelection }
+        : {}),
       ...(this.#snapRegions.length ? { windowSnapRegions: this.#snapRegions } : {}),
     });
     this.#initialized = true;
@@ -461,6 +473,8 @@ export class ScreenshotSession {
   };
 
   async #captureImageFallback(message: string): Promise<void> {
+    // Live overlays remain visible and capture-protected while the selected screen's image is retried.
+    // Do not discard the user's initial selection just because Windows denied the desktop stream.
     const adapter = this.#options.captureAdapter;
     const display = this.#captureDisplay;
     if (
@@ -485,7 +499,8 @@ export class ScreenshotSession {
     try {
       const frames = await adapter.captureFallback(
         this.#options.captureOptions,
-        display
+        display,
+        this.#snapAbort.signal
       );
       if (this.#settled) {
         return;

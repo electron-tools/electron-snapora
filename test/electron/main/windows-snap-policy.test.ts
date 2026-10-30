@@ -67,7 +67,7 @@ describe('Windows snap granularity', () => {
         [window, panel, inner, deep, row, buttonWrapper, custom],
         'panel'
       )
-    ).toEqual([window, panel, inner]);
+    ).toEqual([window, panel]);
   });
   it('collapses near-full-window and nearly identical wrappers without losing sidebars', () => {
     const wrapper = { ...panel, x: 0, y: 0, width: 1000, height: 760 };
@@ -95,5 +95,19 @@ describe('Windows snap granularity', () => {
       height: 700,
     };
     expect(filterWindowsSnapRegions([window, unknown], 'panel')).toEqual([window]);
+  });
+
+  it('keeps a chat viewport whole in panel mode while fine mode retains nested content blocks', () => {
+    const sidebar = { ...panel, x: 0, width: 250 };
+    const nestedChatBlock = {
+      ...panel,
+      y: 100,
+      width: 380,
+      height: 600,
+      controlType: 'Group',
+    };
+    const input = [window, panel, sidebar, nestedChatBlock];
+    expect(filterWindowsSnapRegions(input, 'panel')).toEqual([window, panel, sidebar]);
+    expect(filterWindowsSnapRegions(input, 'fine')).toEqual(input);
   });
 });

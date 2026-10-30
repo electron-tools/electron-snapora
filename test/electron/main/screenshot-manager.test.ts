@@ -171,7 +171,11 @@ describe('ScreenshotManager', () => {
       status: 'completed',
       output: { action: 'copy' },
     });
-    expect(captureAdapter.capture).toHaveBeenCalledWith({ locale: 'zh-CN' });
+    expect(captureAdapter.capture).toHaveBeenCalledWith(
+      { locale: 'zh-CN' },
+      undefined,
+      expect.any(AbortSignal)
+    );
     expect(createOverlay).toHaveBeenCalledWith(frame.display);
     expect(overlay.showCopyFeedback).not.toHaveBeenCalled();
     expect(overlay.hide).toHaveBeenCalledOnce();

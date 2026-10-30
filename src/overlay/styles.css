@@ -94,11 +94,11 @@ input {
   position: relative;
   width: 100%;
   height: 100%;
-  cursor: crosshair;
+  cursor: default;
   touch-action: none;
 }
 
-/* 透明 Overlay 先接管系统光标，避免 WGC 把点击位置的旧箭头烘焙进首帧。 */
+/* 旧冻结模式的桌面流仍需隐藏系统光标；实时采集在原生进程中排除光标。 */
 .capture-surface[data-state='waiting'],
 .capture-surface[data-state='waiting'] * {
   cursor: none !important;
@@ -106,6 +106,14 @@ input {
 
 .capture-surface[data-state='waiting'] {
   opacity: 0;
+}
+
+.capture-surface[data-state='capturing'] .selection {
+  pointer-events: none;
+}
+
+.capture-surface[data-live='true'] .resize-handle {
+  visibility: hidden;
 }
 
 .screen-frame {
@@ -134,6 +142,10 @@ input {
 
 .capture-surface[data-tool='text'] .annotation-canvas {
   cursor: text;
+}
+
+.capture-surface[data-state='capturing'] .annotation-canvas {
+  cursor: default;
 }
 
 .capture-surface:not([data-tool='select']):not([data-tool='watermark'])
@@ -319,6 +331,7 @@ input {
   padding: 0;
   border: 0;
   background: transparent;
+  cursor: default;
 }
 
 .selection-toolbar[data-has-preset='true'] {
@@ -432,8 +445,9 @@ input {
   background: var(--snapora-accent);
 }
 
-.tool-button[data-active='true']:hover,
-.confirm-button:hover {
+.tool-button[data-active='true']:hover:not(:disabled),
+.confirm-button:hover:not(:disabled) {
+  color: var(--snapora-accent-foreground);
   background: var(--snapora-accent);
   filter: brightness(1.08);
 }

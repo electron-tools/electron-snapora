@@ -20,6 +20,10 @@ import {
   type ScreenshotResourceLimits,
 } from '../protocol/limits.js';
 import { ScreenshotError } from './errors.js';
+import {
+  NativeWindowsScreenCapture,
+  type WindowsScreenCapture,
+} from './windows-screen-capture.js';
 
 interface ElectronDisplayLike {
   id: number;
@@ -33,6 +37,10 @@ interface ElectronDisplayLike {
 }
 
 interface ScreenApi {
+  dipToScreenRect?(
+    window: null,
+    rect: ElectronDisplayLike['bounds']
+  ): ElectronDisplayLike['bounds'];
   getAllDisplays(): ElectronDisplayLike[];
   getCursorScreenPoint(): { x: number; y: number };
   getDisplayNearestPoint(point: { x: number; y: number }): ElectronDisplayLike;
@@ -81,6 +89,8 @@ const MAC_SCREEN_CAPTURE_SETTINGS_URL =
   'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture';
 
 export interface ElectronCaptureAdapterOptions {
+  /** Inject the cursor-free Windows live capture process (primarily for tests). */
+  windowsCapture?: WindowsScreenCapture;
   desktopCapturer?: DesktopCapturerApi;
   screen?: ScreenApi;
   platform?: NodeJS.Platform;
@@ -106,8 +116,10 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
   #sourceRevision = 0;
   #watchingSources = false;
   #disposed = false;
+  #windowsCapture: WindowsScreenCapture | undefined;
 
   constructor(options: ElectronCaptureAdapterOptions = {}) {
+    this.#windowsCapture = options.windowsCapture;
     this.#desktopCapturer = options.desktopCapturer ?? desktopCapturer;
     this.#screen = options.screen ?? screen;
     this.#platform = options.platform ?? process.platform;
@@ -124,7 +136,11 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
     return this.#toCaptureDisplay(this.#resolveDisplay(options.display ?? 'cursor'));
   }
 
-  async prepare(): Promise<void> {
+  async prepare(options: ScreenshotOptions = {}): Promise<void> {
+    if (this.#platform === 'win32' && options.interactionMode === 'live') {
+      await this.#nativeCapture().prepare();
+      return;
+    }
     if (this.#platform === 'win32') {
       await this.#enumerateDesktopSources();
     }
@@ -133,6 +149,7 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
   /** 释放默认 Manager 拥有的系统订阅；自定义适配器由宿主释放。 */
   dispose(): void {
     this.#disposed = true;
+    this.#windowsCapture?.dispose();
     this.#sourceRevision++;
     this.#desktopSourceIds.clear();
     this.#desktopSourceFallbacks.clear();
@@ -148,26 +165,31 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
 
   async capture(
     options: ScreenshotOptions = {},
-    targetDisplay?: CaptureDisplay
+    targetDisplay?: CaptureDisplay,
+    signal?: AbortSignal
   ): Promise<CapturedFrame[]> {
-    return this.#capture(options, targetDisplay, this.#platform === 'win32');
+    return this.#capture(options, targetDisplay, this.#platform === 'win32', signal);
   }
 
   async captureFallback(
     options: ScreenshotOptions,
-    targetDisplay: CaptureDisplay
+    targetDisplay: CaptureDisplay,
+    signal?: AbortSignal
   ): Promise<CapturedFrame[]> {
     this.#desktopSourceFallbacks.add(targetDisplay.id);
     this.#desktopSourceIds.delete(targetDisplay.id);
-    return this.#capture(options, targetDisplay, false);
+    return this.#capture(options, targetDisplay, false, signal);
   }
 
   async #capture(
     options: ScreenshotOptions,
     targetDisplay: CaptureDisplay | undefined,
-    returnDesktopSource: boolean
+    returnDesktopSource: boolean,
+    signal?: AbortSignal
   ): Promise<CapturedFrame[]> {
+    signal?.throwIfAborted();
     await this.#ensurePermission();
+    signal?.throwIfAborted();
 
     // Session 预加载 Overlay 后必须继续使用同一个显示器，不能再次按鼠标位置解析。
     const display = targetDisplay
@@ -178,6 +200,44 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
       height: Math.max(1, Math.round(display.bounds.height * display.scaleFactor)),
     };
     this.#assertRequestedPixelSize(pixelSize);
+
+    if (this.#platform === 'win32' && options.interactionMode === 'live') {
+      const bounds = this.#screen.dipToScreenRect?.(null, display.bounds);
+      if (!bounds)
+        throw new ScreenshotError(
+          'CAPTURE_FAILED',
+          'Physical display coordinates are unavailable.'
+        );
+      this.#assertRequestedPixelSize(bounds);
+      const dataUrl = await this.#nativeCapture().capture(
+        bounds,
+        this.#resourceLimits.maxCaptureDataUrlBytes,
+        signal
+      );
+      signal?.throwIfAborted();
+      // Read only the PNG header; decoding a full desktop image here would block main-process input.
+      const header = Buffer.from(
+        dataUrl.slice(
+          'data:image/png;base64,'.length,
+          'data:image/png;base64,'.length + 32
+        ),
+        'base64'
+      );
+      if (header.length !== 24 || header.toString('ascii', 12, 16) !== 'IHDR')
+        throw new ScreenshotError(
+          'CAPTURE_FAILED',
+          'Native capture returned an invalid PNG header.'
+        );
+      const frame: CapturedFrame = {
+        kind: 'image',
+        display: this.#toCaptureDisplay(display),
+        pixelSize: { width: header.readUInt32BE(16), height: header.readUInt32BE(20) },
+        dataUrl,
+      };
+      const violation = findCapturedFrameLimitViolation(frame, this.#resourceLimits);
+      if (violation) throw new ScreenshotError('RESOURCE_LIMIT_EXCEEDED', violation);
+      return [frame];
+    }
 
     const displayId = String(display.id);
     if (returnDesktopSource && !this.#desktopSourceFallbacks.has(displayId)) {
@@ -270,6 +330,12 @@ export class ElectronCaptureAdapter implements ScreenCaptureAdapter {
       );
     }
     return this.#desktopSourceIds.get(displayId);
+  }
+
+  #nativeCapture(): WindowsScreenCapture {
+    if (this.#disposed)
+      throw new ScreenshotError('CAPTURE_FAILED', 'Capture adapter is disposed.');
+    return (this.#windowsCapture ??= new NativeWindowsScreenCapture());
   }
 
   /** 屏幕配置变化才失效并预热，普通截图保留原有的 ID 缓存命中路径。 */

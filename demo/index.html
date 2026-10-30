@@ -15,11 +15,16 @@
       <p class="eyebrow">ELECTRON SNAPORA</p>
       <h1>Reusable screenshots for Electron.</h1>
       <p class="description">
-        Capture the display under the cursor through the package's isolated main,
-        preload and overlay pipeline.
+        Select across displays, then capture and annotate your chosen region.
       </p>
       <button class="capture-button" type="button">Take screenshot</button>
       <div class="snap-setting">
+        <label for="interaction-mode">截图交互</label>
+        <select id="interaction-mode" disabled>
+          <option value="live" selected>实时选择 · 多屏 · 选后采集</option>
+          <option value="frozen">冻结画面 · 当前屏幕（旧模式）</option>
+        </select>
+        <p>实时模式可跨屏嗅探；在单块屏幕确定选区后采集并标注。</p>
         <label for="snap-granularity">吸附粒度（Windows）</label>
         <select id="snap-granularity" aria-describedby="snap-description" disabled>
           <option value="window">窗口级 · 仅整窗</option>

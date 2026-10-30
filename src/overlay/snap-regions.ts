@@ -1,11 +1,36 @@
 import type { ScreenshotBounds, ScreenshotSnapRegion } from '../types.js';
+import type { Point } from '../core/geometry/rect.js';
+
+/** Sorted containers win, then their window; live desktop gaps fall back to this screen only. */
+export function findSnapRegion(
+  regions: ScreenshotBounds[],
+  point: Point,
+  screenFallback?: ScreenshotBounds
+): ScreenshotBounds | null {
+  const contains = (r: ScreenshotBounds) =>
+    point.x >= r.x &&
+    point.y >= r.y &&
+    point.x < r.x + r.width &&
+    point.y < r.y + r.height;
+  return (
+    regions.find(contains) ??
+    (screenFallback && contains(screenFallback) ? screenFallback : null)
+  );
+}
 
 /** Clip screen DIP candidates to this display; foreground windows always win. */
 export function resolveSnapRegions(
   regions: ScreenshotSnapRegion[],
-  display: ScreenshotBounds
+  display: ScreenshotBounds,
+  displayId?: string
 ): ScreenshotSnapRegion[] {
   return regions
+    .filter(
+      (region) =>
+        displayId === undefined ||
+        region.displayId === undefined ||
+        region.displayId === displayId
+    )
     .filter((region) =>
       [region.x, region.y, region.width, region.height].every(Number.isFinite)
     )

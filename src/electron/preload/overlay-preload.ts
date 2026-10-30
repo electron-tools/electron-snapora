@@ -8,11 +8,19 @@ import type {
   ScreenshotFeedbackPayload,
   ScreenshotInitializePayload,
   ScreenshotSnapRegionsPayload,
+  ScreenshotSelectionPayload,
+  ScreenshotSelectedPayload,
   ScreenshotOutputPayload,
   ScreenshotOutputResponse,
 } from '../protocol/messages.js';
 
 export interface ScreenshotOverlayApi {
+  onSelectInitialize(
+    listener: (payload: ScreenshotSelectionPayload) => void
+  ): () => void;
+  onReset(listener: () => void): () => void;
+  selected(payload: Omit<ScreenshotSelectedPayload, 'protocolVersion'>): void;
+  selectionReady(jobId: string): void;
   onInitialize(listener: (payload: ScreenshotInitializePayload) => void): () => void;
   onSnapRegions(listener: (payload: ScreenshotSnapRegionsPayload) => void): () => void;
   onFeedback(listener: (payload: ScreenshotFeedbackPayload) => void): () => void;
@@ -28,6 +36,31 @@ export interface ScreenshotOverlayApi {
 }
 
 const overlayApi: ScreenshotOverlayApi = {
+  onSelectInitialize(listener) {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      payload: ScreenshotSelectionPayload
+    ) => listener(payload);
+    ipcRenderer.on(OVERLAY_CHANNELS.selectInitialize, handler);
+    return () => ipcRenderer.removeListener(OVERLAY_CHANNELS.selectInitialize, handler);
+  },
+  onReset(listener) {
+    const handler = () => listener();
+    ipcRenderer.on(OVERLAY_CHANNELS.reset, handler);
+    return () => ipcRenderer.removeListener(OVERLAY_CHANNELS.reset, handler);
+  },
+  selected(payload) {
+    ipcRenderer.send(OVERLAY_CHANNELS.selected, {
+      ...payload,
+      protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
+    });
+  },
+  selectionReady(jobId) {
+    ipcRenderer.send(OVERLAY_CHANNELS.selectionReady, {
+      jobId,
+      protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
+    });
+  },
   onSnapRegions(listener) {
     const handler = (
       _event: Electron.IpcRendererEvent,

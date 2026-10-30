@@ -225,7 +225,11 @@ describe('ScreenshotSession', () => {
     const resultPromise = session.run();
     await vi.waitFor(() => expect(overlay.load).toHaveBeenCalledOnce());
     expect(session.state).toBe('capturing');
-    expect(capture).toHaveBeenCalledWith({ display: 'cursor' }, frame.display);
+    expect(capture).toHaveBeenCalledWith(
+      { display: 'cursor' },
+      frame.display,
+      expect.any(AbortSignal)
+    );
 
     emitOverlayMessage(ipc, OVERLAY_CHANNELS.ready, {
       protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
@@ -283,7 +287,11 @@ describe('ScreenshotSession', () => {
     });
 
     await vi.waitFor(() => expect(overlay.sendInitialize).toHaveBeenCalledTimes(2));
-    expect(captureFallback).toHaveBeenCalledWith({ display: 'cursor' }, frame.display);
+    expect(captureFallback).toHaveBeenCalledWith(
+      { display: 'cursor' },
+      frame.display,
+      expect.any(AbortSignal)
+    );
     expect(overlay.sendInitialize).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({ frames: [frame] })

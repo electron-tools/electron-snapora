@@ -10,7 +10,14 @@ import {
 export const MINIMUM_SELECTION_SIZE = 4;
 
 export type OverlayPhase =
-  'waiting' | 'ready' | 'creating' | 'selected' | 'moving' | 'resizing' | 'exporting';
+  | 'waiting'
+  | 'ready'
+  | 'creating'
+  | 'capturing'
+  | 'selected'
+  | 'moving'
+  | 'resizing'
+  | 'exporting';
 
 type OverlayInteraction =
   | { kind: 'create'; pointerId: number; origin: Point }
@@ -33,6 +40,8 @@ export type OverlayAction =
   | { type: 'initialize'; payload: ScreenshotInitializePayload }
   | { type: 'reset' }
   | { type: 'image-ready' }
+  | { type: 'capture-selection' }
+  | { type: 'restore-selection'; selection: Rect }
   | { type: 'begin-create'; pointerId: number; point: Point; bounds: Rect }
   | { type: 'begin-move'; pointerId: number; point: Point }
   | { type: 'begin-resize'; pointerId: number; handle: ResizeHandle }
@@ -94,6 +103,17 @@ export function reduceOverlayState(
       return initialOverlayState;
     case 'image-ready':
       return state.payload ? { ...state, phase: 'ready' } : state;
+    case 'capture-selection':
+      return state.selection
+        ? { ...state, phase: 'capturing', interaction: null }
+        : state;
+    case 'restore-selection':
+      return {
+        ...state,
+        phase: 'selected',
+        selection: action.selection,
+        interaction: null,
+      };
     case 'begin-create':
       if (!state.payload || state.phase === 'exporting') {
         return state;

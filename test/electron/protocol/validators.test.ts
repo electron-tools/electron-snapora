@@ -12,6 +12,21 @@ import {
 } from '../../../src/electron/protocol/validators.js';
 
 describe('screenshot protocol validators', () => {
+  it('allows live screen selection and rejects unsupported interaction combinations', () => {
+    expect(parseScreenshotOptions({ display: 'all', interactionMode: 'live' })).toEqual(
+      { success: true, value: { display: 'all', interactionMode: 'live' } }
+    );
+    expect(
+      parseScreenshotOptions({ display: 'primary', interactionMode: 'frozen' }).success
+    ).toBe(true);
+    expect(parseScreenshotOptions({ display: 'all' }).success).toBe(false);
+    expect(
+      parseScreenshotOptions({ display: 'all', interactionMode: 'frozen' }).success
+    ).toBe(false);
+    expect(parseScreenshotOptions({ interactionMode: 'immediate' }).success).toBe(
+      false
+    );
+  });
   it('accepts the supported ready protocol', () => {
     expect(isReadyPayload({ protocolVersion: SCREENSHOT_PROTOCOL_VERSION })).toBe(true);
     expect(isReadyPayload({ protocolVersion: 999 })).toBe(false);

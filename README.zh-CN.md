@@ -385,11 +385,11 @@ const snapora = setupElectronSnapora({
 Windows demo 默认面板级，可用“吸附粒度”下拉框比较三档，按钮和全局快捷键从下一次截图采用新选择。
 设置保存在本次 demo 进程内，重启恢复面板级。
 
-| `granularity`     | 范围                                         |
-| ----------------- | -------------------------------------------- |
-| `'window'`        | 仅整个应用窗口，跳过 UI Automation 内部遍历  |
-| `'panel'`（默认） | 主要面板、侧栏，过滤小容器、列表项和深层嵌套 |
-| `'fine'`          | 原型的精细容器范围，包括小分组、列表项等     |
+| `granularity`     | 范围                                           |
+| ----------------- | ---------------------------------------------- |
+| `'window'`        | 仅整个应用窗口，跳过 UI Automation 内部遍历    |
+| `'panel'`（默认） | 最外层主要面板和侧栏，不再吸附其中的内部内容块 |
+| `'fine'`          | 原型的精细容器范围，包括小分组、列表项等       |
 
 ```ts
 import { app } from 'electron';
@@ -413,10 +413,38 @@ demo 预热并复用一个隔离工作进程；每次截图读取新的窗口边
 
 运行 `pnpm run demo`，Windows 默认快捷键为 **Ctrl + Alt + Shift + S**。
 面板筛选是启发式策略，不能保证每个应用暴露相同的可访问性布局。
-目前仅验证源码 demo，安装包分发和混合 DPI 跨屏仍待验证；详见源码中的 `docs/windows-container-snap-prototype.md`。
+目前仅验证源码 demo；150% / 100% 混合缩放已验证双屏分别选择及同一窗口横跨两屏的吸附边界。`pnpm run demo:mixed-dpi-snap-smoke` 可运行跨屏窗口回归；其他显示布局和安装包分发仍待验证。详见 `docs/windows-container-snap-prototype.md`。
 
 开发测试集中在 `test/`，按 `core/`、`electron/`、`overlay/`、`demo/`、`scripts/` 保留模块层级。
 `pnpm run test` 运行全部单元测试；`pnpm run demo:granularity-smoke` 在 Windows 验证实际 demo 的切换和截图链路。
+
+### 多屏实时选择、选后采集（Windows 原型）
+
+Windows demo 默认“实时选择 · 多屏 · 选后采集”，可切换“冻结画面 · 当前屏幕”比较旧模式。
+启动后可在各屏嗅探/框选，选区始终限制在起点屏幕。有效选区提交后才采集所选屏幕的一帧，进入原有标注与导出；其他屏幕退出交互。Esc 取消整个会话。
+
+显式启用：
+
+```ts
+// app ready 后预热透明窗口；不采集屏幕像素。
+await Promise.all([
+  snapProvider.prepare(),
+  manager.prepare({ display: 'all', interactionMode: 'live' }),
+]);
+const result = await manager.capture({ display: 'all', interactionMode: 'live' });
+```
+
+`getWindowSnapRegions: snapProvider` 可直接使用。自定义包装函数必须转发第三个 `context` 参数，
+动态粒度示例：`(signal, update, context) => snapProvider(signal, update, granularity, context)`；否则实时刷新会识别到自己的截图层。
+
+库默认仍为 `cursor + frozen`；`all + frozen` 返回 `INVALID_REQUEST`，不支持的系统请求 live/all 返回 `UNSUPPORTED_PLATFORM`。
+实时模式要求 Windows 10 2004 或更新版本，当前真机验证为 Electron 43.3.0、双屏 150%/100%。选择阶段页面继续更新，图片取自选定后的帧。
+单击只固定候选并进入编辑，不会直接完成或复制。窗口内未命中容器的空白处回退整窗；没有窗口候选的桌面空白处回退当前整屏。拖动仍可自由框选。
+选区确定后立即显示工具栏，无须等待图片。等待期间可以选择工具、取消或提前确认；确认只在图片就绪后执行一次，绘制需等采集完成。`pnpm run demo:live-toolbar-smoke` 验证这段交互及主按钮 hover 颜色。
+实时模式改用独立 Windows GDI 屏幕拷贝进程：系统光标始终正常显示和移动，采集像素不包含光标和受保护交互层，只拷贝所选显示器。原型在预热时使用系统 .NET Framework 编译器编译随包提供的 C# 源码，不使用 PowerShell，也不下载可执行文件；编译/采集失败返回 `CAPTURE_FAILED`，不回退到会夹带光标的桌面流。冻结模式保留既有 Electron 桌面流/图片路径。显示拓扑/缩放改变时结束会话并返回 `DISPLAY_NOT_FOUND`。
+
+`pnpm run demo:capture-exclusion-smoke` 检查实际屏幕像素；`pnpm run demo:live-selection-smoke` 需要两块真实显示器，验证跨屏嗅探、延后采集、PNG 导出和取消。详细方案与实测限制见 [多屏实时选择](docs/multi-display-live-selection-plan.md)。
+`pnpm run demo:live-click-smoke` 从真实 demo 按钮验证单击选区、候选为空时整屏选择，以及桌面流被拒绝时仍可独立完成原生采集。`pnpm run demo:live-cursor-smoke` 同时检查 Windows 系统光标可见标志，以及指针位于选区内外时的底图像素。
 
 ## 开源协议与商标
 

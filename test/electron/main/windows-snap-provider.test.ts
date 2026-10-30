@@ -4,13 +4,16 @@ import { spawn } from 'node:child_process';
 import { screen } from 'electron';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createWindowsSnapProvider } from '../../../src/electron/main/windows-snap-provider.js';
+import type { ScreenshotManagerOptions } from '../../../src/electron/main/screenshot-manager.js';
 
 vi.mock('node:child_process', () => ({ spawn: vi.fn() }));
 vi.mock('node:process', () => ({
   platform: 'win32',
   env: { SystemRoot: 'C:\\Windows' },
 }));
-vi.mock('electron', () => ({ screen: { screenToDipRect: vi.fn() } }));
+vi.mock('electron', () => ({
+  screen: { getAllDisplays: vi.fn(), dipToScreenRect: vi.fn() },
+}));
 
 function worker() {
   const child = Object.assign(new EventEmitter(), {
@@ -33,6 +36,25 @@ const region = {
 };
 
 describe('Windows snapshot process boundary', () => {
+  it('accepts the Manager context directly and excludes only validated native handles', async () => {
+    const child = worker();
+    const provider = createWindowsSnapProvider();
+    const compatible: NonNullable<ScreenshotManagerOptions['getWindowSnapRegions']> =
+      provider;
+    const result = compatible(new AbortController().signal, undefined, {
+      excludedWindowHandles: ['101', '202'],
+    });
+    child.stdout.write('{"ready":true}\n');
+    await Promise.resolve();
+    expect(child.stdin.read().toString()).toBe('panel|101,202\n');
+    child.stdout.write('{"done":true}\n');
+    expect(await result).toEqual([]);
+    expect(() =>
+      provider(new AbortController().signal, undefined, {
+        excludedWindowHandles: ['1\nfine'],
+      })
+    ).toThrow(/handles/);
+  });
   it('prewarms once, streams bounds before completion, and takes a fresh snapshot on reuse', async () => {
     const child = worker();
     const diagnostics = vi.fn();
@@ -114,11 +136,18 @@ describe('Windows snapshot process boundary', () => {
   });
   beforeEach(() => {
     vi.useFakeTimers();
-    vi.mocked(screen.screenToDipRect).mockImplementation((_window, r) => ({
-      x: r.x / 1.5,
-      y: r.y / 1.5,
-      width: r.width / 1.5,
-      height: r.height / 1.5,
+    vi.mocked(screen.getAllDisplays).mockReturnValue([
+      {
+        id: 1,
+        scaleFactor: 1.5,
+        bounds: { x: -1000, y: 0, width: 2000, height: 1500 },
+      },
+    ] as never);
+    vi.mocked(screen.dipToScreenRect).mockImplementation((_window, r) => ({
+      x: r.x * 1.5,
+      y: r.y * 1.5,
+      width: r.width * 1.5,
+      height: r.height * 1.5,
     }));
   });
   afterEach(() => {
@@ -142,6 +171,7 @@ describe('Windows snapshot process boundary', () => {
     child.emit('close', 0);
     expect(await result).toEqual([
       {
+        displayId: '1',
         x: -200,
         y: 40,
         width: 400,
@@ -257,7 +287,7 @@ describe('Windows snapshot process boundary', () => {
     );
     child.emit('close', 0);
     expect((await result).filter((r) => r.kind === 'container')).toEqual([
-      expect.objectContaining({ width: 200, height: 140, controlType: 'Pane' }),
+      expect.objectContaining({ displayId: '1', controlType: 'Pane' }),
     ]);
   });
 

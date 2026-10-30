@@ -11,14 +11,17 @@ import type {
   TextElement,
   TextStyle,
 } from '../core/model/document.js';
-import type { ScreenshotInitializePayload } from '../electron/protocol/messages.js';
+import type {
+  ScreenshotInitializePayload,
+  ScreenshotSelectionPayload,
+} from '../electron/protocol/messages.js';
 import type {
   ScreenshotMessages,
   ScreenshotOptions,
   ScreenshotTool,
 } from '../types.js';
 import { drawCapturedFrame } from './capture-frame.js';
-import { resolveSnapRegions } from './snap-regions.js';
+import { findSnapRegion, resolveSnapRegions } from './snap-regions.js';
 import {
   calculateTextBaselinePosition,
   calculateTextFillBounds,
@@ -185,6 +188,10 @@ let configuredDefaultTool: AnnotationTool = 'select';
 let windowSnapRegions: Rect[] = [];
 let hoveredWindowSnap: Rect | null = null;
 let snapSession: ScreenshotInitializePayload | undefined;
+let liveSelection: ScreenshotSelectionPayload | undefined;
+let pendingOutputAction: 'save' | 'copy' | 'pin' | undefined;
+let editorPrepared = false;
+let cancelledJobId: string | undefined;
 let lastSnapPoint: Point | null = null;
 let pendingTextPoint: Point | null = null;
 let pendingTextViewportPoint: Point | null = null;
@@ -219,6 +226,7 @@ interface AnnotationCanvasRenderCache {
 
 /** 捕获帧加载完成后才开放选区和标注，确保三套坐标使用同一实际图片尺寸。 */
 async function initializeOverlay(payload: ScreenshotInitializePayload): Promise<void> {
+  if (payload.jobId === cancelledJobId) return;
   const frame = payload.frames[0];
   if (!frame) {
     window.snaporaOverlay.reportError({
@@ -230,7 +238,9 @@ async function initializeOverlay(payload: ScreenshotInitializePayload): Promise<
   }
 
   configuredDefaultTool = payload.options.defaultTool ?? 'select';
-  resetOverlaySession();
+  const fromLive = liveSelection?.jobId === payload.jobId && payload.initialSelection;
+  if (!fromLive) resetOverlaySession();
+  else frameLoadController?.abort();
   snapSession = payload;
   windowSnapRegions = resolveWindowSnapRegions(payload, frame.display.bounds);
   hoveredWindowSnap = null;
@@ -240,8 +250,8 @@ async function initializeOverlay(payload: ScreenshotInitializePayload): Promise<
   const controller = new AbortController();
   frameLoadController = controller;
   try {
-    // 先让透明全屏 Overlay 的 cursor:none 进入 Windows 合成器，再采集桌面首帧。
-    await waitForCompositeFrames();
+    // Frozen windows need their first composition; live selection is already visible and capture-protected.
+    if (!fromLive) await waitForCompositeFrames();
     if (controller.signal.aborted) {
       return;
     }
@@ -261,14 +271,34 @@ async function initializeOverlay(payload: ScreenshotInitializePayload): Promise<
     annotationCanvas.width = pixelSize.width;
     annotationCanvas.height = pixelSize.height;
     selectionStore.dispatch({ type: 'image-ready' });
+    liveSelection = undefined;
+    delete surface.dataset.live;
+    if (payload.initialSelection) {
+      selectionStore.dispatch({
+        type: 'restore-selection',
+        selection: payload.initialSelection,
+      });
+      annotationStore.initialize(
+        viewportRectToImageRect(payload.initialSelection, getSurfaceSize(), pixelSize),
+        fromLive ? annotationStore.getState().activeTool : configuredDefaultTool
+      );
+      resetAnnotationsAfterSelection = false;
+    }
     // 缓存窗口可能仍保留上一帧合成结果；仅在新图和空画布都准备好后才解除渲染层隐藏。
     screenFrame.hidden = false;
     annotationCanvas.hidden = false;
     // 图片解码后保留两次合成机会，但共享一个截止时间，避免透明窗口被节流时串行等待。
     screenFrame.getBoundingClientRect();
     await waitForCompositeFrames();
+    if (controller.signal.aborted) return;
     window.focus();
     window.snaporaOverlay.prepared(payload.jobId);
+    editorPrepared = true;
+    if (pendingOutputAction) {
+      const action = pendingOutputAction;
+      pendingOutputAction = undefined;
+      void confirmCapture(action);
+    }
   } catch (error) {
     if (controller.signal.aborted) {
       return;
@@ -313,6 +343,10 @@ function resetOverlaySession(): void {
   hoveredWindowSnap = null;
   pendingTextPoint = null;
   snapSession = undefined;
+  liveSelection = undefined;
+  pendingOutputAction = undefined;
+  editorPrepared = false;
+  delete surface.dataset.live;
   lastSnapPoint = null;
   pendingTextViewportPoint = null;
   outputFeedback = null;
@@ -344,12 +378,39 @@ function resetOverlaySession(): void {
   watermarkOpacityOutput.value = `${watermarkOpacityInput.value}%`;
   copyFeedback.hidden = true;
   delete annotationCanvas.dataset.canMove;
+  annotationCanvas.style.cursor = '';
   delete document.documentElement.dataset.snaporaFeedback;
   delete document.documentElement.dataset.tooltipPointer;
 }
 
 window.snaporaOverlay.onInitialize((payload) => {
   void initializeOverlay(payload);
+});
+window.snaporaOverlay.onReset(resetOverlaySession);
+window.snaporaOverlay.onSelectInitialize((payload) => {
+  if (payload.jobId === cancelledJobId) return;
+  resetOverlaySession();
+  liveSelection = payload;
+  surface.dataset.live = 'true';
+  configuredDefaultTool = payload.options.defaultTool ?? 'select';
+  annotationStore.setTool(configuredDefaultTool);
+  applyTheme(payload.options);
+  applyLocale(payload.options);
+  applyToolAvailability(payload.options.tools);
+  const geometryOnly: ScreenshotInitializePayload = { ...payload, frames: [] };
+  snapSession = geometryOnly;
+  windowSnapRegions = resolveSnapRegions(
+    payload.windowSnapRegions,
+    payload.display.bounds,
+    payload.display.id
+  );
+  selectionStore.dispatch({ type: 'initialize', payload: geometryOnly });
+  // A transparent 1px canvas receives input without allocating a desktop-sized bitmap.
+  annotationCanvas.width = 1;
+  annotationCanvas.height = 1;
+  annotationCanvas.hidden = false;
+  selectionStore.dispatch({ type: 'image-ready' });
+  window.snaporaOverlay.selectionReady(payload.jobId);
 });
 window.snaporaOverlay.onSnapRegions((payload) => {
   if (
@@ -360,7 +421,8 @@ window.snaporaOverlay.onSnapRegions((payload) => {
     return;
   windowSnapRegions = resolveSnapRegions(
     payload.regions,
-    snapSession.frames[0]!.display.bounds
+    liveSelection?.display.bounds ?? snapSession.frames[0]!.display.bounds,
+    liveSelection?.display.id ?? snapSession.frames[0]!.display.id
   );
   // A pointer-down freezes its candidate. Late UIA updates only affect idle hover.
   if (!pointerInteraction && selectionStore.getState().phase === 'ready')
@@ -394,6 +456,7 @@ annotationStore.subscribe(render);
 
 /** 鼠标按压拖离时隐藏所有气泡；键盘焦点仍由 :focus-visible 提供提示。 */
 function setTooltipPointerState(active: boolean): void {
+  if ((document.documentElement.dataset.tooltipPointer === 'down') === active) return;
   if (active) {
     document.documentElement.dataset.tooltipPointer = 'down';
   } else {
@@ -423,6 +486,9 @@ annotationCanvas.addEventListener('pointerdown', handleCanvasPointerDown);
 annotationCanvas.addEventListener('pointermove', handleCanvasPointerMove);
 annotationCanvas.addEventListener('pointerup', handleCanvasPointerEnd);
 annotationCanvas.addEventListener('pointercancel', handleCanvasPointerEnd);
+// A captured drag can end outside the canvas (including beyond this monitor's edge).
+window.addEventListener('pointerup', handleCanvasPointerEnd);
+window.addEventListener('pointercancel', handleCanvasPointerEnd);
 annotationCanvas.addEventListener('dblclick', handleCanvasDoubleClick);
 annotationCanvas.addEventListener('pointerleave', () => {
   if (!pointerInteraction) {
@@ -603,6 +669,13 @@ function handleShortcut(event: {
   stopPropagation?: () => void;
   target?: EventTarget | null;
 }): void {
+  if (liveSelection) {
+    if (event.key === 'Escape') {
+      event.preventDefault?.();
+      void cancelCapture();
+    }
+    return;
+  }
   if (selectionStore.getState().phase === 'exporting') {
     return;
   }
@@ -696,7 +769,12 @@ window.snaporaOverlay.ready();
 
 function handleCanvasPointerDown(event: PointerEvent): void {
   const phase = selectionStore.getState().phase;
-  if (event.button !== 0 || phase === 'waiting' || phase === 'exporting') {
+  if (
+    event.button !== 0 ||
+    phase === 'waiting' ||
+    phase === 'exporting' ||
+    phase === 'capturing'
+  ) {
     return;
   }
   // textarea 会被下一次文字点击复用，必须在清空并移动它之前提交当前内容。
@@ -705,12 +783,16 @@ function handleCanvasPointerDown(event: PointerEvent): void {
   }
   event.stopPropagation();
   delete annotationCanvas.dataset.canMove;
+  // Clear idle hover overrides so a new selection drag gets its selection cursor.
+  annotationCanvas.style.cursor = '';
   if (event.isTrusted) {
     annotationCanvas.setPointerCapture(event.pointerId);
   }
 
   const viewportPoint = toSurfacePoint(event);
   const selection = selectionStore.getState().selection;
+  // A click may arrive before the first mousemove; resolve its candidate at the actual press point.
+  if (phase === 'ready') updateWindowSnapPreview(viewportPoint);
   if (!selection || !containsPoint(selection, viewportPoint)) {
     if (
       !selection &&
@@ -904,6 +986,17 @@ function handleCanvasPointerEnd(event: PointerEvent): void {
   if (!interaction || interaction.pointerId !== event.pointerId) {
     return;
   }
+  if (liveSelection && event.type === 'pointercancel') {
+    pointerInteraction = null;
+    selectionStore.dispatch({
+      type: 'initialize',
+      payload: { ...liveSelection, frames: [] },
+    });
+    selectionStore.dispatch({ type: 'image-ready' });
+    if (annotationCanvas.hasPointerCapture(event.pointerId))
+      annotationCanvas.releasePointerCapture(event.pointerId);
+    return;
+  }
 
   if (interaction.kind === 'selection') {
     finishSelection(event.pointerId);
@@ -952,6 +1045,11 @@ function handleCanvasPointerEnd(event: PointerEvent): void {
 }
 
 function handleCanvasDoubleClick(event: MouseEvent): void {
+  if (liveSelection && selectionStore.getState().phase === 'capturing') {
+    event.preventDefault();
+    pendingOutputAction ??= 'copy';
+    return;
+  }
   if (event.button !== 0) {
     return;
   }
@@ -1091,7 +1189,7 @@ function beginDirectElementMove(pointerId: number, imagePoint: Point): boolean {
  * 鼠标在画布上悬浮移动时的光标反馈：
  * 1. 悬浮在当前选中元素的四个 Resize 控制点上时，呈现对应的 resize 光标；
  * 2. 悬浮在已有标注轮廓边线上时，呈现 move 光标，提示可点击选中并拖拽；
- * 3. 悬浮在空白区域时，恢复当前工具的默认光标。
+ * 3. 选区外显示箭头，选区内空白恢复当前工具的默认光标。
  */
 function updateDirectMoveHover(viewportPoint: Point | null): void {
   const selectionState = selectionStore.getState();
@@ -1101,10 +1199,22 @@ function updateDirectMoveHover(viewportPoint: Point | null): void {
     !viewportPoint ||
     selectionState.phase !== 'selected' ||
     !selection ||
-    !containsPoint(selection, viewportPoint)
+    !containsPoint(selection, viewportPoint) ||
+    (!annotationState.document?.elements.length &&
+      !annotationState.draft &&
+      !annotationState.preview)
   ) {
-    delete annotationCanvas.dataset.canMove;
-    annotationCanvas.style.cursor = '';
+    if (annotationCanvas.dataset.canMove !== undefined)
+      delete annotationCanvas.dataset.canMove;
+    const cursor =
+      viewportPoint &&
+      selectionState.phase === 'selected' &&
+      selection &&
+      !containsPoint(selection, viewportPoint)
+        ? 'default'
+        : '';
+    if (annotationCanvas.style.cursor !== cursor)
+      annotationCanvas.style.cursor = cursor;
     return;
   }
 
@@ -1187,6 +1297,23 @@ function endSelectionPointer(event: PointerEvent): void {
 function finishSelection(pointerId: number): void {
   selectionStore.dispatch({ type: 'end-interaction', pointerId });
   const selection = selectionStore.getState().selection;
+  if (liveSelection && selection) {
+    selectionStore.dispatch({ type: 'capture-selection' });
+    const payload = {
+      jobId: liveSelection.jobId,
+      displayId: liveSelection.display.id,
+      selection,
+    };
+    // 工具栏先完成合成，再启动选后采集；实时路径在采集端排除光标。
+    void waitForCompositeFrames().then(() => {
+      if (
+        liveSelection?.jobId === payload.jobId &&
+        selectionStore.getState().phase === 'capturing'
+      )
+        window.snaporaOverlay.selected(payload);
+    });
+    return;
+  }
   const frame = selectionStore.getState().payload?.frames[0];
   if (!selection || !frame) {
     return;
@@ -1483,8 +1610,11 @@ function parseCssPixels(value: string): number {
 async function cancelCapture(): Promise<void> {
   const jobId = selectionStore.getState().payload?.jobId;
   if (jobId) {
+    const live = selectionStore.getState().payload?.options.interactionMode === 'live';
+    cancelledJobId = jobId;
     resetOverlaySession();
-    await waitForCompositeFrames();
+    // Live capture may still be waiting for its first frame: cancel ownership immediately.
+    if (!live) await waitForCompositeFrames();
     window.snaporaOverlay.cancel(jobId);
   }
 }
@@ -1493,6 +1623,10 @@ async function confirmCapture(
   outputAction: 'save' | 'copy' | 'pin' = 'copy'
 ): Promise<void> {
   const state = selectionStore.getState();
+  if (!editorPrepared) {
+    if (state.selection) pendingOutputAction ??= outputAction;
+    return;
+  }
   const frame = state.payload?.frames[0];
   if (!state.payload || !frame || !state.selection || state.phase !== 'selected') {
     return;
@@ -1599,7 +1733,11 @@ function render(): void {
   }
   // 正在导出/准备写入剪切板时，立即隐藏选区选择框及其手柄，避免用户产生“未双击成功/还可拖拽”的卡顿感
   selectionElement.hidden = selection === null || selectionState.phase === 'exporting';
-  toolbar.hidden = selectionState.phase !== 'selected';
+  // Geometry is enough to place the toolbar. Output requests wait for editorPrepared; drawing waits for pixels.
+  const capturingSelection =
+    Boolean(liveSelection) && selectionState.phase === 'capturing';
+  toolbar.hidden = selectionState.phase !== 'selected' && !capturingSelection;
+  toolbar.setAttribute('aria-busy', String(capturingSelection));
 
   const showPhaseStatus = selectionState.phase === 'ready';
   status.hidden = !showPhaseStatus && !outputFeedback;
@@ -1615,7 +1753,7 @@ function render(): void {
     const imageRect = frame
       ? viewportRectToImageRect(selection, getSurfaceSize(), frame.pixelSize)
       : selection;
-    sizeHint.value = `${imageRect.width} × ${imageRect.height}`;
+    sizeHint.value = `${Math.round(imageRect.width)} × ${Math.round(imageRect.height)}`;
     if (!toolbar.hidden) {
       const positionKey = [
         selection.x,
@@ -1805,8 +1943,8 @@ function setRectStyle(element: HTMLElement, rect: Rect): void {
 }
 
 function toSurfacePoint(event: MouseEvent): Point {
-  const bounds = surface.getBoundingClientRect();
-  return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+  // capture-surface 固定铺满视口、没有偏移；不要在每次鼠标移动时强制读取布局。
+  return { x: event.clientX, y: event.clientY };
 }
 
 function toImagePoint(point: Point): Point {
@@ -1859,7 +1997,11 @@ function updateWindowSnapPreview(point: Point | null): void {
   lastSnapPoint = point;
   const next =
     point && selectionStore.getState().phase === 'ready'
-      ? (windowSnapRegions.find((region) => containsPoint(region, point)) ?? null)
+      ? findSnapRegion(
+          windowSnapRegions,
+          point,
+          liveSelection ? getSurfaceBounds() : undefined
+        )
       : null;
   if (next === hoveredWindowSnap) {
     return;
@@ -1873,7 +2015,11 @@ function resolveWindowSnapRegions(
   payload: ScreenshotInitializePayload,
   displayBounds: Rect
 ): Rect[] {
-  return resolveSnapRegions(payload.windowSnapRegions ?? [], displayBounds);
+  return resolveSnapRegions(
+    payload.windowSnapRegions ?? [],
+    displayBounds,
+    payload.frames[0]?.display.id
+  );
 }
 
 function containsPoint(rect: Rect, point: Point): boolean {

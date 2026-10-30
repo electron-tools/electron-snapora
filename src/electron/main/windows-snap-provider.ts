@@ -2,12 +2,13 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { join } from 'node:path';
 import { env, platform } from 'node:process';
 import { screen } from 'electron';
-import type { ScreenshotSnapRegion } from '../../types.js';
+import type { ScreenshotSnapRegion, ScreenshotSnapContext } from '../../types.js';
 import {
   filterWindowsSnapRegions,
   type WindowsSnapCandidate,
   type WindowsSnapGranularity,
 } from './windows-snap-policy.js';
+import { splitWindowsSnapCandidate } from './windows-snap-geometry.js';
 
 export interface WindowsSnapDiagnostic {
   granularity: WindowsSnapGranularity;
@@ -130,12 +131,33 @@ export function createWindowsSnapProvider(options: WindowsSnapProviderOptions = 
   const provider = (
     signal: AbortSignal,
     onUpdate?: Update,
-    granularity = defaultGranularity
+    granularityOrContext:
+      WindowsSnapGranularity | ScreenshotSnapContext = defaultGranularity,
+    context?: ScreenshotSnapContext
   ): Promise<ScreenshotSnapRegion[]> => {
+    // The third argument is also the Manager callback context; direct provider assignment remains supported.
+    const granularity =
+      typeof granularityOrContext === 'string'
+        ? granularityOrContext
+        : defaultGranularity;
+    const requestContext =
+      typeof granularityOrContext === 'string' ? context : granularityOrContext;
     validateGranularity(granularity);
+    const excluded = requestContext?.excludedWindowHandles ?? [];
+    if (
+      excluded.length > 64 ||
+      !excluded.every((handle) => /^[0-9]{1,19}$/.test(handle))
+    )
+      throw new TypeError('Invalid excluded window handles.');
     if (platform !== 'win32' || signal.aborted || disposed) return Promise.resolve([]);
     if (active)
       return Promise.reject(new Error('Windows snap provider is already capturing.'));
+    const displays = screen.getAllDisplays().map((display) => ({
+      id: String(display.id),
+      bounds: display.bounds,
+      physicalBounds: screen.dipToScreenRect(null, display.bounds),
+      scaleFactor: display.scaleFactor,
+    }));
     const started = Date.now();
     const warm = worker?.ready ?? false;
     let target: Worker;
@@ -227,25 +249,27 @@ export function createWindowsSnapProvider(options: WindowsSnapProviderOptions = 
             ['Custom', 'ListItem'].includes(raw.controlType as string)
           )
             return;
-          // Use Electron's monitor-aware conversion, including negative monitor origins.
-          const bounds = screen.screenToDipRect(null, {
-            x: Math.round(raw.x as number),
-            y: Math.round(raw.y as number),
-            width: Math.round(raw.width as number),
-            height: Math.round(raw.height as number),
-          });
-          const key = `${raw.windowZOrder}:${bounds.x},${bounds.y},${bounds.width},${bounds.height}`;
-          if (keys.has(key)) return;
-          keys.add(key);
-          regions.push({
-            ...bounds,
-            windowZOrder: raw.windowZOrder as number,
-            kind: raw.kind as 'window' | 'container',
-            sourceProcessId: raw.processId as number,
-            ...(typeof raw.controlType === 'string'
-              ? { controlType: raw.controlType }
-              : {}),
-          });
+          const pieces = splitWindowsSnapCandidate(
+            {
+              x: raw.x as number,
+              y: raw.y as number,
+              width: raw.width as number,
+              height: raw.height as number,
+              windowZOrder: raw.windowZOrder as number,
+              kind: raw.kind as 'window' | 'container',
+              sourceProcessId: raw.processId as number,
+              ...(typeof raw.controlType === 'string'
+                ? { controlType: raw.controlType }
+                : {}),
+            },
+            displays
+          );
+          for (const piece of pieces) {
+            const key = `${piece.displayId}:${piece.windowZOrder}:${piece.x},${piece.y},${piece.width},${piece.height}`;
+            if (keys.has(key) || regions.length >= 4096) continue;
+            keys.add(key);
+            regions.push(piece);
+          }
 
           if (
             raw.kind === 'container' &&
@@ -266,7 +290,9 @@ export function createWindowsSnapProvider(options: WindowsSnapProviderOptions = 
           finish('failed');
           return;
         }
-        target.child.stdin.write(granularity + '\n');
+        target.child.stdin.write(
+          granularity + (excluded.length ? '|' + excluded.join(',') : '') + '\n'
+        );
       });
     });
   };

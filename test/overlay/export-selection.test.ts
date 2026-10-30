@@ -145,65 +145,72 @@ describe('captured frame canvas', () => {
     expect(drawImage).toHaveBeenCalledWith(expect.any(ImageMock), 0, 0, 800, 600);
   });
 
-  it('draws a desktop video frame and always stops its stream', async () => {
-    const drawImage = vi.fn();
-    const canvas = {
-      width: 0,
-      height: 0,
-      getContext: vi.fn(() => ({ drawImage })),
-    } as unknown as HTMLCanvasElement;
-    const stop = vi.fn();
-    const stream = {
-      getTracks: () => [{ stop }],
-    } as unknown as MediaStream;
-    const video = {
-      muted: false,
-      playsInline: false,
-      srcObject: null,
-      videoWidth: 800,
-      videoHeight: 600,
-      play: vi.fn(async () => undefined),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      requestVideoFrameCallback: vi.fn((callback: VideoFrameRequestCallback) => {
-        queueMicrotask(() => callback(0, {} as VideoFrameCallbackMetadata));
-        return 1;
-      }),
-      cancelVideoFrameCallback: vi.fn(),
-    } as unknown as HTMLVideoElement;
-    const getUserMedia = vi.fn(async () => stream);
-    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } });
-    vi.stubGlobal('document', { createElement: vi.fn(() => video) });
+  it.each([1, 2])(
+    'draws a desktop frame at readyState %i without waiting past available data',
+    async (readyState) => {
+      const drawImage = vi.fn();
+      const canvas = {
+        width: 0,
+        height: 0,
+        getContext: vi.fn(() => ({ drawImage })),
+      } as unknown as HTMLCanvasElement;
+      const stop = vi.fn();
+      const stream = {
+        getTracks: () => [{ stop }],
+      } as unknown as MediaStream;
+      const video = {
+        muted: false,
+        playsInline: false,
+        srcObject: null,
+        videoWidth: 800,
+        videoHeight: 600,
+        readyState,
+        play: vi.fn(async () => undefined),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        requestVideoFrameCallback: vi.fn((callback: VideoFrameRequestCallback) => {
+          queueMicrotask(() => callback(0, {} as VideoFrameCallbackMetadata));
+          return 1;
+        }),
+        cancelVideoFrameCallback: vi.fn(),
+      } as unknown as HTMLVideoElement;
+      const getUserMedia = vi.fn(async () => stream);
+      vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } });
+      vi.stubGlobal('document', { createElement: vi.fn(() => video) });
 
-    const pixelSize = await drawCapturedFrame(canvas, {
-      kind: 'desktop-source',
-      display: {
-        id: '10',
-        bounds: { x: 0, y: 0, width: 800, height: 600 },
-        scaleFactor: 1,
-      },
-      sourceId: 'screen:10:0',
-      pixelSize: { width: 801, height: 601 },
-    });
-
-    expect(getUserMedia).toHaveBeenCalledWith({
-      audio: false,
-      video: {
-        cursor: 'never',
-        mandatory: {
-          chromeMediaSource: 'desktop',
-          chromeMediaSourceId: 'screen:10:0',
-          maxWidth: 801,
-          maxHeight: 601,
+      const pixelSize = await drawCapturedFrame(canvas, {
+        kind: 'desktop-source',
+        display: {
+          id: '10',
+          bounds: { x: 0, y: 0, width: 800, height: 600 },
+          scaleFactor: 1,
         },
-      },
-    });
-    expect(drawImage).toHaveBeenCalledWith(video, 0, 0, 800, 600);
-    expect(pixelSize).toEqual({ width: 800, height: 600 });
-    expect(canvas).toMatchObject({ width: 800, height: 600 });
-    expect(stop).toHaveBeenCalledOnce();
-    expect(video.srcObject).toBeNull();
-  });
+        sourceId: 'screen:10:0',
+        pixelSize: { width: 801, height: 601 },
+      });
+
+      expect(getUserMedia).toHaveBeenCalledWith({
+        audio: false,
+        video: {
+          cursor: 'never',
+          mandatory: {
+            chromeMediaSource: 'desktop',
+            chromeMediaSourceId: 'screen:10:0',
+            maxWidth: 801,
+            maxHeight: 601,
+          },
+        },
+      });
+      expect(drawImage).toHaveBeenCalledWith(video, 0, 0, 800, 600);
+      expect(pixelSize).toEqual({ width: 800, height: 600 });
+      expect(canvas).toMatchObject({ width: 800, height: 600 });
+      expect(stop).toHaveBeenCalledOnce();
+      expect(video.srcObject).toBeNull();
+      expect(video.requestVideoFrameCallback).toHaveBeenCalledTimes(
+        readyState >= 2 ? 0 : 1
+      );
+    }
+  );
 
   it('stops the desktop stream when first-frame playback times out', async () => {
     vi.useFakeTimers();

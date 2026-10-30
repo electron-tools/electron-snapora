@@ -10,6 +10,8 @@ export interface ScreenshotBounds {
 
 /** Screen DIP candidate; lower z-order wins before comparing container sizes. */
 export interface ScreenshotSnapRegion extends ScreenshotBounds {
+  /** Optional target display for native candidates split across mixed-DPI monitors. */
+  displayId?: string;
   windowZOrder?: number;
   kind?: 'window' | 'container';
   /** Native provenance for diagnostics; no application content is included. */
@@ -87,6 +89,8 @@ export interface ScreenshotTheme {
 
 export interface ScreenshotOptions {
   display?: 'cursor' | 'primary' | string;
+  /** Windows live selection captures only after selection; frozen preserves the original flow. */
+  interactionMode?: 'frozen' | 'live';
   tools?: ScreenshotTool[];
   defaultTool?: 'select' | ScreenshotTool;
   /** 复制成功后是否显示提示，默认关闭；传 true 开启。 */
@@ -94,6 +98,11 @@ export interface ScreenshotOptions {
   locale?: ScreenshotLocale;
   messages?: ScreenshotMessageOverrides;
   theme?: ScreenshotTheme;
+}
+
+/** Native handles of our own interaction overlays; never exclude the entire host process. */
+export interface ScreenshotSnapContext {
+  excludedWindowHandles: string[];
 }
 
 export type ScreenshotErrorCode =

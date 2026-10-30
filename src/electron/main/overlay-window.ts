@@ -6,6 +6,7 @@ import type {
   CaptureDisplay,
   ScreenshotInitializePayload,
   ScreenshotSnapRegionsPayload,
+  ScreenshotSelectionPayload,
 } from '../protocol/messages.js';
 import { OVERLAY_CHANNELS } from '../protocol/channels.js';
 import {
@@ -34,6 +35,8 @@ export type OverlayBrowserWindow = Pick<
   | 'show'
   | 'showInactive'
 > & {
+  setContentProtection?: (enabled: boolean) => void;
+  getNativeWindowHandle?: () => Buffer;
   webContents: Pick<WebContents, 'id' | 'on' | 'removeListener' | 'send'> & {
     focus?: () => void;
   };
@@ -57,6 +60,8 @@ export interface ScreenshotOverlayWindow {
   load(): Promise<void>;
   sendInitialize(payload: ScreenshotInitializePayload): void;
   sendSnapRegions?(payload: ScreenshotSnapRegionsPayload): void;
+  readonly nativeHandle?: string;
+  showSelection?(payload: ScreenshotSelectionPayload, focus: boolean): void;
   prime(): void;
   reveal(): void;
   hide?(): void;
@@ -147,6 +152,26 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
     return this.#window.webContents.id;
   }
 
+  get nativeHandle(): string {
+    const handle = this.#window.getNativeWindowHandle?.();
+    return handle
+      ? (handle.length === 8
+          ? handle.readBigUInt64LE()
+          : BigInt(handle.readUInt32LE())
+        ).toString()
+      : '0';
+  }
+
+  /** Display the live UI without a captured bitmap; protect it before its first composition. */
+  showSelection(payload: ScreenshotSelectionPayload, focus: boolean): void {
+    if (this.#platform !== 'win32' || !this.#window.setContentProtection)
+      throw new Error('Live selection requires Windows capture exclusion.');
+    this.#window.setContentProtection(true);
+    this.#window.webContents.send(OVERLAY_CHANNELS.selectInitialize, payload);
+    this.prime();
+    if (focus) this.reveal();
+  }
+
   get rendererReady(): boolean {
     return this.#rendererReady;
   }
@@ -222,6 +247,7 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
       this.#window.setOpacity(0);
     }
     this.#window.hide();
+    this.#window.webContents.send(OVERLAY_CHANNELS.reset);
   }
 
   /** 复制完成后隐藏全屏截图层，改用独立的小窗口显示鼠标穿透提示。 */

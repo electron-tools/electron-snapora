@@ -125,6 +125,11 @@ function waitForFirstVideoFrame(
   deadline: number,
   signal?: AbortSignal
 ): Promise<void> {
+  if (signal?.aborted) return Promise.reject(createAbortError());
+  // play() can resolve with a drawable frame already buffered (HAVE_CURRENT_DATA = 2).
+  // Waiting for another frame adds latency and may time out on a static desktop.
+  if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0)
+    return Promise.resolve();
   return new Promise((resolve, reject) => {
     let frameCallbackId: number | undefined;
     const cleanup = () => {
