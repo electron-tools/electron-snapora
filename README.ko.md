@@ -20,6 +20,20 @@
   <img src="./docs/assets/preview.jpg" alt="electron-snapora preview" width="800" />
 </p>
 
+## 1.0.26 업그레이드: 호스트 설정
+
+기존 정지 화면 단일 모니터 캡처에는 새로운 필수 인자가 없습니다. 패키지만 업데이트하면 실시간 선택이나 스냅이 자동으로 켜지지 않습니다.
+
+| 목적 | 호스트 설정 |
+| --- | --- |
+| 다중 화면 실시간 선택 | Windows 10 2004+ / macOS 14+에서 `capture({ interactionMode: 'live', display: 'all' })`를 호출합니다. 미지원 환경은 `frozen` + `cursor`를 유지합니다. |
+| 자동 스냅 | 메인 프로세스에서 `createWindowsSnapProvider(...)` / `createMacSnapProvider(...)`를 생성하고 `setupElectronSnapora({ ipcMain, managerOptions: { getWindowSnapRegions: provider } })`에 전달합니다. `ScreenshotManager`에는 `{ getWindowSnapRegions: provider }`를 직접 전달합니다. provider가 없으면 수동 선택만 가능합니다. |
+| 전체 창만 스냅 | provider 생성 시 `{ granularity: 'window' }`를 명시합니다. API 기본값은 창 내부 영역을 선택하는 `panel`이며, `fine`은 더 작은 영역을 선택합니다. |
+| macOS 권한 | `macProvider.getPermissions()`로 조회하고 사용자의 권한 허용 동작 후 `getPermissions(true)`를 호출한 다음 다시 조회합니다. live 캡처에는 화면 기록, AX 컨테이너에는 손쉬운 사용 권한이 필요합니다. 모든 캡처에 두 권한을 요구하려면 호스트가 직접 차단해야 합니다. 라이브러리는 이 정책이나 권한 UI를 자동 제공하지 않습니다. |
+| 앱 패키징 | `node_modules/electron-snapora/dist/native/**`를 ASAR 밖으로 풀고 호스트 서명을 적용합니다. 표준 npm 배치에는 helper 경로 인자가 필요 없습니다. 경로를 옮기면 아래 `extraResources` 설정을 따르세요. |
+
+provider는 메인 프로세스에서 한 번 생성하여 재사용하고 종료 시 `dispose()`를 호출합니다. `prepare()`는 선택적인 사전 실행입니다. demo 객체, DOM, 창 목록, 권한 불리언은 전달할 필요가 없습니다. 전체 연결, 권한 브리지 및 서명 예제는 아래 실시간 선택 섹션에 있습니다.
+
 ## 주요 기능
 
 - Windows 10 2004+ / macOS 14+의 다중 화면 실시간 선택. 영역 확정 후 화면을 캡처합니다.

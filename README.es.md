@@ -20,6 +20,20 @@ Una biblioteca de capturas de pantalla para Electron con configuración en una l
   <img src="./docs/assets/preview.jpg" alt="electron-snapora preview" width="800" />
 </p>
 
+## Actualización a 1.0.26: configuración del host
+
+La captura congelada de una sola pantalla no tiene nuevos argumentos obligatorios. Actualizar el paquete no activa automáticamente la selección en vivo ni el ajuste automático.
+
+| Objetivo | Configuración del host |
+| --- | --- |
+| Selección en vivo en varias pantallas | Llama a `capture({ interactionMode: 'live', display: 'all' })` en Windows 10 2004+ / macOS 14+. Conserva `frozen` + `cursor` en plataformas no compatibles. |
+| Ajuste automático | Crea `createWindowsSnapProvider(...)` / `createMacSnapProvider(...)` en el proceso principal y pásalo a `setupElectronSnapora({ ipcMain, managerOptions: { getWindowSnapRegions: provider } })`. Con `ScreenshotManager`, pasa directamente `{ getWindowSnapRegions: provider }`. Sin provider se puede seleccionar manualmente, pero no hay ajuste automático. |
+| Solo ventanas completas | Crea el provider con `{ granularity: 'window' }` explícitamente. El valor predeterminado de la API es `panel`, que puede seleccionar una parte de la ventana; `fine` selecciona regiones más pequeñas. |
+| Permisos de macOS | Consulta `macProvider.getPermissions()`, llama a `getPermissions(true)` tras una acción de autorización del usuario y vuelve a consultar. La captura live necesita grabación de pantalla; los contenedores AX necesitan accesibilidad. Si el producto exige ambos permisos antes de cualquier captura, el host debe aplicar esa política. La biblioteca no impone esa restricción ni incluye una interfaz de permisos. |
+| Aplicación empaquetada | Extrae `node_modules/electron-snapora/dist/native/**` fuera de ASAR y aplica la firma del host. La estructura npm estándar no necesita un argumento de ruta del helper; para otras ubicaciones, consulta las instrucciones de `extraResources` más abajo. |
+
+Crea y reutiliza el provider en el proceso principal y llama a `dispose()` al cerrar. `prepare()` es un precalentamiento opcional. No es necesario pasar objetos del demo, nodos DOM, listas de ventanas ni booleanos de permisos. Los ejemplos completos de integración, puente de permisos y firma están en la sección de selección en varias pantallas más abajo.
+
 ## Características principales
 
 - Selección en varias pantallas en Windows 10 2004+ y macOS 14+, con captura después de confirmar el área.

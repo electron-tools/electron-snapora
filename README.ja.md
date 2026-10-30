@@ -20,6 +20,20 @@
   <img src="./docs/assets/preview.jpg" alt="electron-snapora preview" width="800" />
 </p>
 
+## 1.0.26 への更新：ホスト側の設定
+
+従来の静止画・単一画面キャプチャに新しい必須引数はありません。パッケージの更新だけではライブ選択や吸着は有効になりません。
+
+| 目的 | ホスト側の設定 |
+| --- | --- |
+| 複数画面のライブ選択 | Windows 10 2004+ / macOS 14+ で `capture({ interactionMode: 'live', display: 'all' })` を呼び出します。非対応環境では `frozen` + `cursor` を使用します。 |
+| 自動吸着 | メインプロセスで `createWindowsSnapProvider(...)` / `createMacSnapProvider(...)` を作成し、`setupElectronSnapora({ ipcMain, managerOptions: { getWindowSnapRegions: provider } })` に渡します。`ScreenshotManager` には直接 `{ getWindowSnapRegions: provider }` を渡します。provider がなければ手動選択のみ可能です。 |
+| ウィンドウ全体だけに吸着 | provider に `{ granularity: 'window' }` を明示します。API の既定値は内部領域を選ぶ `panel`、さらに細かい設定は `fine` です。 |
+| macOS の権限 | `macProvider.getPermissions()` で確認し、ユーザーの許可操作後に `getPermissions(true)` を呼び、再確認します。live キャプチャには画面収録、AX コンテナーにはアクセシビリティ権限が必要です。両方の許可をすべてのキャプチャの条件にする場合は、ホスト側で制御してください。ライブラリはその制限や許可 UI を自動提供しません。 |
+| アプリの配布 | `node_modules/electron-snapora/dist/native/**` を ASAR の外に展開し、ホスト側で署名します。標準 npm 配置では helper パスの指定は不要です。移動する場合は後述の `extraResources` 設定を参照してください。 |
+
+provider はメインプロセスで一度作成して再利用し、終了時に `dispose()` を呼びます。`prepare()` は任意の事前起動です。demo オブジェクト、DOM、ウィンドウ一覧、権限の真偽値を渡す必要はありません。詳細な接続・権限ブリッジ・署名の例は後述のライブ選択セクションにあります。
+
 ## 主な機能
 
 - Windows 10 2004+ / macOS 14+ の複数画面ライブ選択。範囲を確定してから画像を取得します。

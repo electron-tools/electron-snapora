@@ -17,6 +17,10 @@ All notable changes to this project will be documented in this file.
 
 - Improve mixed-DPI selection accuracy, keep the selection visible while saving, and preserve all four selection borders at screen edges.
 
+### Integration
+
+- Existing capture calls remain valid. Enable live multi-display selection with `interactionMode: 'live', display: 'all'`; inject `managerOptions.getWindowSnapRegions` for snapping and set provider `granularity: 'window'` for whole windows. Hosts handle macOS permissions and unpack native helpers from ASAR; see the README upgrade checklist.
+
 ## [1.0.25] - 2026-10-17
 
 ### Fixed

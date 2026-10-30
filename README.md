@@ -20,6 +20,20 @@ An easy-to-integrate Electron screenshot plugin with one-call setup and secure P
   <img src="./docs/assets/preview.jpg" alt="electron-snapora preview" width="800" />
 </p>
 
+## Upgrading to 1.0.26: host configuration
+
+Existing frozen, single-display captures have no new required arguments. Upgrading the package alone does not enable live selection or snapping.
+
+| Goal | Host configuration |
+| --- | --- |
+| Live selection across displays | Call `capture({ interactionMode: 'live', display: 'all' })` on Windows 10 2004+ / macOS 14+. Keep `frozen` + `cursor` on unsupported platforms. |
+| Automatic snapping | Create `createWindowsSnapProvider(...)` / `createMacSnapProvider(...)` in the main process and pass it to `setupElectronSnapora({ ipcMain, managerOptions: { getWindowSnapRegions: provider } })`. With `ScreenshotManager`, pass `{ getWindowSnapRegions: provider }` directly. Without a provider, manual selection works but automatic snapping is disabled. |
+| Whole-window snapping only | Explicitly create the provider with `{ granularity: 'window' }`. The API default is `panel`, which can select part of a window; `fine` selects smaller regions. |
+| macOS permissions | Query `macProvider.getPermissions()`, call `getPermissions(true)` after a user authorization action, then query again before deciding to capture. Live capture needs screen recording; AX containers need accessibility. Hosts that require both before any capture must enforce that policy themselves; the library supplies neither that restriction nor permission UI. |
+| Packaged applications | Unpack `node_modules/electron-snapora/dist/native/**` from ASAR and apply host signing. Standard npm layouts need no helper path argument; see the custom `extraResources` instructions below for relocated helpers. |
+
+Create and reuse the provider in the main process, and call `dispose()` on shutdown. `prepare()` is optional prewarming. Do not pass demo objects, DOM nodes, window lists, or permission booleans. Complete main-process, preload, permission-bridge, and signing examples follow under “Live selection, container snapping, and host permissions”.
+
 ## Features
 
 - Live selection across displays on Windows 10 2004+ and macOS 14+, with capture after selection.

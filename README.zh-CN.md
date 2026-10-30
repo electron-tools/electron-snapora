@@ -20,6 +20,20 @@
   <img src="./docs/assets/preview.jpg" alt="electron-snapora preview" width="800" />
 </p>
 
+## 升级到 1.0.26：宿主需要配置什么
+
+旧的冻结画面单屏截图没有新增必填参数。多屏实时选择和吸附需要宿主显式启用，仅升级 npm 包不会自动开启。
+
+| 目标 | 宿主配置 |
+| --- | --- |
+| 多屏实时选择 | 每次 `capture({ interactionMode: 'live', display: 'all' })`；支持 Windows 10 2004+ / macOS 14+。不支持的平台继续使用 `frozen` + `cursor`。 |
+| 自动吸附 | 主进程创建对应平台的 `createWindowsSnapProvider(...)` / `createMacSnapProvider(...)`，传入 `setupElectronSnapora({ ipcMain, managerOptions: { getWindowSnapRegions: provider } })`；直接使用 `ScreenshotManager` 时传 `{ getWindowSnapRegions: provider }`。不传 provider 仍可自由框选，但不会自动吸附。 |
+| 只吸附整个窗口 | 创建 provider 时显式传 `{ granularity: 'window' }`。省略时 API 默认是 `panel`，可能选中窗口内部区域；`fine` 更细。 |
+| macOS 权限 | 宿主调用 `macProvider.getPermissions()` 查询，在用户点击授权后调用 `getPermissions(true)`，再查询并决定是否开始截图。live 采集需要屏幕录制权限，AX 容器识别需要辅助功能权限。若产品要求两项都授权才能截图，应由宿主拦截；库不会自动强制这个策略或提供权限界面。 |
+| 正式应用打包 | 将 `node_modules/electron-snapora/dist/native/**` 解包到 ASAR 外，并处理宿主签名。标准 npm 布局无需传 helper 路径；自定义 `extraResources` 路径按后文配置。 |
+
+provider 只在主进程创建一次并复用，退出时调用 `dispose()`；`prepare()` 是可选预热。无需传 demo 对象、DOM、窗口列表或权限布尔值。完整主进程、preload、权限桥及签名示例见后文“多屏实时选择、容器吸附与宿主权限接入”。
+
 ## 功能特性
 
 - Windows 10 2004+ / macOS 14+ 多屏实时选择：移动鼠标跨屏选择，确定选区后再采集画面。
