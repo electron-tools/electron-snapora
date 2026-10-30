@@ -22,6 +22,9 @@ Una biblioteca de capturas de pantalla para Electron con configuración en una l
 
 ## Características principales
 
+- Selección en varias pantallas en Windows 10 2004+ y macOS 14+, con captura después de confirmar el área.
+- Ajuste a ventanas y contenedores entre aplicaciones mediante UI Automation / AX, con niveles `window / panel / fine`.
+- Consulta de permisos de macOS, solicitud explícita de autorización y errores estructurados para el host.
 - **Captura por región**：Captura de pantalla por pantalla seleccionada o posición del cursor.
 - **Superposición interactiva**：Selección libre mediante arrastre y 8 manejadores de redimensionamiento.
 - **Herramientas de anotación**：Rectángulos, elipses, flechas, pincel, texto (estilos estándar/fondo relleno/trazo), mosaico regulable y marca de agua.
@@ -204,6 +207,176 @@ Si la superposición es visible pero las teclas no responden, compruebe `app.isA
 | `EXPORT_FAILED`           | Falló la salida PNG, el portapapeles o el guardado.  |
 | `INVALID_RESULT`          | Datos de resultado no válidos.                       |
 | `UNSUPPORTED_PLATFORM`    | Plataforma o protocolo de pantalla no compatible.    |
+
+## Selección en varias pantallas, ajuste a contenedores y permisos del host
+
+Estas funciones pertenecen a la API pública del paquete. `demo/` es una aplicación de prueba del repositorio y no se publica en npm. La integración predeterminada conserva la captura congelada de una pantalla; instalar el paquete no registra automáticamente un proveedor de ajuste ni una interfaz de permisos.
+
+`interactionMode: 'live'` permite mover el puntero entre pantallas, ajustar el área al pasar sobre una ventana, seleccionar con un clic y arrastrar libremente. El arrastre queda limitado a la pantalla donde comienza. La imagen se obtiene después de confirmar el área y se abre el editor existente. `display: 'all'` requiere live y no une varias pantallas en una imagen. El modo anterior usa `interactionMode: 'frozen', display: 'cursor'`.
+
+| Nivel                    | Comportamiento                                                                              |
+| ------------------------ | ------------------------------------------------------------------------------------------- |
+| `window`                 | Ventanas completas, sin recorrer el árbol de accesibilidad.                                 |
+| `panel` (predeterminado de la API del proveedor) | Paneles principales y barras laterales; excluye controles pequeños y tarjetas anidadas.     |
+| `fine`                   | Contenedores más pequeños expuestos por accesibilidad, como tarjetas y elementos de listas. |
+
+Windows usa UI Automation; macOS usa límites de CoreGraphics, AX y ScreenCaptureKit. Ambos proveedores ofrecen `prepare()` / `dispose()` y publican ventanas antes que contenedores. En Mac se excluyen las superficies de composición e indicadores del sistema antes de detectar el objetivo y calcular oclusiones; las aplicaciones realmente a pantalla completa se conservan. Canvas y las interfaces propias pueden ofrecer solo la ventana. Live requiere Windows build 19041+ o macOS 14+; no está disponible en Linux.
+
+### Proceso principal del host
+
+Después de `app.whenReady()`, cree la ventana con el preload indicado abajo y llame a `setupHostScreenshot(hostWindow, trustedUrl)` antes de cargar la página. Pase la URL completa de confianza (`file://` o de desarrollo) para registrar IPC antes de inicializar el Renderer. Sustituye la inicialización anterior de `setupElectronSnapora()`; no registre los mismos canales dos veces. Ejecute la función de limpieza devuelta al cerrar la ventana o la aplicación. Para varios hosts, comparta un manager/proveedor y valide cada remitente autorizado.
+
+```ts
+import { release } from 'node:os';
+import type { BrowserWindow, IpcMainInvokeEvent } from 'electron';
+import { ipcMain } from 'electron';
+import {
+  setupElectronSnapora,
+  createMacSnapProvider,
+  createWindowsSnapProvider,
+} from 'electron-snapora/main';
+
+export function setupHostScreenshot(hostWindow: BrowserWindow, trustedUrl: string) {
+  const liveSupported =
+    (process.platform === 'win32' && Number(release().split('.')[2]) >= 19041) ||
+    (process.platform === 'darwin' && Number(release().split('.')[0]) >= 23);
+  const macProvider =
+    process.platform === 'darwin' && liveSupported
+      ? createMacSnapProvider({ granularity: 'panel', onDiagnostic: console.info })
+      : undefined;
+  const provider =
+    macProvider ??
+    (process.platform === 'win32' && liveSupported
+      ? createWindowsSnapProvider({ granularity: 'panel', keepAlive: true })
+      : undefined);
+  const validateSender = (event: IpcMainInvokeEvent) =>
+    !hostWindow.isDestroyed() &&
+    event.sender === hostWindow.webContents &&
+    event.senderFrame === hostWindow.webContents.mainFrame &&
+    event.senderFrame?.url === trustedUrl;
+
+  const snapora = setupElectronSnapora({
+    ipcMain,
+    validateSender,
+    managerOptions: { getWindowSnapRegions: provider },
+  });
+  ipcMain.handle('host:snapora-permissions', async (event, prompt: unknown) => {
+    if (!validateSender(event) || typeof prompt !== 'boolean')
+      throw new Error('Unauthorized permission request.');
+    if (snapora.manager.activeJobId)
+      throw new Error('Finish or cancel the current capture first.');
+    return {
+      liveSupported,
+      macPermissions: macProvider ? await macProvider.getPermissions(prompt) : null,
+    };
+  });
+
+  return () => {
+    ipcMain.removeHandler('host:snapora-permissions');
+    snapora.unregister();
+    provider?.dispose();
+  };
+}
+```
+
+### Preload y Renderer del host
+
+Compile este preload como un único archivo CommonJS y use su ruta absoluta en `BrowserWindow.webPreferences.preload`. Mantenga `contextIsolation: true`, `sandbox: true` y `nodeIntegration: false`. Incluya `electron-snapora/preload` en el bundle y deje solo `electron` como external. El paquete del proceso principal debe permanecer external. Consulte [el sandbox de Electron](https://www.electronjs.org/docs/latest/tutorial/sandbox).
+
+```ts
+import { contextBridge, ipcRenderer } from 'electron';
+import { exposeScreenshotApi } from 'electron-snapora/preload';
+
+exposeScreenshotApi({ contextBridge, ipcRenderer });
+contextBridge.exposeInMainWorld('snaporaPermissions', {
+  get: () => ipcRenderer.invoke('host:snapora-permissions', false),
+  request: () => ipcRenderer.invoke('host:snapora-permissions', true),
+});
+```
+
+`host:snapora-permissions` y `window.snaporaPermissions` son APIs de ejemplo definidas por el host, no exportaciones integradas de Snapora. Añada sus declaraciones de tipos al Renderer. `get()` devuelve `{ liveSupported, macPermissions: null | { screenRecording, accessibility } }`; `null` indica que el ejemplo no tiene un proveedor Mac compatible. Los errores de consulta rechazan la llamada IPC y deben distinguirse de un permiso denegado.
+
+```ts
+import type { MacSnapPermissions } from 'electron-snapora/main';
+import type { ScreenshotRendererApi } from 'electron-snapora/types';
+
+interface HostPermissionState {
+  liveSupported: boolean;
+  macPermissions: MacSnapPermissions | null;
+}
+declare global {
+  interface Window {
+    electronSnapora: ScreenshotRendererApi;
+    snaporaPermissions: {
+      get(): Promise<HostPermissionState>;
+      request(): Promise<HostPermissionState>;
+    };
+  }
+}
+```
+
+```ts
+const state = await window.snaporaPermissions.get();
+const result = await window.electronSnapora.capture({
+  interactionMode: state.liveSupported ? 'live' : 'frozen',
+  display: state.liveSupported ? 'all' : 'cursor',
+});
+if (result.status === 'failed' && result.code === 'PERMISSION_DENIED') {
+  console.info(result.message);
+}
+```
+
+### Responsabilidad sobre los permisos
+
+| Estado                                | Respuesta del paquete                                                                               | Responsabilidad del host                                                               |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Sin Grabación de pantalla             | `capture()` en live devuelve `status: 'failed', code: 'PERMISSION_DENIED'` por el IPC habitual.     | Explicar el motivo y ofrecer autorización o ajustes.                                   |
+| Sin Accesibilidad                     | Se conserva el ajuste a ventanas y la selección libre; una captura correcta no confirma permiso AX. | Consultar `getPermissions()` o `accessibility: false` en `onDiagnostic` del proveedor. |
+| Helper ausente o imposible de iniciar | La consulta se rechaza; la captura puede devolver `CAPTURE_FAILED`.                                 | Corregir distribución, ruta o firma antes de pedir permiso.                            |
+
+`macProvider.getPermissions()` consulta al helper real sin abrir diálogos. Llame a `window.snaporaPermissions.request()` únicamente desde el botón de autorización del usuario; se traduce a `getPermissions(true)` y solicita Grabación de pantalla y Accesibilidad. No espera a que el usuario termine de modificar los ajustes: consulte de nuevo y reinicie la aplicación firmada si es necesario. `false` no distingue entre permiso aún no solicitado, denegado o restringido. No solicite permisos durante una captura.
+
+No hay notificaciones automáticas de cambios ni un puente de permisos integrado para el Renderer. El host controla UI, validación y limpieza de IPC y actualización de estado. Live usa los permisos del backend nativo, no solo los del host Electron. Frozen conserva las comprobaciones de Electron y abre los ajustes de Grabación de pantalla si el permiso ya está denegado. La captura y el ajuste normales no necesitan micrófono, cámara, monitorización de entrada, acceso total al disco ni Automatización. Solo el fallback AppleScript de restauración de foco del demo puede pedir Automatización; no es una dependencia de la integración.
+
+### Distribución del helper de Mac
+
+Mantenga el paquete en production `dependencies` y su entrada principal como external. La publicación debe incluir `dist/native/snapora-macos`, un ejecutable universal **arm64 + x86_64**. Los equipos de los usuarios no necesitan Swift, Xcode, `koffi` ni archivos del demo. Los helpers son procesos separados, no addons nativos de Node.
+
+Con **electron-builder 26**, la versión del repositorio, desempaquete el helper:
+
+```json
+{
+  "build": {
+    "asarUnpack": ["node_modules/electron-snapora/dist/native/**"]
+  }
+}
+```
+
+Windows incluye dos ejecutables precompilados: `dist/native/snapora-windows-snap.exe` (UI Automation) y `dist/native/snapora-windows-capture.exe` (captura de píxeles). Electron los inicia directamente, sin PowerShell, compilación C#, descargas ni ejecutables temporales durante el uso. Son programas AnyCPU que usan el runtime de .NET Framework de Windows, no distribuciones .NET autocontenidas. El usuario no necesita compilador ni SDK. Desempaquete ambos fuera de ASAR; HTML/CSS/JS pueden permanecer dentro.
+
+En Windows, `pnpm run build` y `pnpm demo` compilan primero los helpers. Use `pnpm run build:native:windows` para compilarlos por separado y `pnpm run verify:native:windows` para validar los binarios y hashes del código fuente. No cambian las API, la preparación, la reutilización, la cancelación, los tres niveles de ajuste ni la edición de capturas.
+
+Para publicar desde macOS/Linux, compile la misma revisión en Windows y copie ambos exe y `windows-helpers.json` a `src/electron/native` en el equipo de publicación. CI proporciona el artefacto `windows-native-helpers`. `release:check` exige los helpers de Windows y Mac universal y rechaza archivos Windows ausentes, corruptos u obsoletos. No se publica código C#/PowerShell/Swift en npm. La firma de producción de los helpers Windows puede realizarse al empaquetar el host.
+
+La búsqueda predeterminada convierte `app.asar` en `app.asar.unpacked`. Conserve el permiso de ejecución e incluya el helper en la firma Developer ID y notarización del host; la firma ad-hoc de desarrollo no sustituye a la de distribución. [builder 26](https://www.electron.build/v26/docs/mac/) documenta `mac.binaries` para ejecutables adicionales. En builder 27 use `asar.unpack` y `mac.sign`; Forge también debe desempaquetar y firmar el ejecutable.
+
+Si usa `extraResources`, pase la misma ruta absoluta a `createMacSnapProvider({ executablePath })` y `new ElectronCaptureAdapter({ macHelperPath })`, e inyecte el adaptador mediante `managerOptions.captureAdapter`. El host debe ejecutar `dispose()` en el adaptador inyectado además del manager y proveedor. Verifique los permisos con la identidad de la aplicación final firmada.
+
+### Demo de código fuente, publicación y verificación
+
+Para desarrollar en el repositorio, ejecute `pnpm demo` (alias `pnpm run demo:mac`). En macOS 14+ compila primero el helper; solo el equipo de compilación necesita Xcode Command Line Tools. El demo usa live + window (ventanas completas) por defecto; permite cambiar a panel / fine para comparar. El paquete no importa su IPC de permisos ni su restauración de foco.
+
+Antes de publicar, ejecute en un Mac:
+
+```bash
+pnpm run test:native:mac
+pnpm run build:native:mac:universal
+pnpm run release:check
+```
+
+`release:check` rechaza helpers ausentes, de una sola arquitectura o malformados; en macOS también comprueba permiso de ejecución y firma. El build copia helpers precompilados y datos de verificación a `dist/native`, sin publicar fuentes C#/PowerShell/Swift. CI verifica los artefactos Windows, ejecuta regresiones Swift en Mac, comprueba el artefacto universal y verifica consumidores ESM/CommonJS instalados desde un tgz real.
+
+El usuario ha confirmado que la captura y el ajuste funcionan en el demo Mac después del filtro de ventanas del sistema. La distribución firmada, ambas CPU en hardware real y la matriz completa Lark/navegador/Ping aún requieren validación de lanzamiento. Consulte [las notas de implementación y validación](https://github.com/electron-tools/electron-snapora/blob/main/docs/macos-container-snap.md).
 
 ## Licencia y marcas
 

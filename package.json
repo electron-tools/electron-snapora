@@ -1,6 +1,6 @@
 {
   "name": "electron-snapora",
-  "version": "1.0.25",
+  "version": "1.1.0",
   "description": "Easy-to-integrate Electron screenshot plugin with one-call setup, secure Preload IPC, region capture, annotation editing, clipboard copy, PNG export, and pin-to-screen windows.",
   "license": "MIT",
   "author": {
@@ -117,6 +117,7 @@
     "demo:mac": "pnpm run demo",
     "demo:mac-live-smoke": "pnpm run build:native:mac && pnpm run build && electron test/demo/live-selection-smoke.cjs",
     "build:native:mac": "node scripts/build-native-mac.mjs",
+    "build:native:windows": "node scripts/build-native-windows.mjs",
     "build:native:mac:universal": "node scripts/build-native-mac.mjs --universal",
     "demo:host-smoke": "pnpm run build && electron demo/host-smoke.cjs",
     "demo:selection-smoke": "pnpm run build && electron demo/selection-smoke.cjs",
@@ -137,7 +138,7 @@
     "demo:pin-smoke": "pnpm run build && electron demo/pin-smoke.cjs",
     "demo:pin-selection-smoke": "pnpm run build && electron demo/selection-smoke.cjs --pin",
     "demo:smoke": "pnpm run build && electron demo/smoke.cjs",
-    "build": "pnpm run clean && pnpm run build:lib && pnpm run build:overlay",
+    "build": "node scripts/build-native-windows.mjs --if-windows && pnpm run clean && pnpm run build:lib && pnpm run build:overlay",
     "build:lib": "tsup",
     "build:overlay": "vite build --config vite.config.ts",
     "lint": "eslint .",
@@ -154,9 +155,11 @@
     "verify:package:built": "node scripts/verify-package-consumers.mjs && node scripts/verify-bundler-consumers.mjs && node scripts/verify-electron-matrix.mjs && node scripts/verify-packaged-consumer.mjs",
     "verify:package": "pnpm run build && pnpm run verify:package:built",
     "verify:release-metadata": "node scripts/verify-release-metadata.mjs",
+    "verify:native:mac": "node scripts/verify-native-mac.mjs",
+    "verify:native:windows": "node scripts/verify-native-windows.mjs",
     "check": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build",
-    "release:check": "pnpm run check && pnpm run verify:release-metadata && pnpm run verify:package:built",
-    "prepack": "pnpm run build",
+    "release:check": "pnpm run check && pnpm run verify:native:windows && pnpm run verify:native:mac && pnpm run verify:release-metadata && pnpm run verify:package:built",
+    "prepack": "pnpm run build && pnpm run verify:native:windows",
     "prepublishOnly": "pnpm run release:check"
   },
   "engines": {

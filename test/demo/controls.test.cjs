@@ -57,7 +57,7 @@ function fixture({ supported = true, snapGet, interactionGet, capture } = {}) {
         set: async (mode) => mode,
       },
       demoSnapApi: {
-        get: snapGet || (async () => ({ supported, granularity: 'panel' })),
+        get: snapGet || (async () => ({ supported, granularity: 'window' })),
         set: async (granularity) => granularity,
       },
     },
@@ -74,6 +74,7 @@ test('Mac demo enables both settings and sends the chosen interaction mode', asy
   await setImmediate();
   assert.equal(f.interaction.disabled, false);
   assert.equal(f.snap.disabled, false);
+  assert.equal(f.snap.value, 'window');
   for (const value of ['window', 'fine', 'panel']) {
     f.snap.value = value;
     await f.snap.events.change();

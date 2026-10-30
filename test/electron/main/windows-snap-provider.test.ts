@@ -65,6 +65,11 @@ describe('Windows snapshot process boundary', () => {
     const ready = provider.prepare();
     child.stdout.write('{"ready":true}\n');
     expect(await ready).toBe(true);
+    expect(spawn).toHaveBeenCalledExactlyOnceWith(
+      expect.stringMatching(/native[/\\]snapora-windows-snap\.exe$/),
+      ['--server'],
+      { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] }
+    );
     const update = vi.fn();
     const first = provider(new AbortController().signal, update, 'fine');
     await Promise.resolve();
@@ -186,7 +191,7 @@ describe('Windows snapshot process boundary', () => {
     );
     expect(spawn).toHaveBeenCalledWith(
       expect.any(String),
-      expect.arrayContaining(['-MTA']),
+      ['--server'],
       expect.objectContaining({ windowsHide: true })
     );
   });
@@ -238,9 +243,7 @@ describe('Windows snapshot process boundary', () => {
       );
       child.emit('close', 0);
       expect((await result).length).toBe(granularity === 'fine' ? 2 : 1);
-      expect(vi.mocked(spawn).mock.calls[0]?.[1]).toEqual(
-        expect.arrayContaining(['-Server'])
-      );
+      expect(vi.mocked(spawn).mock.calls[0]?.[1]).toEqual(['--server']);
       expect(child.stdin.read().toString()).toBe(granularity + '\n');
       expect(diagnostics).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -298,7 +301,7 @@ describe('Windows snapshot process boundary', () => {
     expect(spawn).not.toHaveBeenCalled();
     const child = worker();
     const result = createWindowsSnapProvider()(new AbortController().signal);
-    child.emit('error', new Error('missing powershell'));
+    child.emit('error', new Error('missing packaged executable'));
     expect(await result).toEqual([]);
     expect(vi.getTimerCount()).toBe(0);
   });

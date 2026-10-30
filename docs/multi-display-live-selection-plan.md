@@ -1,5 +1,7 @@
 # 多屏实时选区与选后采集方案
 
+> 当前配置：demo 和 Ping 接入默认使用 `window`，按独立窗口边界吸附；demo 保留 `panel / fine` 切换。下文涉及默认 panel 的验收记录属于此前版本。
+
 日期：2026-10-30。状态：已在 electron-snapora 和 demo 实现 Windows 源码原型，Ping 接入保持不变。本文保留设计目标，文末单列已完成验证与未覆盖范围。
 
 ## 目标与交互约定
@@ -195,7 +197,7 @@ pnpm run demo:granularity-smoke
 
 最终实时路径使用独立的 Windows GDI 屏幕拷贝进程，不绘制系统光标。Windows 系统光标全程可见，按钮/调整边框继续使用原生光标，不依赖 DOM 跟随。`BitBlt(SRCCOPY | CAPTUREBLT)` 只读取所选屏幕的物理边界，配合交互窗口的 `WDA_EXCLUDEFROMCAPTURE` 排除遮罩；按 `screen.dipToScreenRect` 换算混合 DPI，输出 PNG 后复用现有标注/导出。后续扩大选区也不会露出原先选区外的箭头。
 
-原型在 `manager.prepare({ interactionMode: 'live' })` 时直接调用 Windows 自带 .NET Framework 的 csc.exe，把随包 C# 源码编译到每个适配器私有的临时目录，启动可复用子进程；预热不读取桌面像素。没有新增 npm 原生依赖、PowerShell 调用或下载。复制和 PNG 编码均在子进程执行，带编译/启动/采集超时、响应长度限制、串行请求、退出清理。宿主退出时补同步清理自己的临时目录。原生路径失败明确返回 `CAPTURE_FAILED`，不静默退回会带光标的流。旧冻结模式继续原有桌面流及图片回退。
+当前在构建时生成 `snapora-windows-capture.exe` 并随包分发；`manager.prepare({ interactionMode: 'live' })` 直接启动它，不再运行编译器、写临时源码或临时 exe。预热不读取桌面像素。复制和 PNG 编码仍在可复用子进程执行，保留启动/采集超时、响应长度限制、串行请求、取消和退出清理。原生路径失败明确返回 `CAPTURE_FAILED`，不静默退回会带光标的流。旧冻结模式继续原有桌面流及图片回退。
 
 依据：[Microsoft 的窗口排除捕获约定](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowdisplayaffinity)，[Chromium 桌面流启用嵌入光标的实现](https://chromium.googlesource.com/chromium/src/+/master/content/browser/media/capture/desktop_capture_device.cc)。本机在显示系统箭头时，Electron 流及缩略图均能夹带箭头；不再依赖 `cursor: 'never'` 作为实时路径的保障。
 
@@ -208,7 +210,7 @@ pnpm run demo:granularity-smoke
 
 新的系统光标测试记录为忽略目录下 `.pack-preview/native-cursor-evidence.json` 和 `native-cursor-*.png`。旧 `cursor-*` 文件只记录已撤销方案，不作为现实现证据。
 
-限制：新增原生路径要求系统 .NET Framework 编译器可用，企业策略禁止编译/运行临时程序时会失败。尚未验证 HDR、远程桌面、受保护视频、不同显卡矩阵及正式安装包分发，不将源码 demo 的结果当成这些环境的承诺。
+限制：预编译 helper 使用 Windows .NET Framework 运行时，不要求终端用户提供编译器。两个 Windows exe 都需解包到 ASAR 外，并按宿主要求签名。尚未验证 HDR、远程桌面、受保护视频和不同显卡矩阵，不将源码 demo 的结果当成这些环境的承诺。
 
 ## 代码审查修复与回归
 

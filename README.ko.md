@@ -22,6 +22,9 @@
 
 ## 주요 기능
 
+- Windows 10 2004+ / macOS 14+의 다중 화면 실시간 선택. 영역 확정 후 화면을 캡처합니다.
+- Windows UI Automation / macOS AX 기반 앱 간 창·컨테이너 스냅과 `window / panel / fine` 3단계 설정.
+- 호스트용 macOS 권한 조회, 명시적 권한 요청 및 구조화된 캡처 오류.
 - **영역 스크린샷**：디스플레이 또는 커서 위치 기준 화면 캡처.
 - **대화형 선택 오버레이**：자유 드래그 선택 및 8방향 리사이즈 핸들.
 - **다양한 주석 도구**：사각형, 타원, 화살표, 브러시, 텍스트(일반/배경 채우기/외곽선 프리셋), 강도 조절 모자이크 및 워터마크.
@@ -204,6 +207,176 @@ Snapora는 캡처 종료 시 `app.hide()`를 호출하지 않습니다. 이 호�
 | `EXPORT_FAILED`           | 이미지 출력 또는 저장에 실패했습니다.             |
 | `INVALID_RESULT`          | 잘못된 결과 데이터입니다.                         |
 | `UNSUPPORTED_PLATFORM`    | 지원되지 않는 플랫폼입니다.                       |
+
+## 다중 화면 실시간 선택, 컨테이너 스냅 및 호스트 권한
+
+이 기능들은 npm 패키지의 공개 API입니다. `demo/`는 소스 저장소의 테스트 앱이며 npm에 포함되지 않습니다. 기본 연동은 정지 화면의 단일 모니터 캡처를 유지합니다. 설치만으로 스냅 provider나 권한 UI가 자동 등록되지는 않습니다.
+
+`interactionMode: 'live'`는 모니터 사이 포인터 이동, 호버 스냅, 클릭 선택, 자유 드래그를 지원합니다. 드래그는 시작한 화면 안에 제한되고, 선택 확정 후 해당 화면을 캡처하여 기존 편집기로 전환합니다. `display: 'all'`은 live 전용이며 여러 화면을 한 이미지로 합치는 옵션이 아닙니다. 기존 모드는 `interactionMode: 'frozen', display: 'cursor'`입니다.
+
+| 단계           | 동작                                                         |
+| -------------- | ------------------------------------------------------------ |
+| `window`       | 전체 앱 창만 선택하며 접근성 트리를 탐색하지 않습니다.       |
+| `panel` (provider API 기본값) | 주요 패널과 사이드바. 작은 컨트롤 및 중첩 카드를 제외합니다. |
+| `fine`         | 카드와 목록 항목 등 더 작은 접근성 컨테이너.                 |
+
+Windows는 UI Automation, macOS는 CoreGraphics 창 경계, AX, ScreenCaptureKit을 사용합니다. 두 provider 모두 `prepare()` / `dispose()`를 제공하고 창을 먼저, 컨테이너를 나중에 전달합니다. Mac 시스템 합성·상태 레이어는 히트 테스트 및 가림 판정에서 제외하며 실제 전체 화면 앱은 유지합니다. Canvas/사용자 정의 UI는 창 단위만 지원할 수 있습니다. live는 Windows build 19041+ 또는 macOS 14+가 필요하며 Linux live는 지원하지 않습니다.
+
+### 호스트 메인 프로세스
+
+`app.whenReady()` 완료 후 아래의 preload로 호스트 창을 만들고, 페이지를 로드하기 전에 `setupHostScreenshot(hostWindow, trustedUrl)`을 호출합니다. 신뢰할 수 있는 전체 `file://` URL 또는 개발 URL을 전달하여 렌더러 초기화 전에 IPC를 등록하세요. 앞의 `setupElectronSnapora()` 초기화를 대체하므로 같은 IPC를 중복 등록하지 마세요. 반환된 정리 함수를 창 종료/앱 종료 시 호출하세요. 여러 호스트 창에서는 하나의 manager/provider를 공유하고 승인된 각 발신자를 검증합니다.
+
+```ts
+import { release } from 'node:os';
+import type { BrowserWindow, IpcMainInvokeEvent } from 'electron';
+import { ipcMain } from 'electron';
+import {
+  setupElectronSnapora,
+  createMacSnapProvider,
+  createWindowsSnapProvider,
+} from 'electron-snapora/main';
+
+export function setupHostScreenshot(hostWindow: BrowserWindow, trustedUrl: string) {
+  const liveSupported =
+    (process.platform === 'win32' && Number(release().split('.')[2]) >= 19041) ||
+    (process.platform === 'darwin' && Number(release().split('.')[0]) >= 23);
+  const macProvider =
+    process.platform === 'darwin' && liveSupported
+      ? createMacSnapProvider({ granularity: 'panel', onDiagnostic: console.info })
+      : undefined;
+  const provider =
+    macProvider ??
+    (process.platform === 'win32' && liveSupported
+      ? createWindowsSnapProvider({ granularity: 'panel', keepAlive: true })
+      : undefined);
+  const validateSender = (event: IpcMainInvokeEvent) =>
+    !hostWindow.isDestroyed() &&
+    event.sender === hostWindow.webContents &&
+    event.senderFrame === hostWindow.webContents.mainFrame &&
+    event.senderFrame?.url === trustedUrl;
+
+  const snapora = setupElectronSnapora({
+    ipcMain,
+    validateSender,
+    managerOptions: { getWindowSnapRegions: provider },
+  });
+  ipcMain.handle('host:snapora-permissions', async (event, prompt: unknown) => {
+    if (!validateSender(event) || typeof prompt !== 'boolean')
+      throw new Error('Unauthorized permission request.');
+    if (snapora.manager.activeJobId)
+      throw new Error('Finish or cancel the current capture first.');
+    return {
+      liveSupported,
+      macPermissions: macProvider ? await macProvider.getPermissions(prompt) : null,
+    };
+  });
+
+  return () => {
+    ipcMain.removeHandler('host:snapora-permissions');
+    snapora.unregister();
+    provider?.dispose();
+  };
+}
+```
+
+### 호스트 Preload와 렌더러
+
+다음 preload를 단일 CommonJS 파일로 번들링하고 절대 출력 경로를 `BrowserWindow.webPreferences.preload`에 지정합니다. `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`를 유지합니다. preload의 `electron-snapora/preload`는 번들에 포함하고 `electron`만 external로 둡니다. 메인 프로세스 패키지는 external로 유지합니다. [Electron 샌드박스 문서](https://www.electronjs.org/docs/latest/tutorial/sandbox)를 참고하세요.
+
+```ts
+import { contextBridge, ipcRenderer } from 'electron';
+import { exposeScreenshotApi } from 'electron-snapora/preload';
+
+exposeScreenshotApi({ contextBridge, ipcRenderer });
+contextBridge.exposeInMainWorld('snaporaPermissions', {
+  get: () => ipcRenderer.invoke('host:snapora-permissions', false),
+  request: () => ipcRenderer.invoke('host:snapora-permissions', true),
+});
+```
+
+`host:snapora-permissions`와 `window.snaporaPermissions`는 호스트가 정의한 예제 API이며 패키지 내장 API가 아닙니다. 렌더러 타입 선언을 추가하세요. `get()`은 `{ liveSupported, macPermissions: null | { screenRecording, accessibility } }`를 반환하며 `null`은 지원되는 Mac provider가 없음을 뜻합니다. 조회 실패는 IPC reject로 전달되며 권한 거부와 구분해 표시해야 합니다.
+
+```ts
+import type { MacSnapPermissions } from 'electron-snapora/main';
+import type { ScreenshotRendererApi } from 'electron-snapora/types';
+
+interface HostPermissionState {
+  liveSupported: boolean;
+  macPermissions: MacSnapPermissions | null;
+}
+declare global {
+  interface Window {
+    electronSnapora: ScreenshotRendererApi;
+    snaporaPermissions: {
+      get(): Promise<HostPermissionState>;
+      request(): Promise<HostPermissionState>;
+    };
+  }
+}
+```
+
+```ts
+const state = await window.snaporaPermissions.get();
+const result = await window.electronSnapora.capture({
+  interactionMode: state.liveSupported ? 'live' : 'frozen',
+  display: state.liveSupported ? 'all' : 'cursor',
+});
+if (result.status === 'failed' && result.code === 'PERMISSION_DENIED') {
+  console.info(result.message);
+}
+```
+
+### 권한 처리 책임
+
+| 상태                  | 패키지 동작                                                                               | 호스트 처리                                                                            |
+| --------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| 화면 기록 권한 없음   | live `capture()`가 `status: 'failed', code: 'PERMISSION_DENIED'`를 기존 IPC로 반환합니다. | 용도와 권한/설정 진입점을 표시합니다.                                                  |
+| 손쉬운 사용 권한 없음 | 창 스냅/자유 선택으로 제한됩니다. 캡처 성공은 AX 권한을 의미하지 않습니다.                | `getPermissions()` 또는 provider `onDiagnostic`의 `accessibility: false`를 확인합니다. |
+| helper 누락/실행 불가 | 조회 reject, 캡처는 `CAPTURE_FAILED`가 될 수 있습니다.                                    | 권한 대신 패키징·경로·서명을 먼저 수정합니다.                                          |
+
+`macProvider.getPermissions()`는 실제 helper 권한만 조회하며 팝업을 띄우지 않습니다. 사용자가 권한 버튼을 누를 때만 `window.snaporaPermissions.request()`를 호출하세요. 이는 `getPermissions(true)`로 연결되어 화면 기록과 손쉬운 사용 권한을 요청합니다. 설정 변경 완료를 기다리는 API가 아니므로 다시 조회하고 필요하면 서명된 앱을 재시작합니다. `false`는 미요청·거부·제한을 구분하지 않습니다. 캡처 도중에는 요청하지 마세요.
+
+권한 변경 자동 알림과 내장 권한 렌더러 브리지는 없습니다. UI, IPC 검증·해제, 새로고침은 호스트 책임입니다. live는 native backend 권한을 기준으로 판단하며 Electron 호스트 상태만으로 대체할 수 없습니다. frozen은 기존 Electron 검사를 유지하며 이미 거부된 경우 화면 기록 설정을 엽니다. 일반 캡처/스냅에는 마이크, 카메라, 입력 모니터링, 전체 디스크 접근, 자동화가 필요 없습니다. demo의 AppleScript 포커스 복원 폴백만 자동화를 요청할 수 있으며 필수 연동 코드가 아닙니다.
+
+### Mac helper 배포
+
+패키지를 production `dependencies`에 두고 메인 진입점을 external로 유지하세요. 릴리스에는 **arm64 + x86_64 universal** 실행 파일 `dist/native/snapora-macos`가 포함되어야 합니다. 실행 환경에는 Swift, Xcode, `koffi`, demo 파일이 필요 없습니다. helper는 별도 프로세스이며 Node native addon이 아닙니다.
+
+저장소와 같은 **electron-builder 26**에서는 다음과 같이 압축에서 제외합니다.
+
+```json
+{
+  "build": {
+    "asarUnpack": ["node_modules/electron-snapora/dist/native/**"]
+  }
+}
+```
+
+Windows에는 미리 컴파일한 `dist/native/snapora-windows-snap.exe`(UI Automation)와 `dist/native/snapora-windows-capture.exe`(화면 캡처)가 포함됩니다. Electron이 직접 실행하므로 런타임 PowerShell, C# 컴파일, 다운로드, 임시 exe 생성이 없습니다. Windows .NET Framework 런타임을 사용하는 AnyCPU 프로그램이며 자체 포함 .NET 배포는 아닙니다. 사용자는 컴파일러나 SDK가 필요하지 않습니다. 두 exe를 ASAR 밖에 배치하고 HTML/CSS/JS는 ASAR 안에 유지할 수 있습니다.
+
+Windows에서 `pnpm run build` / `pnpm demo`는 helper를 먼저 컴파일합니다. 별도 빌드는 `pnpm run build:native:windows`, 바이너리와 소스 해시 검증은 `pnpm run verify:native:windows`입니다. API, 사전 준비, 프로세스 재사용, 취소, 세 단계 흡착과 이미지 편집은 동일합니다.
+
+macOS/Linux에서 배포할 때는 같은 리비전을 Windows에서 빌드하고 두 exe와 `windows-helpers.json`을 배포 머신의 `src/electron/native`에 복사하세요. CI 산출물 이름은 `windows-native-helpers`입니다. `release:check`는 Windows 및 Mac universal helper를 모두 요구하며 누락·손상·오래된 Windows 빌드를 거부합니다. C#/PowerShell/Swift 소스는 npm에 포함하지 않습니다. Windows helper의 제품 서명은 호스트 패키징 단계에서 적용할 수 있습니다.
+
+기본 경로는 `app.asar`를 `app.asar.unpacked`로 변환합니다. 실행 권한을 유지하고 호스트의 Developer ID 서명·공증에 helper를 포함하세요. 개발용 ad-hoc 서명은 배포용 서명이 아닙니다. [builder 26](https://www.electron.build/v26/docs/mac/)의 `mac.binaries`로 추가 실행 파일 서명을 지정할 수 있습니다. builder 27은 `asar.unpack`과 `mac.sign` 설정을 사용하며 Forge도 실행 파일 압축 해제와 서명이 필요합니다.
+
+`extraResources`를 사용한다면 같은 절대 경로를 `createMacSnapProvider({ executablePath })`와 `new ElectronCaptureAdapter({ macHelperPath })`에 전달하고 `managerOptions.captureAdapter`로 주입하세요. 주입한 adapter는 manager/provider 외에 호스트에서 직접 `dispose()`해야 합니다. 최종 서명된 앱의 신원으로 권한을 검증하세요.
+
+### 소스 demo, 릴리스 및 검증
+
+저장소 개발은 `pnpm demo`(별칭 `pnpm run demo:mac`)로 실행합니다. macOS 14+에서는 helper를 먼저 빌드하므로 빌드 머신에만 Xcode Command Line Tools가 필요합니다. demo 기본값은 live + window(전체 창)이며 panel / fine으로 전환하여 비교할 수 있습니다. 또한 패키지는 demo 권한 IPC나 포커스 복원 코드를 참조하지 않습니다.
+
+게시 전에 Mac에서 실행합니다.
+
+```bash
+pnpm run test:native:mac
+pnpm run build:native:mac:universal
+pnpm run release:check
+```
+
+`release:check`는 누락·단일 아키텍처·손상된 helper를 거부하며 Mac에서는 실행 권한과 서명도 검사합니다. `dist/native`에는 미리 빌드한 helper와 검증 정보만 복사하고 C#/PowerShell/Swift 소스는 제외합니다. CI는 Windows 산출물, Mac Swift 회귀, universal 산출물, 실제 tgz에서 설치한 ESM/CommonJS 소비 프로젝트를 검증합니다.
+
+시스템 창 필터링 이후 사용자가 Mac demo 캡처와 스냅이 동작한다고 확인했습니다. 서명 앱 배포, 두 CPU의 실기기, 전체 Lark/브라우저/Ping 조합은 릴리스 검증이 더 필요합니다. [구현 및 검증 기록](https://github.com/electron-tools/electron-snapora/blob/main/docs/macos-container-snap.md)을 참고하세요.
 
 ## 라이선스 및 상표
 

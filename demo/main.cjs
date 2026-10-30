@@ -8,7 +8,7 @@ const {
   createMacSnapProvider,
 } = require('electron-snapora/main');
 
-let snapGranularity = 'panel';
+let snapGranularity = 'window';
 const liveSupported =
   process.platform === 'win32' ||
   (process.platform === 'darwin' && Number(release().split('.')[0]) >= 23);

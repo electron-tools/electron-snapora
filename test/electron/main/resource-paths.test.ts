@@ -5,9 +5,39 @@ import {
   PackagedResourceError,
   resolveHostPreloadPath,
   resolveOverlayResources,
+  resolveNativeHelperPath,
 } from '../../../src/electron/main/resource-paths.js';
 
 describe('resolveOverlayResources', () => {
+  it('resolves external helpers to unpacked files while leaving directory builds unchanged', () => {
+    for (const name of [
+      'snapora-windows-snap.exe',
+      'snapora-windows-capture.exe',
+      'snapora-macos',
+    ]) {
+      expect(
+        resolveNativeHelperPath(
+          name,
+          resolve('app.asar', 'node_modules', 'electron-snapora', 'dist', 'main')
+        )
+      ).toBe(
+        resolve(
+          'app.asar.unpacked',
+          'node_modules',
+          'electron-snapora',
+          'dist',
+          'native',
+          name
+        )
+      );
+      expect(resolveNativeHelperPath(name, resolve('package', 'dist', 'main'))).toBe(
+        resolve('package', 'dist', 'native', name)
+      );
+      expect(resolveNativeHelperPath(name, resolve('myapp.asar', 'dist', 'main'))).toBe(
+        resolve('myapp.asar', 'dist', 'native', name)
+      );
+    }
+  });
   it('resolves sibling overlay assets from the built main entry', () => {
     const mainDirectory = resolve('package', 'dist', 'main');
 

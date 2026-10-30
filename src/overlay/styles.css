@@ -173,11 +173,12 @@ input {
   top: 0;
   left: 0;
   z-index: 3;
-  border: 1px solid var(--snapora-accent);
+  /* 提示线向内绘制，避免非整数 DPI 下窗口尺寸取整裁掉右侧或底部的一像素线。 */
+  border: 0;
   background: transparent;
   box-shadow:
     0 0 0 100vmax var(--snapora-mask),
-    inset 0 0 0 1px rgb(255 255 255 / 26%);
+    inset 0 0 0 2px var(--snapora-accent);
   pointer-events: none;
 }
 
@@ -186,11 +187,11 @@ input {
   top: 0;
   left: 0;
   z-index: 3;
-  border: 1px solid var(--snapora-accent);
+  border: 0;
   background: transparent;
   box-shadow:
     0 0 0 100vmax var(--snapora-mask),
-    inset 0 0 0 1px rgb(255 255 255 / 30%);
+    inset 0 0 0 2px var(--snapora-accent);
   pointer-events: none;
 }
 
@@ -216,14 +217,10 @@ input {
   display: none;
 }
 
-/* 准备导出/写入剪切板时（例如双击选区或确认），立即隐藏选择框及其手柄，并禁用所有鼠标指针交互，避免产生“未双击成功/还可拖拽”的卡顿感 */
+/* 输出未完成前保留选区和工具栏，只锁定输入；取消保存后可继续编辑。 */
 .capture-surface[data-state='exporting'] {
   cursor: default !important;
   pointer-events: none !important;
-}
-
-.capture-surface[data-state='exporting'] .selection {
-  display: none !important;
 }
 
 .size-hint {

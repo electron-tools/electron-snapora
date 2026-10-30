@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { join } from 'node:path';
-import { env, platform } from 'node:process';
+import { resolveNativeHelperPath } from './resource-paths.js';
+import { platform } from 'node:process';
 import { screen } from 'electron';
 import type { ScreenshotSnapRegion, ScreenshotSnapContext } from '../../types.js';
 import {
@@ -65,24 +65,8 @@ export function createWindowsSnapProvider(options: WindowsSnapProviderOptions = 
   const ensureWorker = (): Worker => {
     if (worker) return worker;
     const child = spawn(
-      join(
-        env.SystemRoot ?? 'C:\\Windows',
-        'System32',
-        'WindowsPowerShell',
-        'v1.0',
-        'powershell.exe'
-      ),
-      [
-        '-NoLogo',
-        '-NoProfile',
-        '-NonInteractive',
-        '-MTA',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        join(__dirname, '..', 'native', 'windows-snap.ps1'),
-        '-Server',
-      ],
+      resolveNativeHelperPath('snapora-windows-snap.exe'),
+      ['--server'],
       { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] }
     );
     let resolveReady!: (ready: boolean) => void;

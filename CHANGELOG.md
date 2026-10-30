@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-10-30
+
+### Added
+
+- Multi-display live selection and cross-application window/container snapping on Windows 10 2004+ and macOS 14+, with window, panel, and fine granularity.
+- macOS screen-recording and accessibility permission APIs for host integration.
+
+### Changed
+
+- Ship precompiled Windows helpers for faster startup without runtime PowerShell compilation.
+
+### Fixed
+
+- Improve mixed-DPI selection accuracy, keep the selection visible while saving, and preserve all four selection borders at screen edges.
+
 ## [1.0.25] - 2026-10-17
 
 ### Fixed

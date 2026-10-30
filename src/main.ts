@@ -17,6 +17,8 @@ export {
   createMacSnapProvider,
   type MacSnapProviderOptions,
   type MacSnapPermissions,
+  type MacSnapDiagnostic,
+  type MacSnapNativeDiagnostics,
 } from './electron/main/mac-snap-provider.js';
 export type { WindowsSnapGranularity } from './electron/main/windows-snap-policy.js';
 export {

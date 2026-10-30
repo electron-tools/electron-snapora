@@ -1,12 +1,9 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { rmSync } from 'node:fs';
-import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { resolveNativeHelperPath } from './resource-paths.js';
 import type { ScreenshotBounds } from '../../types.js';
 import { ScreenshotError } from './errors.js';
 
-/** Native process boundary: warmup compiles only; capture is serialized and bounded. */
+/** Native process boundary: warmup starts a bundled executable; capture is serialized and bounded. */
 export interface WindowsScreenCapture {
   prepare(): Promise<void>;
   capture(
@@ -18,13 +15,10 @@ export interface WindowsScreenCapture {
 }
 
 /** A separate GDI process keeps pixel copying/PNG encoding off Electron's UI threads.
- * The OS .NET Framework compiler is invoked directly, once per adapter; no PowerShell,
- * external download, shared executable cache, or screen pixels during prepare().
+ * A precompiled executable is shipped with the package; prepare reads no screen pixels.
  */
 export class NativeWindowsScreenCapture implements WindowsScreenCapture {
   #child: ChildProcessWithoutNullStreams | undefined;
-  #compiler: ChildProcessWithoutNullStreams | undefined;
-  #directory: string | undefined;
   #preparing: Promise<void> | undefined;
   #disposed = false;
   #pending:
@@ -41,20 +35,7 @@ export class NativeWindowsScreenCapture implements WindowsScreenCapture {
   #queue: Promise<unknown> = Promise.resolve();
   // app.quit() may finish before asynchronous child-close cleanup gets a turn.
   #exitCleanup = (): void => {
-    this.#compiler?.kill();
     this.#child?.kill();
-    if (this.#directory) {
-      try {
-        rmSync(this.#directory, {
-          recursive: true,
-          force: true,
-          maxRetries: 3,
-          retryDelay: 30,
-        });
-      } catch {
-        /* OS temp cleanup remains the last resort after a locked-file failure. */
-      }
-    }
   };
 
   prepare(): Promise<void> {
@@ -64,62 +45,16 @@ export class NativeWindowsScreenCapture implements WindowsScreenCapture {
       this.#preparing = undefined;
       this.#child?.kill();
       this.#child = undefined;
-      this.#cleanupDirectory();
+      process.removeListener('exit', this.#exitCleanup);
       throw error;
     }));
   }
 
   async #start(): Promise<void> {
-    const directory = await mkdtemp(join(tmpdir(), 'snapora-capture-'));
-    this.#directory = directory;
     process.removeListener('exit', this.#exitCleanup);
     process.once('exit', this.#exitCleanup);
     if (this.#disposed) throw this.#error('Native capture is disposed.');
-    const executable = join(directory, 'capture.exe');
-    // csc cannot read Electron's virtual app.asar paths; copy only the bundled source.
-    const sourcePath = join(directory, 'capture.cs');
-    await writeFile(
-      sourcePath,
-      await readFile(join(__dirname, '..', 'native', 'windows-capture.cs'))
-    );
-    if (this.#disposed) throw this.#error('Native capture is disposed.');
-    await new Promise<void>((resolve, reject) => {
-      const compiler = spawn(
-        join(
-          process.env.SystemRoot ?? 'C:\\Windows',
-          'Microsoft.NET',
-          process.arch === 'ia32' ? 'Framework' : 'Framework64',
-          'v4.0.30319',
-          'csc.exe'
-        ),
-        [
-          '/nologo',
-          '/optimize+',
-          '/r:System.Drawing.dll',
-          `/out:${executable}`,
-          sourcePath,
-        ],
-        { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] }
-      );
-      this.#compiler = compiler;
-      const timer = setTimeout(() => {
-        compiler.kill();
-        reject(this.#error('Native capture compiler timed out.'));
-      }, 5000);
-      compiler.stdout.resume();
-      compiler.stderr.resume();
-      compiler.on('error', () => {
-        clearTimeout(timer);
-        reject(this.#error('Windows .NET Framework compiler is unavailable.'));
-      });
-      compiler.on('close', (code) => {
-        clearTimeout(timer);
-        if (this.#compiler === compiler) this.#compiler = undefined;
-        if (code === 0) resolve();
-        else reject(this.#error('Native capture compilation failed.'));
-      });
-    });
-    if (this.#disposed) throw this.#error('Native capture is disposed.');
+    const executable = resolveNativeHelperPath('snapora-windows-capture.exe');
     await new Promise<void>((resolve, reject) => {
       const child = spawn(executable, [], {
         windowsHide: true,
@@ -132,7 +67,9 @@ export class NativeWindowsScreenCapture implements WindowsScreenCapture {
       }, 3000);
       const fail = () => {
         clearTimeout(timer);
-        const error = this.#error('Native capture process exited.');
+        const error = this.#error(
+          'Bundled Windows capture helper could not start or exited.'
+        );
         reject(error);
         if (this.#child !== child) return;
         this.#child = undefined;
@@ -148,7 +85,7 @@ export class NativeWindowsScreenCapture implements WindowsScreenCapture {
               : error
           );
         }
-        this.#cleanupDirectory();
+        process.removeListener('exit', this.#exitCleanup);
       };
       child.on('error', fail);
       child.on('close', fail);
@@ -242,28 +179,8 @@ export class NativeWindowsScreenCapture implements WindowsScreenCapture {
 
   dispose(): void {
     this.#disposed = true;
-    this.#compiler?.kill();
     this.#child?.kill();
-    // Process close releases pending captures and removes the private compilation directory.
-    if (!this.#compiler && !this.#child) this.#cleanupDirectory();
-  }
-
-  #cleanupDirectory(): void {
-    const directory = this.#directory;
-    if (directory)
-      void rm(directory, {
-        recursive: true,
-        force: true,
-        maxRetries: 3,
-        retryDelay: 100,
-      })
-        .then(() => {
-          if (this.#directory === directory) {
-            this.#directory = undefined;
-            process.removeListener('exit', this.#exitCleanup);
-          }
-        })
-        .catch(() => undefined);
+    process.removeListener('exit', this.#exitCleanup);
   }
 
   #error(message: string): ScreenshotError {

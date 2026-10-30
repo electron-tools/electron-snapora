@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { join, isAbsolute } from 'node:path';
+import { isAbsolute } from 'node:path';
 import { ScreenshotError } from './errors.js';
+import { resolveNativeHelperPath } from './resource-paths.js';
 
 /** Bounded JSON-lines transport; separate instances isolate AX latency from pixel capture. */
 export interface MacNativeClient {
@@ -42,9 +43,7 @@ export class MacNativeWorker implements MacNativeClient {
   readonly #exit = () => this.#child?.kill('SIGKILL');
 
   constructor(executablePath?: string) {
-    const bundled = join(__dirname, '..', 'native', 'snapora-macos');
-    this.#path =
-      executablePath ?? bundled.replace(/app\.asar([/\\])/, 'app.asar.unpacked$1');
+    this.#path = executablePath ?? resolveNativeHelperPath('snapora-macos');
     if (!isAbsolute(this.#path)) throw new Error('macOS helper path must be absolute.');
   }
 

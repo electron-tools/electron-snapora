@@ -2,19 +2,11 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { spawn } from 'node:child_process';
-import { rm } from 'node:fs/promises';
 import { NativeWindowsScreenCapture } from '../../../src/electron/main/windows-screen-capture.js';
 
 vi.mock('node:child_process', () => ({ spawn: vi.fn() }));
-vi.mock('node:fs', () => ({ rmSync: vi.fn() }));
-vi.mock('node:fs/promises', () => ({
-  mkdtemp: vi.fn(async () => 'C:\\Temp\\snapora-capture-test'),
-  readFile: vi.fn(async () => Buffer.from('bundled native source')),
-  writeFile: vi.fn(async () => undefined),
-  rm: vi.fn(async () => undefined),
-}));
 
-/** Controllable compiler/worker pair; tests failures without starting native processes. */
+/** Controllable executable worker; tests failures without reading the desktop. */
 function fixture() {
   const children: Array<
     EventEmitter & {
@@ -41,11 +33,9 @@ function fixture() {
   const ready = async () => {
     const preparing = worker.prepare();
     await vi.waitFor(() => expect(children).toHaveLength(1));
-    children[0]!.emit('close', 0);
-    await vi.waitFor(() => expect(children).toHaveLength(2));
-    children[1]!.stdout.write('ready\n');
+    children[0]!.stdout.write('ready\n');
     await preparing;
-    return children[1]!;
+    return children[0]!;
   };
   return { worker, ready, children };
 }
@@ -90,10 +80,8 @@ describe('NativeWindowsScreenCapture', () => {
     await rejected;
     expect(old.kill).toHaveBeenCalledOnce();
     const next = worker.capture(bounds, 10000);
-    await vi.waitFor(() => expect(children).toHaveLength(3));
-    children[2]!.emit('close', 0);
-    await vi.waitFor(() => expect(children).toHaveLength(4));
-    const child = children[3]!;
+    await vi.waitFor(() => expect(children).toHaveLength(2));
+    const child = children[1]!;
     child.stdout.write('ready\n');
     await vi.waitFor(() => expect(child.stdin.readableLength).toBeGreaterThan(0));
     old.stdout.write('iVBORw0KGgoSTALE\n');
@@ -102,28 +90,30 @@ describe('NativeWindowsScreenCapture', () => {
     worker.dispose();
   });
 
-  it('does not read pixels when cancelled during compiler/worker warmup', async () => {
+  it('does not read pixels when cancelled during worker warmup', async () => {
     const { worker, children } = fixture();
     const controller = new AbortController();
     const capture = worker.capture(bounds, 10000, controller.signal);
     const rejected = expect(capture).rejects.toMatchObject({ name: 'AbortError' });
     await vi.waitFor(() => expect(children).toHaveLength(1));
     controller.abort();
-    children[0]!.emit('close', 0);
-    await vi.waitFor(() => expect(children).toHaveLength(2));
-    children[1]!.stdout.write('ready\n');
+    children[0]!.stdout.write('ready\n');
     await rejected;
-    expect(children[1]!.stdin.readableLength).toBe(0);
+    expect(children[0]!.stdin.readableLength).toBe(0);
     worker.dispose();
   });
 
-  it('compiles once, sends no pixels at warmup, serializes requests and assembles split replies', async () => {
+  it('starts the bundled exe once without compilation, serializes requests and assembles split replies', async () => {
     const { worker, ready } = fixture();
     const child = await ready();
     const requests: string[] = [];
     child.stdin.on('data', (chunk) => requests.push(String(chunk)));
     await worker.prepare();
-    expect(spawn).toHaveBeenCalledTimes(2);
+    expect(spawn).toHaveBeenCalledExactlyOnceWith(
+      expect.stringMatching(/native[/\\]snapora-windows-capture\.exe$/),
+      [],
+      { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] }
+    );
     expect(requests).toEqual([]);
     const first = worker.capture(bounds, 10000);
     const second = worker.capture(bounds, 10000);
@@ -136,11 +126,10 @@ describe('NativeWindowsScreenCapture', () => {
     child.stdout.write('iVBORw0KGgoBBB\n');
     await second;
     worker.dispose();
-    await vi.waitFor(() => expect(rm).toHaveBeenCalled());
     expect(child.kill).toHaveBeenCalledOnce();
   });
 
-  it('rejects an unavailable compiler and can be disposed during startup', async () => {
+  it('can be disposed during executable startup', async () => {
     const { worker, children } = fixture();
     const preparing = worker.prepare();
     const rejected = expect(preparing).rejects.toMatchObject({
@@ -151,6 +140,24 @@ describe('NativeWindowsScreenCapture', () => {
     await rejected;
     expect(children[0]!.kill).toHaveBeenCalled();
     await expect(worker.prepare()).rejects.toMatchObject({ code: 'CAPTURE_FAILED' });
+  });
+
+  it('rejects a missing packaged executable without attempting compilation, then retries', async () => {
+    const { worker, children } = fixture();
+    const preparing = worker.prepare();
+    const rejected = expect(preparing).rejects.toMatchObject({
+      code: 'CAPTURE_FAILED',
+    });
+    children[0]!.emit(
+      'error',
+      Object.assign(new Error('missing helper'), { code: 'ENOENT' })
+    );
+    await rejected;
+    expect(spawn).toHaveBeenCalledOnce();
+    const retry = worker.prepare();
+    children[1]!.stdout.write('ready\n');
+    await retry;
+    worker.dispose();
   });
 
   it('rejects bounded protocol errors and recovers for the next request', async () => {

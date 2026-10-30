@@ -39,6 +39,19 @@ namespace Snapora {
                 type == ControlType.Custom || type == ControlType.ListItem;
         }
 
+        // UIA can report a client-relative origin or retain an old screen origin.
+        // Intersecting that full-size surface with its current parent fabricates a panel.
+        // Keep normal scroll-content clipping, but reject displaced viewport-sized surfaces.
+        internal static bool IsDisplacedSurface(Rect rect, Rect parent, ControlType type) {
+            if ((type != ControlType.Pane && type != ControlType.Document) ||
+                rect.IsEmpty || parent.IsEmpty || parent.Width <= 0 || parent.Height <= 0) return false;
+            const double tolerance = 8; // Physical pixels: allow native borders and DPI rounding.
+            bool sameSize = Math.Abs(rect.Width-parent.Width) <= Math.Max(tolerance, parent.Width*0.02) &&
+                Math.Abs(rect.Height-parent.Height) <= Math.Max(tolerance, parent.Height*0.02);
+            return sameSize && (rect.Left < parent.Left-tolerance || rect.Top < parent.Top-tolerance ||
+                rect.Right > parent.Right+tolerance || rect.Bottom > parent.Bottom+tolerance);
+        }
+
         // Keep compilation/UIA initialization off the capture path. Each command takes a fresh snapshot.
         public static void Serve(int budgetMs) {
             // Initialize UIA itself during warmup; do not enumerate application content.
@@ -131,6 +144,15 @@ namespace Snapora {
                             visited++;
                             var info = child.Cached;
                             var rect = info.BoundingRectangle;
+                            if (IsDisplacedSurface(rect, parent.Clip, info.ControlType)) {
+                                // Chromium's intermediate native Pane can report (0,0) while its
+                                // Document and layout children still have correct screen coordinates.
+                                // Treat that Pane like an empty structural wrapper: don't emit it or
+                                // narrow the clip, but retain valid descendants within the real parent.
+                                if (!info.IsOffscreen && info.ControlType == ControlType.Pane)
+                                    queue.Enqueue(new Node { Element = child, Clip = parent.Clip, Depth = parent.Depth + 1 });
+                                continue;
+                            }
                             rect.Intersect(parent.Clip);
                             if (!info.IsOffscreen) {
                                 if (!rect.IsEmpty && rect.Width >= 64 && rect.Height >= 40 && IsContainer(info.ControlType)) Emit(rect, window, "container", info.ControlType.ProgrammaticName.Replace("ControlType.", ""));

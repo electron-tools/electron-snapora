@@ -1,6 +1,6 @@
 # npm 打包与发布检查
 
-Current candidate: [1.0.25 release preparation and checklist](./releases/1.0.25.md) (English).
+当前候选版本：[1.1.0 发布准备](./releases/1.1.0.md)。
 
 本文档供仓库维护者使用，不随 npm 包发布。面向使用者的安装、接入和宿主打包说明保留在根目录 `README.md`。
 
@@ -8,7 +8,7 @@ Current candidate: [1.0.25 release preparation and checklist](./releases/1.0.25.
 
 发布内容由 `package.json` 的 `files` 白名单控制：
 
-- `dist`：ESM/CommonJS 运行时代码、类型声明、宿主与 Overlay Preload、Overlay HTML/CSS/JS。
+- `dist`：ESM/CommonJS 运行时代码、类型声明、宿主与 Overlay Preload、Overlay HTML/CSS/JS、预编译原生 helper。
 - `README*.md`：英文完整文档，以及简体中文、日语、韩语和西班牙语快速开始。
 - `CHANGELOG.md`：对使用者可见的版本变化。
 - `LICENSE`：项目许可证；正式发布前必须存在。
@@ -19,6 +19,15 @@ Current candidate: [1.0.25 release preparation and checklist](./releases/1.0.25.
 - `src`、`demo`、`integration`、`scripts` 和 `docs`。
 - `.github`、`.ai-factory` 及其他维护工具配置。
 - 测试文件、覆盖率、临时打包目录和本地日志。
+- 原生 `.cs`、`.ps1`、`.swift` 源码；使用者不应在运行时编译。
+
+## 原生发布产物
+
+Windows 运行 `pnpm build` 会先构建 `snapora-windows-snap.exe` 和 `snapora-windows-capture.exe`。构建机器需要 Windows .NET Framework 编译器和 UIA 程序集；使用者只需要系统 .NET Framework 运行时。`pnpm run build:native:windows` 可单独编译，`pnpm run verify:native:windows` 校验 `dist/native` 中的 exe 及源码哈希。`prepack` 强制此校验，不允许发出缺失或过期的 Windows helper。
+
+最终跨平台包同时需要 Windows 两个 exe、`windows-helpers.json` 和 Mac universal helper。在相同源码版本的 Windows 上构建后，将三个 Windows 产物复制到 Mac 发布机器的 `src/electron/native`（也可下载 CI 的 `windows-native-helpers` artifact），再编译 universal Mac helper 并执行 `pnpm run release:check`。源码哈希忽略 CRLF/LF 差异，其他源码变更必须重新编译。Windows 源码构建不会产生 Mac helper，Mac 构建也不会凭空产生 Windows exe。
+
+宿主将 `node_modules/electron-snapora/dist/native/**` 解包到 ASAR 外，按应用要求给解包后的 exe 签名；包的源产物与清单应保持对应，签名改变二进制后不能继续使用旧产物哈希。ESM/CommonJS tgz 消费测试验证不含原生源码，并启动 UIA exe；ASAR 消费测试还预热采集 exe，全程不读取桌面像素。
 
 `exports` 只限制使用者可导入的入口，不决定文件是否进入 tarball；检查发布内容时应以 `files` 和 `pnpm pack --dry-run` 的结果为准。
 
@@ -61,6 +70,14 @@ npm publish --dry-run
 ```
 
 `prepack` 会重建 `dist`；`prepublishOnly` 会执行完整发布门禁。独立消费项目优先使用 pnpm 缓存，缺少元数据时允许从 registry 补齐。
+
+## 保存选区回归
+
+截图保存交互回归：构建后执行 `pnpm exec electron test/demo/save-selection-smoke.cjs`。
+该测试使用隐藏窗口和合成图片，不采集桌面、不打开系统保存对话框；验证等待保存响应期间选区、遮罩、工具栏持续可见，重复输出被阻止，取消后恢复编辑，保存成功后才清理选区。
+Windows/macOS 实机验收还需打开原生保存对话框，确认其位于选区上方，取消后可以继续标注。
+
+全屏提示线回归：构建后执行 `pnpm exec electron test/demo/selection-border-smoke.cjs`，再加 `--fractional` 验证 150% 缩放。测试只采样隐藏窗口的合成图片，检查选区和悬停提示的四条蓝线，以及物理屏幕右侧/底部裁掉 1 像素时边线仍然可见。提示线向内绘制，不改变选区坐标或导出尺寸。
 
 ## 自动递增版本
 

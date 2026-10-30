@@ -9,7 +9,7 @@
 | 多屏实时选择 | 复用 `LiveScreenshotSession`；一次会话同时呈现各屏，确认后只采集选中屏                                                                                 |
 | 窗口边界     | CoreGraphics `CGWindowListCopyWindowInfo`，前后层级与窗口 ID，不读取标题                                                                               |
 | 容器         | AX 公共接口按目标窗口读取角色、位置、大小、有限子节点，不读取 Name/Value/文本                                                                          |
-| 粒度         | 与 Windows 共用 `snap-policy.ts`，窗口 / 面板 / 精细三档，demo 默认面板                                                                                |
+| 粒度         | 与 Windows 共用 `snap-policy.ts`，窗口 / 面板 / 精细三档，demo 默认窗口级                                                                                |
 | 坐标         | CG / AX 顶部原点全局点坐标直接对应 DIP；按显示器裁剪并附加 displayId，Retina 缩放只用于像素采集                                                        |
 | 像素         | macOS 14+ `SCScreenshotManager`，按实际 `pointPixelScale` 配置 PNG 尺寸，关闭采集光标                                                                  |
 | 排除截图层   | `BrowserWindow.getMediaSourceId()` 取 CGWindowID，`SCContentFilter(display:excludingWindows:)` 精确排除；不依赖 `setContentProtection`，不排除整个进程 |
@@ -31,7 +31,7 @@
 ## 本地运行
 
 1. 在 macOS 14+ 安装依赖和 Xcode Command Line Tools（`xcode-select --install`）。
-2. `pnpm run demo`（或别名 `pnpm run demo:mac`）：macOS 14+ 自动使用系统 `xcrun swiftc` 构建 helper，进行开发用 ad-hoc 签名，再构建/启动 demo。编译失败直接停止，避免打开无法采集的 demo。Windows 与较旧 macOS 跳过原生编译。
+2. `pnpm run demo`（或别名 `pnpm run demo:mac`）：macOS 14+ 自动使用系统 `xcrun swiftc` 构建 helper，进行开发用 ad-hoc 签名，再构建/启动 demo。编译失败直接停止，避免打开无法采集的 demo。Windows 的 `pnpm build` 单独编译 Windows exe；较旧 macOS 跳过原生编译。
 3. 点击 demo 的“授权屏幕录制与辅助功能”。系统允许后刷新状态，若仍为旧状态重启 demo。屏幕录制负责像素权限；辅助功能负责跨应用容器。
 4. 在实时/冻结模式及三档粒度间切换，比较下一次截图。macOS 全局快捷键沿用 demo 配置 `CommandOrControl+Shift+A`。
 
@@ -66,7 +66,8 @@ macOS live 路径由实际采集后端检查屏幕权限，Electron 宿主的 `g
 - 安装包将 `dist/native/snapora-macos` 放到 ASAR 外（例如 electron-builder `asarUnpack: ['**/dist/native/snapora-macos']`），保留执行权限；默认路径自动映射 `app.asar` 到 `app.asar.unpacked`。
 - 应随应用使用 Developer ID 签名并公证 helper，保留稳定路径和代码身份。构建脚本中的 ad-hoc 签名仅供源码 demo，不能作为生产发布验收。运行时不编译、不下载、不调用 PowerShell。
 - 也可通过 provider 的 `executablePath` 及 `new ElectronCaptureAdapter({ macHelperPath })` 提供自己的绝对路径，再把 adapter 传给 manager；自定义 adapter 由宿主 `dispose()`。
-- 尚未发布包含 helper 的 npm 包；发布时必须先在 Mac 构建所需架构并检查包内容。跨平台 JS 构建成功不代表包含可执行 Mac helper。
+- 尚未发布包含 helper 的 npm 包。发布前先执行 `pnpm run test:native:mac`，再执行 `pnpm run build:native:mac:universal` 和 `pnpm run release:check`。后者检查 universal Mach-O 的两个架构、复制后的文件一致性，并在 Mac 校验执行权限与签名；缺失或单架构产物会阻止发布检查。跨平台 JS 构建成功不代表包含可执行 Mac helper。`test:native:mac` 会生成本机单架构文件，因此务必在它之后重新生成 universal 文件。
+- 面向宿主的五语言 README 已提供 provider、权限 IPC、Preload 和清理示例。demo IPC 与 AppleScript 焦点恢复不属于包依赖。Windows 外部 worker 也需解包原生目录，统一使用 `asarUnpack: ['node_modules/electron-snapora/dist/native/**']`（electron-builder 26）；库将外部 helper 路径统一映射到 `app.asar.unpacked`。
 
 ## 验证
 

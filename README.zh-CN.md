@@ -22,6 +22,9 @@
 
 ## 功能特性
 
+- Windows 10 2004+ / macOS 14+ 多屏实时选择：移动鼠标跨屏选择，确定选区后再采集画面。
+- 跨应用窗口与容器吸附：Windows UI Automation、macOS AX，支持 `window / panel / fine` 三档粒度。
+- 面向宿主的 macOS 权限查询、显式授权请求和结构化截图失败结果。
 - **跨平台屏幕截取**：支持显示器与光标定位截屏。
 - **交互式选区覆盖层**：支持自由拖拽框选、8 方向尺寸调整与坐标指示。
 - **丰富的上下文标注预设**：矩形、椭圆、箭头、画笔涂鸦、文字（普通/背景色块/描边预设）、强度可调马赛克和全屏平铺水印。
@@ -286,7 +289,7 @@ module.exports = {
 
 ### electron-builder 配置
 
-`electron-builder` 可将本依赖打包至 ASAR 内部，HTML/CSS/JS 资源无需配置 `asarUnpack`。
+HTML/CSS/JS 资源可以保留在 ASAR 内，Mac 可执行 helper 必须解包；配置见下文[正式应用如何携带 Mac helper](#正式应用如何携带-mac-helper)。
 
 ### Electron Forge 配置
 
@@ -303,22 +306,7 @@ module.exports = {
 
 ### macOS 权限配置
 
-macOS 10.15 及以上需要屏幕录制权限。在应用首次发起截图请求时系统会弹出原生权限授权弹窗。若用户此前拒绝过，Snapora 会自动引导跳转至“系统设置 → 隐私与安全性 → 屏幕录制”并返回 `PERMISSION_DENIED`。
-
-在打包配置（如 electron-builder）中添加权限用途说明：
-
-```json
-{
-  "build": {
-    "mac": {
-      "hardenedRuntime": true,
-      "extendInfo": {
-        "NSScreenCaptureUsageDescription": "用于捕获选定的屏幕区域并进行标注分享。"
-      }
-    }
-  }
-}
-```
+frozen 模式检查 Electron 宿主权限；live 采集与 AX 嗅探检查原生 helper 权限。屏幕录制和辅助功能未授权时的行为不同，查询、显式授权、IPC 和分发方式见下文[宿主权限说明](#权限由谁检查谁告知用户)。不要假定截图会自动申请两项权限。
 
 ### macOS 快捷键与宿主窗口保护
 
@@ -379,84 +367,175 @@ const snapora = setupElectronSnapora({
 | `INVALID_RESULT`          | 覆盖层返回了非法数据或未预期的生命周期消息。 |
 | `UNSUPPORTED_PLATFORM`    | 当前操作系统或显示协议不受支持。             |
 
-## Windows 吸附粒度（源码原型）
+## 多屏实时选择、容器吸附与宿主权限接入
 
-当前分支提供可选的 `createWindowsSnapProvider`；普通 `ScreenshotManager` 默认仍自由框选。
-Windows demo 默认面板级，可用“吸附粒度”下拉框比较三档，按钮和全局快捷键从下一次截图采用新选择。
-设置保存在本次 demo 进程内，重启恢复面板级。
+这些能力属于 npm 包公开 API，不是 demo 专属功能。`demo/` 只是源码仓库的测试应用，不随 npm 发布。默认接入仍是冻结画面的单屏截图；安装依赖不会自动注册吸附 provider，也不会自动带上权限界面。
 
-| `granularity`     | 范围                                           |
-| ----------------- | ---------------------------------------------- |
-| `'window'`        | 仅整个应用窗口，跳过 UI Automation 内部遍历    |
-| `'panel'`（默认） | 最外层主要面板和侧栏，不再吸附其中的内部内容块 |
-| `'fine'`          | 原型的精细容器范围，包括小分组、列表项等       |
+`interactionMode: 'live'` 支持跨屏移动鼠标、悬停吸附、单击选区和自由拖框；一次拖动限制在起始显示器内。选区确定后才采集该屏幕并进入原有标注编辑器。`display: 'all'` 只能配合 live 使用，不表示将多个屏幕拼成一张图片。旧模式使用 `interactionMode: 'frozen', display: 'cursor'`。
+
+| 粒度            | 行为                                       |
+| --------------- | ------------------------------------------ |
+| `window`        | 只吸附完整应用窗口，不遍历可访问性树。     |
+| `panel`（provider API 默认） | 主要布局面板和侧栏，过滤小控件及嵌套卡片。 |
+| `fine`          | 更细的可访问性容器，如卡片、列表项。       |
+
+Windows 使用 UI Automation；macOS 使用 CoreGraphics 窗口边界、AX 容器与 ScreenCaptureKit 像素采集。两端 provider 均支持 `prepare()`、`dispose()`，先增量返回窗口，再补充容器。Mac 在命中与遮挡筛选前排除系统合成/状态层，保留真实全屏应用。识别精度取决于目标应用暴露的可访问性树，Canvas/自绘界面可能只有整窗。实时模式要求 Windows build 19041+ 或 macOS 14+；Linux 暂不支持实时模式。
+
+### 宿主主进程
+
+在 `app.whenReady()` 完成后，先使用下文自行构建的 preload 创建宿主窗口，再于加载页面前调用 `setupHostScreenshot(hostWindow, trustedUrl)`，传入可信页面完整的 `file://` URL 或开发 URL，保证渲染层初始化前已注册 IPC。它替代前文的 `setupElectronSnapora()` 初始化，不要重复注册相同通道。保存返回的清理函数，在窗口关闭/应用退出时调用。多宿主窗口应共享一个 manager/provider，并校验各个获准窗口的页面来源。
 
 ```ts
-import { app } from 'electron';
-import { ScreenshotManager, createWindowsSnapProvider } from 'electron-snapora/main';
+import { release } from 'node:os';
+import type { BrowserWindow, IpcMainInvokeEvent } from 'electron';
+import { ipcMain } from 'electron';
+import {
+  setupElectronSnapora,
+  createMacSnapProvider,
+  createWindowsSnapProvider,
+} from 'electron-snapora/main';
 
-const snapProvider = createWindowsSnapProvider({
-  granularity: 'panel',
-  keepAlive: true,
-});
-const manager = new ScreenshotManager({ getWindowSnapRegions: snapProvider });
-app.whenReady().then(() => snapProvider.prepare());
-app.on('before-quit', () => {
-  manager.dispose();
-  snapProvider.dispose();
+export function setupHostScreenshot(hostWindow: BrowserWindow, trustedUrl: string) {
+  const liveSupported =
+    (process.platform === 'win32' && Number(release().split('.')[2]) >= 19041) ||
+    (process.platform === 'darwin' && Number(release().split('.')[0]) >= 23);
+  const macProvider =
+    process.platform === 'darwin' && liveSupported
+      ? createMacSnapProvider({ granularity: 'panel', onDiagnostic: console.info })
+      : undefined;
+  const provider =
+    macProvider ??
+    (process.platform === 'win32' && liveSupported
+      ? createWindowsSnapProvider({ granularity: 'panel', keepAlive: true })
+      : undefined);
+  const validateSender = (event: IpcMainInvokeEvent) =>
+    !hostWindow.isDestroyed() &&
+    event.sender === hostWindow.webContents &&
+    event.senderFrame === hostWindow.webContents.mainFrame &&
+    event.senderFrame?.url === trustedUrl;
+
+  const snapora = setupElectronSnapora({
+    ipcMain,
+    validateSender,
+    managerOptions: { getWindowSnapRegions: provider },
+  });
+  ipcMain.handle('host:snapora-permissions', async (event, prompt: unknown) => {
+    if (!validateSender(event) || typeof prompt !== 'boolean')
+      throw new Error('Unauthorized permission request.');
+    if (snapora.manager.activeJobId)
+      throw new Error('Finish or cancel the current capture first.');
+    return {
+      liveSupported,
+      macPermissions: macProvider ? await macProvider.getPermissions(prompt) : null,
+    };
+  });
+
+  return () => {
+    ipcMain.removeHandler('host:snapora-permissions');
+    snapora.unregister();
+    provider?.dispose();
+  };
+}
+```
+
+### 宿主 Preload 与渲染层
+
+将以下 preload 打包成单个 CommonJS 文件，把产物绝对路径传入 `BrowserWindow.webPreferences.preload`，保持 `contextIsolation: true`、`sandbox: true`、`nodeIntegration: false`。preload 中的 `electron-snapora/preload` 要内联打包，仅将 `electron` 保持 external；沙箱 preload 不能在运行时加载任意 npm 模块。主进程的包入口则保持 external。参见 [Electron 沙箱说明](https://www.electronjs.org/docs/latest/tutorial/sandbox)。
+
+```ts
+import { contextBridge, ipcRenderer } from 'electron';
+import { exposeScreenshotApi } from 'electron-snapora/preload';
+
+exposeScreenshotApi({ contextBridge, ipcRenderer });
+contextBridge.exposeInMainWorld('snaporaPermissions', {
+  get: () => ipcRenderer.invoke('host:snapora-permissions', false),
+  request: () => ipcRenderer.invoke('host:snapora-permissions', true),
 });
 ```
 
-demo 预热并复用一个隔离工作进程；每次截图读取新的窗口边界，随后在截图层准备期间逐窗补充 UIA 容器，
-迟到结果不会改变按下鼠标时锁定的候选或已选区域。`keepAlive` 默认关闭；预热/复用的 provider 用完应调用 `dispose()`。
-`pnpm run demo:snap-benchmark` 比较冷/热探测耗时，`pnpm run demo:snap-stream-smoke` 验证增量悬停与选区稳定性。
-
-运行 `pnpm run demo`，Windows 默认快捷键为 **Ctrl + Alt + Shift + S**。
-面板筛选是启发式策略，不能保证每个应用暴露相同的可访问性布局。
-目前仅验证源码 demo；150% / 100% 混合缩放已验证双屏分别选择及同一窗口横跨两屏的吸附边界。`pnpm run demo:mixed-dpi-snap-smoke` 可运行跨屏窗口回归；其他显示布局和安装包分发仍待验证。详见 `docs/windows-container-snap-prototype.md`。
-
-开发测试集中在 `test/`，按 `core/`、`electron/`、`overlay/`、`demo/`、`scripts/` 保留模块层级。
-`pnpm run test` 运行全部单元测试；`pnpm run demo:granularity-smoke` 在 Windows 验证实际 demo 的切换和截图链路。
-
-### 多屏实时选择、选后采集
-
-Windows 和 macOS 14+ demo 默认“实时选择 · 多屏 · 选后采集”，可切换“冻结画面 · 当前屏幕”比较旧模式。
-启动后可在各屏嗅探/框选，选区始终限制在起点屏幕。有效选区提交后才采集所选屏幕的一帧，进入原有标注与导出；其他屏幕退出交互。Esc 取消整个会话。
-
-显式启用：
+示例中的 `host:snapora-permissions` 和 `window.snaporaPermissions` 是宿主自己定义的桥，不是库内置导出；渲染层需补相应类型声明。`get()` 返回 `{ liveSupported, macPermissions: null | { screenRecording, accessibility } }`，`null` 表示示例未创建受支持的 Mac provider。权限查询异常会使 IPC reject，应与“用户未授权”分开提示。
 
 ```ts
-// app ready 后预热透明窗口；不采集屏幕像素。
-await Promise.all([
-  snapProvider.prepare(),
-  manager.prepare({ display: 'all', interactionMode: 'live' }),
-]);
-const result = await manager.capture({ display: 'all', interactionMode: 'live' });
+import type { MacSnapPermissions } from 'electron-snapora/main';
+import type { ScreenshotRendererApi } from 'electron-snapora/types';
+
+interface HostPermissionState {
+  liveSupported: boolean;
+  macPermissions: MacSnapPermissions | null;
+}
+declare global {
+  interface Window {
+    electronSnapora: ScreenshotRendererApi;
+    snaporaPermissions: {
+      get(): Promise<HostPermissionState>;
+      request(): Promise<HostPermissionState>;
+    };
+  }
+}
 ```
 
-`getWindowSnapRegions: snapProvider` 可直接使用。自定义包装函数必须转发第三个 `context` 参数，
-动态粒度示例：`(signal, update, context) => snapProvider(signal, update, granularity, context)`；否则实时刷新会识别到自己的截图层。
+```ts
+const state = await window.snaporaPermissions.get();
+const result = await window.electronSnapora.capture({
+  interactionMode: state.liveSupported ? 'live' : 'frozen',
+  display: state.liveSupported ? 'all' : 'cursor',
+});
+if (result.status === 'failed' && result.code === 'PERMISSION_DENIED') {
+  console.info(result.message);
+}
+```
 
-库默认仍为 `cursor + frozen`；`all + frozen` 返回 `INVALID_REQUEST`，不支持的系统请求 live/all 返回 `UNSUPPORTED_PLATFORM`。
-实时模式要求 Windows 10 2004+ 或 macOS 14+。目前真机验证仅覆盖 Windows / Electron 43.3.0、双屏 150%/100%；macOS 实现与测试入口已加入，尚待 Mac 编译和实机验证。选择阶段页面继续更新，图片取自选定后的帧。
-单击只固定候选并进入编辑，不会直接完成或复制。窗口内未命中容器的空白处回退整窗；没有窗口候选的桌面空白处回退当前整屏。拖动仍可自由框选。
-选区确定后立即显示工具栏，无须等待图片。等待期间可以选择工具、取消或提前确认；确认只在图片就绪后执行一次，绘制需等采集完成。`pnpm run demo:live-toolbar-smoke` 验证这段交互及主按钮 hover 颜色。
-Windows 实时模式使用独立 GDI 屏幕拷贝进程：系统光标始终正常显示和移动，采集像素不包含光标和受保护交互层，只拷贝所选显示器。原型在预热时使用系统 .NET Framework 编译器编译随包提供的 C# 源码，不使用 PowerShell，也不下载可执行文件；编译/采集失败返回 `CAPTURE_FAILED`，不回退到会夹带光标的桌面流。冻结模式保留既有 Electron 桌面流/图片路径。显示拓扑/缩放改变时结束会话并返回 `DISPLAY_NOT_FOUND`。
+### 权限由谁检查、谁告知用户
 
-`pnpm run demo:capture-exclusion-smoke` 检查实际屏幕像素；`pnpm run demo:live-selection-smoke` 需要两块真实显示器，验证跨屏嗅探、延后采集、PNG 导出和取消。详细方案与实测限制见 [多屏实时选择](docs/multi-display-live-selection-plan.md)。
-`pnpm run demo:live-click-smoke` 从真实 demo 按钮验证单击选区、候选为空时整屏选择，以及桌面流被拒绝时仍可独立完成原生采集。`pnpm run demo:live-cursor-smoke` 同时检查 Windows 系统光标可见标志，以及指针位于选区内外时的底图像素。
+| 权限或异常            | 库的反馈                                                                                 | 宿主应处理                                                                            |
+| --------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| 缺少屏幕录制权限      | live 截图返回 `status: 'failed', code: 'PERMISSION_DENIED'`，已有截图 IPC 原样返回结果。 | 显示用途说明，提供授权/设置入口。                                                     |
+| 缺少辅助功能权限      | 容器吸附退化为整窗/自由框选；截图成功不代表 AX 已授权。                                  | 查询 `getPermissions()`，或监听 provider 的 `onDiagnostic` → `accessibility: false`。 |
+| helper 缺失或无法启动 | 权限查询 reject，截图可能返回 `CAPTURE_FAILED`，不是 `PERMISSION_DENIED`。               | 先修复打包、路径或签名，不要当作用户拒绝。                                            |
 
-### macOS 容器吸附与原生采集
+`await macProvider.getPermissions()` 查询实际 helper 的两项权限，不弹窗。用户点击授权按钮后，调用 `await window.snaporaPermissions.request()`；桥转到 `getPermissions(true)` 请求屏幕录制与辅助功能授权。它是发起请求，不会一直等待用户操作系统设置；之后需再次查询，必要时重启签名后的应用。布尔值 `false` 不区分尚未请求、拒绝或系统限制。不要在截图进行中请求权限。
 
-在 macOS 14+ 安装 Xcode Command Line Tools 后运行 `pnpm run demo`（`pnpm run demo:mac` 为同一入口）：自动先编译固定路径的 Swift helper，再构建并启动 demo；原生编译失败会停止启动。Windows 和较旧的 macOS 跳过该编译步骤。正式分发应携带签名后的 helper，用户机器不需要编译器。demo 中点击“授权屏幕录制与辅助功能”，授权后刷新状态，必要时重启 demo。
+库没有自动权限变更推送，也没有内置权限渲染层桥。宿主负责提示界面、IPC 来源校验、清理与状态刷新。live 采集以原生后端权限主体为准，不能只检查 Electron 宿主状态；frozen 模式保留 Electron 权限检查，已拒绝时打开屏幕录制设置。标准截图/嗅探不需要麦克风、摄像头、输入监控、完全磁盘访问或自动化权限。demo 中可选的 AppleScript 焦点恢复兜底可能请求自动化权限，不应把它当作包接入依赖。
 
-`createMacSnapProvider({ granularity: 'panel' })` 的接法与 Windows provider 相同；支持 `window / panel / fine`、增量更新、`prepare()` 和 `dispose()`，额外提供 `getPermissions()` 与显式提示用的 `getPermissions(true)`。未授予辅助功能时保留窗口吸附和手动框选；实时采集需要屏幕录制权限。
+### 正式应用如何携带 Mac helper
 
-每轮优先探测鼠标所在窗口，容器只在祖先可见范围内吸附，并优先读取滚动列表的可见子项。实时采集以原生后端权限为准；冻结模式仍使用 Electron 宿主权限。`pnpm run test:native:mac` 编译 helper 并运行原生遍历回归，无须截图或权限授权；当前 Windows 环境尚未执行这组 Swift 测试。
+将 `electron-snapora` 放在生产 `dependencies`，主进程入口保持 external。发布包必须携带 **arm64 + x86_64 universal** 可执行文件 `dist/native/snapora-macos`。运行时宿主不需要 Swift、Xcode、`koffi` 或 demo 文件。原生 helper 是独立进程，不是 Node 原生 addon。
 
-macOS 使用 CoreGraphics 窗口边界与 AX 容器树，ScreenCaptureKit 按 CGWindowID 排除本次截图层，关闭采集光标；不排除整个宿主进程。原生 helper 默认在 `dist/native/snapora-macos`，ASAR 安装包需 unpack 此文件。自定义路径通过 `createMacSnapProvider({ executablePath })` 和 `new ElectronCaptureAdapter({ macHelperPath })` 分别指定；自定义 adapter 由宿主释放。
+使用仓库当前的 **electron-builder 26** 时，将 helper 解包：
 
-`pnpm run demo:mac-live-smoke` 在已授权、接好两块显示器的 Mac 上验证跨屏悬停、AX 面板、选后画面、截图层排除、导出和取消。当前 Windows 开发环境未执行 Swift 编译或 Mac 实机测试，不能据此认定 Lark、Chrome、Ping 的 macOS 效果已验收。构建、打包和验收说明见 [macOS 实施记录](docs/macos-container-snap.md)。
+```json
+{
+  "build": {
+    "asarUnpack": ["node_modules/electron-snapora/dist/native/**"]
+  }
+}
+```
+
+Windows 随包提供两个预编译程序：`dist/native/snapora-windows-snap.exe`（UI Automation）和 `dist/native/snapora-windows-capture.exe`（像素采集）。Electron 直接启动它们，运行时不调用 PowerShell、不编译 C#、不下载或生成临时可执行文件。它们使用 Windows 的 .NET Framework 运行时，不要求用户安装编译器或 SDK；属于 AnyCPU 托管程序，并非自包含 .NET 包。两个 exe 均须按上例解包到 ASAR 外；HTML/CSS/JS 可留在 ASAR 内。
+
+Windows 源码开发执行 `pnpm run build`（包括 `pnpm demo`）会先编译辅助程序。可用 `pnpm run build:native:windows` 单独编译、`pnpm run verify:native:windows` 校验构建产物和源码哈希。npm 使用者不需要构建工具；接入 API、预热复用、取消、三档吸附和截图编辑功能保持一致。
+
+在 macOS/Linux 制作跨平台发布包前，先在相同源码版本的 Windows 上构建，将 `snapora-windows-snap.exe`、`snapora-windows-capture.exe`、`windows-helpers.json` 一并复制到发布机器的 `src/electron/native`。CI 提供 `windows-native-helpers` 产物。`release:check` 同时要求 Windows 两个 exe 和 Mac universal helper，并拒绝 Windows 文件缺失、损坏或源码过期。Windows 可执行文件的生产签名可在宿主打包阶段应用到解包后的 helper。
+
+默认查找路径会将 `app.asar` 转为 `app.asar.unpacked`。保留可执行权限，并把 helper 纳入宿主的 Developer ID 签名、公证流程；源码构建的 ad-hoc 签名仅供开发，不等于生产签名。[electron-builder 26 文档](https://www.electron.build/v26/docs/mac/) 的 `mac.binaries` 可指定额外需要签名的可执行文件。builder 27 使用 `asar.unpack` 与对应 `mac.sign` 配置；Forge 同样需要解包并签名该文件。
+
+若改为 `extraResources`，须将**同一个绝对路径**同时传给 `createMacSnapProvider({ executablePath })` 与 `new ElectronCaptureAdapter({ macHelperPath })`，并通过 `managerOptions.captureAdapter` 注入适配器。除 manager/provider 外，注入的 adapter 也由宿主自行 `dispose()`。权限验收应使用最终签名后的应用身份，而不只是在终端启动的 Electron。
+
+### 源码 demo、发布与验证
+
+仓库开发运行 `pnpm demo`（`pnpm run demo:mac` 为别名）；macOS 14+ 会先自动编译 helper，仅构建机器需要 Xcode Command Line Tools。demo 默认 live + window，按独立窗口边界吸附；仍可切换 panel / fine 对比内部容器效果。包本身不引用 demo 的权限 IPC 或焦点恢复代码。
+
+发布前在 Mac 执行：
+
+```bash
+pnpm run test:native:mac
+pnpm run build:native:mac:universal
+pnpm run release:check
+```
+
+`release:check` 会拒绝缺失、单架构或结构损坏的 Mac helper；在 macOS 上还检查执行权限和签名。构建只把预编译 helper 复制到 `dist/native`，不发布 C#/PowerShell/Swift 源码。CI 先构建 Windows 产物供跨平台检查使用，再在 Mac 编译/运行 Swift 回归、检查 universal 产物，并验证安装后的 ESM/CommonJS 消费项目；包验证从真实 tgz 安装，不依赖仓库 self-reference。
+
+用户已反馈系统窗口过滤后 Mac demo 截图与吸附可用。签名应用分发、双架构真机、完整 Lark/浏览器/Ping 矩阵仍需发版验收，不把模拟测试当作实机通过。详见 [实现与验收记录](https://github.com/electron-tools/electron-snapora/blob/main/docs/macos-container-snap.md)。
 
 ## 开源协议与商标
 

@@ -1,6 +1,17 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+/** External helper processes cannot read Electron's virtual ASAR filesystem. */
+export function resolveNativeHelperPath(
+  fileName: string,
+  mainDirectory = __dirname
+): string {
+  return resolve(mainDirectory, '..', 'native', fileName).replace(
+    /([/\\])app\.asar([/\\])/,
+    '$1app.asar.unpacked$2'
+  );
+}
+
 export interface OverlayResources {
   htmlPath: string;
   preloadPath: string;

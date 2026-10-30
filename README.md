@@ -22,6 +22,9 @@ An easy-to-integrate Electron screenshot plugin with one-call setup and secure P
 
 ## Features
 
+- Live selection across displays on Windows 10 2004+ and macOS 14+, with capture after selection.
+- Cross-application window/container snapping via UI Automation (Windows) and AX (macOS), with `window`, `panel`, and `fine` granularity.
+- Host-accessible macOS permission queries, explicit authorization requests, and structured capture failures.
 - Electron screenshot and screen capture.
 - Region capture with an interactive snipping overlay.
 - Contextual presets for rectangle, ellipse, arrow, brush, text, adjustable mosaic, and tiled watermark annotations.
@@ -295,7 +298,7 @@ field. On Windows, the built-in adapter instead sends an internal desktop source
 Overlay can draw the first MediaStream frame directly to Canvas. Source references are prepared and
 cached outside the click path, and the actual video size becomes the Canvas pixel size. If direct
 capture fails, Snapora retries once with the legacy image frame and uses that stable path for later
-captures on the same display. macOS and Linux continue to use image frames until their native
+captures on the same display. macOS live capture uses the native helper to return image frames. Linux continues to use image frames until its native
 capture paths are validated.
 
 Resource limits can be lowered per host application:
@@ -351,8 +354,7 @@ module.exports = {
 };
 ```
 
-electron-builder can package the complete dependency inside ASAR; these JavaScript, HTML, and CSS
-resources do not require `asarUnpack`. If a bundler inlines the package or packaging excludes part
+JavaScript, HTML and CSS can remain inside ASAR. The Mac executable must be unpacked; see [Shipping the native Mac helper](#shipping-the-native-mac-helper). If a bundler inlines the package or packaging excludes part
 of `dist`, resource resolution throws an `[electron-snapora] Packaged resource missing` error with
 the expected path instead of waiting on a blank Overlay.
 
@@ -364,8 +366,7 @@ tree.
 ### Published package contents
 
 The npm package contains only the compiled ESM/CommonJS entry points, TypeScript declarations,
-Preloads, Overlay HTML/CSS/JavaScript, package metadata, README, changelog, and license. Source files,
-tests, demos, repository documentation, CI configuration, and release scripts are not published.
+Preloads, Overlay HTML/CSS/JavaScript, precompiled native helpers, package metadata, the five READMEs, changelog, and license. C#/PowerShell/Swift source, tests, demos, repository documentation, CI configuration, and release scripts are not published.
 
 ## Support baseline
 
@@ -385,32 +386,7 @@ Screen API.
 
 ### macOS permission
 
-macOS 10.15 and later requires Screen Recording consent. When the operating system reports
-`not-determined`, the first real capture request triggers the native macOS permission prompt. If
-access was already denied, Snapora opens System Settings → Privacy & Security → Screen Recording
-and returns `PERMISSION_DENIED`; the user must enable the signed host application and restart it.
-Restricted devices return the same error without opening settings. Test permission using the signed
-application identity, not only Electron launched from a terminal.
-
-Add a screen-capture purpose string to the packaged host. For electron-builder:
-
-```json
-{
-  "build": {
-    "mac": {
-      "hardenedRuntime": true,
-      "extendInfo": {
-        "NSScreenCaptureUsageDescription": "Capture a selected screen region for sharing."
-      }
-    }
-  }
-}
-```
-
-With `display: 'cursor'`, Snapora resolves the display under the pointer once at task start and keeps
-that display ID through capture and Overlay creation. If the monitor is disconnected or its geometry
-or scale changes during startup, the task fails with `DISPLAY_NOT_FOUND` and should be retried instead
-of displaying a screenshot on the wrong monitor.
+Frozen capture uses Electron permission checks; live capture and AX discovery use the native helper. Screen Recording and Accessibility have different failure/degradation behavior. See [host permission responsibilities](#permission-responsibilities) below for queries, explicit prompting, IPC and packaging. Do not assume capture automatically requests both permissions.
 
 ### macOS shortcuts and host window protection
 
@@ -499,90 +475,175 @@ thrown by the application's logger are isolated and never change the screenshot 
 | `INVALID_RESULT`          | The Overlay returned an invalid result or lifecycle message.     |
 | `UNSUPPORTED_PLATFORM`    | The current OS/display protocol is explicitly unsupported.       |
 
-## Windows snap granularity (source prototype)
+## Live selection, container snapping, and host permissions
 
-This branch provides an opt-in `createWindowsSnapProvider`. A plain `ScreenshotManager`
-still uses free selection. The Windows demo defaults to **panel** and includes a selector:
+These are package APIs, not demo-only features. `demo/` is a source-repository test application and is not shipped in npm. The default integration remains frozen single-display capture; installing the package does not automatically enable a snap provider or permission UI.
 
-| `granularity`       | Candidates                                                          |
-| ------------------- | ------------------------------------------------------------------- |
-| `'window'`          | Whole application windows; skips internal UI Automation traversal   |
-| `'panel'` (default) | Outermost major panels and sidebars; excludes nested content blocks |
-| `'fine'`            | Fine UIA containers, including smaller groups and list items        |
+`interactionMode: 'live'` supports moving the pointer between displays, hovering to snap, clicking to select, and dragging a free rectangle. A drag stays on its starting display; capture starts after selection, then the existing annotation editor opens. `display: 'all'` requires live mode and does not produce a stitched multi-display image. Use `interactionMode: 'frozen', display: 'cursor'` for the earlier mode.
+
+| Granularity       | Behavior                                                                |
+| ----------------- | ----------------------------------------------------------------------- |
+| `window`          | Whole application windows; no accessibility-tree traversal.             |
+| `panel` (provider API default) | Main layout panels and sidebars; skips small controls and nested cards. |
+| `fine`            | Smaller exposed accessibility containers, such as cards and list items. |
+
+Windows uses UI Automation; macOS uses CoreGraphics window bounds, AX containers, and ScreenCaptureKit pixels. Both providers expose `prepare()` and `dispose()` and stream windows before containers. macOS filters system compositor/status surfaces before hit testing and occlusion; ordinary fullscreen applications remain selectable. Results depend on the target application's accessibility tree; canvas/custom UI may provide only a window. Windows requires build 19041+; macOS live mode requires 14+. Linux live mode is unsupported.
+
+### Host main process
+
+After `app.whenReady()`, create your host window with the bundled preload below, then call `setupHostScreenshot(hostWindow, trustedUrl)` before loading the page. Pass the exact trusted `file://` URL or development URL; register IPC before renderer initialization. This replaces the earlier `setupElectronSnapora()` call; do not register the same channels twice. Keep the returned cleanup and call it on window closure/app shutdown. For multiple host windows, share one manager/provider and validate the specific trusted senders.
 
 ```ts
-import { app } from 'electron';
-import { ScreenshotManager, createWindowsSnapProvider } from 'electron-snapora/main';
+import { release } from 'node:os';
+import type { BrowserWindow, IpcMainInvokeEvent } from 'electron';
+import { ipcMain } from 'electron';
+import {
+  setupElectronSnapora,
+  createMacSnapProvider,
+  createWindowsSnapProvider,
+} from 'electron-snapora/main';
 
-const snapProvider = createWindowsSnapProvider({
-  granularity: 'panel',
-  keepAlive: true,
-});
-const manager = new ScreenshotManager({ getWindowSnapRegions: snapProvider });
-app.whenReady().then(() => snapProvider.prepare());
-app.on('before-quit', () => {
-  manager.dispose();
-  snapProvider.dispose();
+export function setupHostScreenshot(hostWindow: BrowserWindow, trustedUrl: string) {
+  const liveSupported =
+    (process.platform === 'win32' && Number(release().split('.')[2]) >= 19041) ||
+    (process.platform === 'darwin' && Number(release().split('.')[0]) >= 23);
+  const macProvider =
+    process.platform === 'darwin' && liveSupported
+      ? createMacSnapProvider({ granularity: 'panel', onDiagnostic: console.info })
+      : undefined;
+  const provider =
+    macProvider ??
+    (process.platform === 'win32' && liveSupported
+      ? createWindowsSnapProvider({ granularity: 'panel', keepAlive: true })
+      : undefined);
+  const validateSender = (event: IpcMainInvokeEvent) =>
+    !hostWindow.isDestroyed() &&
+    event.sender === hostWindow.webContents &&
+    event.senderFrame === hostWindow.webContents.mainFrame &&
+    event.senderFrame?.url === trustedUrl;
+
+  const snapora = setupElectronSnapora({
+    ipcMain,
+    validateSender,
+    managerOptions: { getWindowSnapRegions: provider },
+  });
+  ipcMain.handle('host:snapora-permissions', async (event, prompt: unknown) => {
+    if (!validateSender(event) || typeof prompt !== 'boolean')
+      throw new Error('Unauthorized permission request.');
+    if (snapora.manager.activeJobId)
+      throw new Error('Finish or cancel the current capture first.');
+    return {
+      liveSupported,
+      macPermissions: macProvider ? await macProvider.getPermissions(prompt) : null,
+    };
+  });
+
+  return () => {
+    ipcMain.removeHandler('host:snapora-permissions');
+    snapora.unregister();
+    provider?.dispose();
+  };
+}
+```
+
+### Host preload and renderer
+
+Bundle this preload into a single CommonJS file and pass its absolute output path to `BrowserWindow.webPreferences.preload`; keep `contextIsolation: true`, `sandbox: true`, and `nodeIntegration: false`. Bundle `electron-snapora/preload` into that file, leaving only `electron` external. A sandboxed preload cannot load arbitrary package modules at runtime. The main-process package must remain external. See [Electron sandbox documentation](https://www.electronjs.org/docs/latest/tutorial/sandbox).
+
+```ts
+import { contextBridge, ipcRenderer } from 'electron';
+import { exposeScreenshotApi } from 'electron-snapora/preload';
+
+exposeScreenshotApi({ contextBridge, ipcRenderer });
+contextBridge.exposeInMainWorld('snaporaPermissions', {
+  get: () => ipcRenderer.invoke('host:snapora-permissions', false),
+  request: () => ipcRenderer.invoke('host:snapora-permissions', true),
 });
 ```
 
-The demo prewarms and reuses one isolated worker. Each capture reads fresh window bounds,
-then streams UIA containers while the overlay prepares; late results never replace a pressed
-or committed selection. `keepAlive` defaults to false; call `dispose()` when done with a
-prewarmed/reusable provider. `pnpm run demo:snap-benchmark` measures cold and warm discovery;
-`pnpm run demo:snap-stream-smoke` checks incremental hover and selection stability.
-
-Run `pnpm run demo`. On Windows, press **Ctrl + Alt + Shift + S** to capture another app.
-The selected mode applies to the next button or global-shortcut capture; restarting the
-demo resets it to panel. Panel filtering is heuristic and depends on each app's accessibility tree.
-This is a source-demo prototype. Selecting independently on two displays and snapping a window
-spanning 150%/100% displays have been verified. Packaged distribution and other display layouts
-remain unverified. Run `pnpm run demo:mixed-dpi-snap-smoke` for the spanning-window regression.
-See `docs/windows-container-snap-prototype.md` in the source checkout.
-
-Tests live under `test/`, grouped by `core/`, `electron/`, `overlay/`, `demo/`, and `scripts/`.
-Run `pnpm run test` for unit tests, and `pnpm run demo:granularity-smoke` on Windows to
-exercise the actual demo selector and capture pipeline.
-
-### Live selection across displays
-
-The Windows and macOS 14+ demos default to live multi-display selection, with the old frozen single-display mode available for comparison.
-Move between displays to hover or select; a drag stays within its starting display. Pixels are acquired only after committing a selection, then the selected display enters the existing editor. Escape cancels the whole session.
+The `host:snapora-permissions` channel and `window.snaporaPermissions` object below are host-owned example APIs, not built-in Snapora exports. Add their types to your renderer declarations. `get()` returns `{ liveSupported, macPermissions: null | { screenRecording, accessibility } }`; `null` means this example has no supported Mac provider. Query errors reject the IPC call and should be displayed separately from permission denial.
 
 ```ts
-await Promise.all([
-  snapProvider.prepare(),
-  manager.prepare({ display: 'all', interactionMode: 'live' }),
-]);
-const result = await manager.capture({ display: 'all', interactionMode: 'live' });
+import type { MacSnapPermissions } from 'electron-snapora/main';
+import type { ScreenshotRendererApi } from 'electron-snapora/types';
+
+interface HostPermissionState {
+  liveSupported: boolean;
+  macPermissions: MacSnapPermissions | null;
+}
+declare global {
+  interface Window {
+    electronSnapora: ScreenshotRendererApi;
+    snaporaPermissions: {
+      get(): Promise<HostPermissionState>;
+      request(): Promise<HostPermissionState>;
+    };
+  }
+}
 ```
 
-Direct `getWindowSnapRegions: snapProvider` assignment is supported. Wrappers must forward the third callback argument:
-`(signal, update, context) => snapProvider(signal, update, granularity, context)`.
-It carries the overlay handles to exclude from native discovery.
+```ts
+const state = await window.snaporaPermissions.get();
+const result = await window.electronSnapora.capture({
+  interactionMode: state.liveSupported ? 'live' : 'frozen',
+  display: state.liveSupported ? 'all' : 'cursor',
+});
+if (result.status === 'failed' && result.code === 'PERMISSION_DENIED') {
+  console.info(result.message);
+}
+```
 
-Existing calls default to `cursor + frozen`. `all + frozen` is rejected with `INVALID_REQUEST`; unsupported systems return `UNSUPPORTED_PLATFORM` for live/all.
-Live mode requires Windows 10 2004+ or macOS 14+. Hardware validation currently covers Windows / Electron 43.3.0 with 150%/100% displays; macOS compilation and hardware validation are still pending.
-The desktop remains live while selecting; the image reflects a frame acquired after selection. The selected screen's full frame allows later resizing; export crops the selection.
-One click locks the candidate and opens the editor; it does not finish or copy. Window whitespace selects the window when no container matches; desktop gaps select the current screen. Dragging still creates a custom rectangle.
-The toolbar appears as soon as the selection is fixed. Tools can be chosen while pixels load; confirmation is queued once until the frame is ready. Drawing starts after acquisition. `pnpm run demo:live-toolbar-smoke` checks this handoff and primary-button hover colors.
-On Windows, live mode uses an isolated GDI screen-copy worker: the real system cursor stays visible and responsive, while the captured pixels omit the cursor and the protected interaction overlay. Only the selected monitor is copied. The prototype compiles its bundled C# source with the OS .NET Framework compiler during warmup (no PowerShell or downloaded executable); compilation/capture failure returns `CAPTURE_FAILED`, without falling back to a cursor-embedded stream. Frozen mode retains its existing Electron stream/image path. Display geometry changes end the session with `DISPLAY_NOT_FOUND`.
+### Permission responsibilities
 
-Run `pnpm run demo:capture-exclusion-smoke` for pixel checks, or `pnpm run demo:live-selection-smoke` with two real monitors for multi-display selection, deferred capture, PNG export and cancellation.
-`pnpm run demo:live-click-smoke` checks single-click selection, empty-candidate full-screen selection and independence from a denied desktop stream through the real demo. `pnpm run demo:live-cursor-smoke` checks the Windows system-cursor visibility flag and captured pixels with the pointer inside/outside the selection.
-See [the implementation plan and validation record](docs/multi-display-live-selection-plan.md) for limitations.
+| Permission / condition      | Package behavior                                                                                                 | Host responsibility                                                          |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Screen Recording missing    | Live capture returns `status: 'failed', code: 'PERMISSION_DENIED'`; the normal capture IPC forwards this result. | Show an explanation and offer authorization/settings.                        |
+| Accessibility missing       | Container discovery degrades to window/free selection; screenshot success does not imply AX permission.          | Read `getPermissions()` or provider `onDiagnostic` → `accessibility: false`. |
+| Helper missing/unlaunchable | Query rejects; capture may return `CAPTURE_FAILED`, not `PERMISSION_DENIED`.                                     | Fix packaging/path/signing before asking for consent.                        |
 
-### macOS native backend
+`await macProvider.getPermissions()` checks the actual helper without prompting. Call `await window.snaporaPermissions.request()` only from the user's authorization-button handler; it maps to `getPermissions(true)` and requests Screen Recording and Accessibility. This starts the request, not a wait for the user to change settings: query again afterward and restart the signed app if required. Boolean `false` does not distinguish not-yet-requested, denied, or restricted. Do not call permission requests during capture.
 
-On macOS 14+ with Xcode Command Line Tools, run `pnpm run demo` (or its alias `pnpm run demo:mac`) to build the Swift helper and launch the demo. A failed native build stops startup; Windows and older Macs skip this step. Grant Screen Recording and Accessibility from the demo permission button, then refresh status or restart the demo if needed. Startup does not request permissions or read pixels.
+The library provides no automatic permission-change push or built-in permission renderer bridge. The host owns its UI, sender validation, IPC cleanup, and refresh. Live capture checks the native backend's permission identity; Electron host permission alone is not authoritative. Frozen capture retains Electron permission checks and opens Screen Recording settings when the status is denied. Standard screenshot/snapping needs no microphone, camera, input-monitoring, full-disk-access, or Automation permission. The demo's optional AppleScript focus-restoration fallback may request Automation; do not copy it as a screenshot dependency.
 
-Use `createMacSnapProvider({ granularity: 'panel' })` with the same manager integration as the Windows provider. It supports `window`, `panel`, `fine`, streaming updates, `prepare()`, `dispose()` and `getPermissions(prompt = false)`. Without Accessibility permission, window snapping and manual selection remain available. Live capture requires Screen Recording permission.
+### Shipping the native Mac helper
 
-Each query prioritizes the window under the pointer. AX traversal prefers visible children and clips descendants to their ancestor viewports. Live capture relies on its native backend's permission result; frozen capture retains Electron host permission checks. `pnpm run test:native:mac` compiles the helper and runs native traversal regressions without capturing pixels or prompting for permissions. These Swift tests have not run in the current Windows environment.
+Keep `electron-snapora` in production dependencies and externalize its main entry. The released package must contain the universal **arm64 + x86_64** `dist/native/snapora-macos` executable. Runtime hosts do not need Swift, Xcode, `koffi`, or any demo file. Native executables are separate processes, not Node native addons.
 
-CoreGraphics supplies window bounds, AX supplies containers, and ScreenCaptureKit captures the selected display with the cursor disabled and only the session's CGWindowIDs excluded. Ship the signed `dist/native/snapora-macos` executable outside ASAR (unpack it); end users do not need Xcode. Custom paths use the provider's `executablePath` and `ElectronCaptureAdapter`'s `macHelperPath`. Hosts own disposal of custom adapters.
+For **electron-builder 26** (the repository's version), unpack the helper:
 
-`pnpm run demo:mac-live-smoke` exercises two real displays, AX panels, deferred pixels, overlay exclusion, export and cancellation on an authorized Mac. Swift compilation and Mac hardware tests could not run in the current Windows environment. See [the macOS implementation and validation guide](docs/macos-container-snap.md) for packaging and the outstanding Lark/Chrome/Ping checks.
+```json
+{
+  "build": {
+    "asarUnpack": ["node_modules/electron-snapora/dist/native/**"]
+  }
+}
+```
+
+Windows ships two precompiled executables: `dist/native/snapora-windows-snap.exe` (UI Automation) and `dist/native/snapora-windows-capture.exe` (pixel capture). Electron launches them directly; there is no runtime PowerShell, C# compilation, download, or temporary executable. Both require the Windows .NET Framework runtime, not a compiler or SDK. They are AnyCPU managed executables, not self-contained .NET bundles. Keep both outside ASAR using the configuration above; HTML/CSS/JS may remain inside.
+
+On Windows, `pnpm run build` (and therefore `pnpm demo`) compiles the helpers before bundling. `pnpm run build:native:windows` builds them separately; `pnpm run verify:native:windows` verifies the bundled binaries and source hashes. The npm consumer needs no build tools. Public APIs, warmup, worker reuse, cancellation, three snapping levels, and screenshot editing are unchanged.
+
+For a cross-platform release built on macOS/Linux, first build on Windows at the same source revision, then copy `snapora-windows-snap.exe`, `snapora-windows-capture.exe`, and `windows-helpers.json` together into `src/electron/native` on the release machine. CI publishes these as `windows-native-helpers`. `release:check` requires both Windows helpers and the universal Mac helper and rejects missing, corrupt, or stale Windows artifacts. Apply Windows executable signing during host packaging to the unpacked helpers as appropriate.
+
+The default lookup maps `app.asar` to `app.asar.unpacked`. Preserve executable permission and include this helper in the host's Developer ID signing/notarization process; the repository's ad-hoc development signature is not production signing. [electron-builder 26 signing](https://www.electron.build/v26/docs/mac/) documents `mac.binaries` for additional executables. For builder 27, use `asar.unpack` and the corresponding `mac.sign` settings. Forge hosts must likewise unpack and sign the executable.
+
+If using `extraResources` instead, set the **same absolute helper path** on both `createMacSnapProvider({ executablePath })` and `new ElectronCaptureAdapter({ macHelperPath })`, then inject that adapter through `managerOptions.captureAdapter`. Dispose the injected adapter yourself in addition to the provider and manager. Validate permission prompts with the final signed app identity, not just terminal-launched Electron.
+
+### Source demo, release, and verification
+
+For repository development, `pnpm demo` (alias `pnpm run demo:mac`) builds the helper automatically on macOS 14+; Xcode Command Line Tools are needed only on the build machine. The demo defaults to live mode and window granularity (whole windows); its selector still offers panel and fine modes for comparison. None of its permission IPC or focus-restoration code is imported by the package.
+
+Before publishing, run on a Mac:
+
+```bash
+pnpm run test:native:mac
+pnpm run build:native:mac:universal
+pnpm run release:check
+```
+
+`release:check` rejects a missing, thin, or malformed Mac helper; on macOS it also verifies the executable bit and signature. The build copies precompiled helpers into `dist/native`, excluding C#/PowerShell/Swift source. CI builds Windows artifacts before its cross-platform checks, compiles/tests Swift on macOS, checks a universal artifact, and tests installed ESM/CommonJS consumers. Package verification uses a real tgz, not repository self-reference.
+
+The user has confirmed Mac demo capture and snapping after system-window filtering. Signed-app distribution, both CPU architectures on real hardware, and the full Lark/browser/Ping matrix still need release validation; simulated tests are not hardware acceptance. See [implementation and validation notes](https://github.com/electron-tools/electron-snapora/blob/main/docs/macos-container-snap.md).
 
 ## License and trademarks
 

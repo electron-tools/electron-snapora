@@ -1731,13 +1731,16 @@ function render(): void {
   if (showWindowSnap) {
     setRectStyle(windowSnapPreview, showWindowSnap);
   }
-  // 正在导出/准备写入剪切板时，立即隐藏选区选择框及其手柄，避免用户产生“未双击成功/还可拖拽”的卡顿感
-  selectionElement.hidden = selection === null || selectionState.phase === 'exporting';
+  // 保存对话框仍属于当前截图任务：保留选区和遮罩，直到输出成功才清理。
+  const exporting = selectionState.phase === 'exporting';
+  selectionElement.hidden = selection === null;
   // Geometry is enough to place the toolbar. Output requests wait for editorPrepared; drawing waits for pixels.
   const capturingSelection =
     Boolean(liveSelection) && selectionState.phase === 'capturing';
-  toolbar.hidden = selectionState.phase !== 'selected' && !capturingSelection;
-  toolbar.setAttribute('aria-busy', String(capturingSelection));
+  toolbar.hidden =
+    selectionState.phase !== 'selected' && !capturingSelection && !exporting;
+  toolbar.inert = exporting;
+  toolbar.setAttribute('aria-busy', String(capturingSelection || exporting));
 
   const showPhaseStatus = selectionState.phase === 'ready';
   status.hidden = !showPhaseStatus && !outputFeedback;

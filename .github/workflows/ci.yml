@@ -13,7 +13,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  native-windows:
+    name: Build Windows helpers
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: node scripts/build-native-windows.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-native-helpers
+          path: |
+            src/electron/native/snapora-windows-*.exe
+            src/electron/native/windows-helpers.json
+          if-no-files-found: error
+
   quality:
+    needs: native-windows
     name: Quality (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -22,11 +37,35 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-native-helpers
+          path: src/electron/native
       - uses: pnpm/setup@v2
         with:
           runtime: node@20
           cache: true
       - run: pnpm check
+      - run: pnpm run verify:native:windows
+      - name: Build and test native Mac helper
+        if: runner.os == 'macOS'
+        run: pnpm run test:native:mac
+      - name: Verify universal Mac release artifact
+        if: runner.os == 'macOS'
+        run: pnpm run build:native:mac:universal && pnpm run build && pnpm run verify:native:mac
+      - name: Verify installed Mac package consumers
+        if: runner.os == 'macOS'
+        run: pnpm run verify:consumers
+      - name: Prepare cross-platform npm tarball
+        if: runner.os == 'macOS' && github.ref == 'refs/heads/main'
+        run: pnpm run verify:release-metadata && pnpm pack --pack-destination .pack-preview/npm
+      - name: Upload npm release candidate
+        if: runner.os == 'macOS' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-snapora-npm-${{ github.sha }}
+          path: .pack-preview/npm/*.tgz
+          if-no-files-found: error
 
   package-consumers:
     name: Package consumers (Windows)

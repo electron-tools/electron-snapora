@@ -55,19 +55,8 @@ function sameRect(actual, expected) {
 async function physicalFixture() {
   return new Promise((resolve, reject) => {
     helper = spawn(
-      join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'),
-      [
-        '-NoLogo',
-        '-NoProfile',
-        '-NonInteractive',
-        '-MTA',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        join(__dirname, '../../src/electron/native/windows-snap.ps1'),
-        '-Granularity',
-        'window',
-      ],
+      join(__dirname, '../../dist/native/snapora-windows-snap.exe'),
+      ['--snapshot', 'window'],
       { windowsHide: true }
     );
     let output = '';

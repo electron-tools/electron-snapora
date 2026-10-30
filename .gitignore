@@ -1,5 +1,7 @@
 node_modules/
 src/electron/native/snapora-macos*
+src/electron/native/snapora-windows-*.exe
+src/electron/native/windows-helpers.json
 .pnpm-store/
 dist/
 coverage/

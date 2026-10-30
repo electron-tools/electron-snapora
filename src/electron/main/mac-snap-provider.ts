@@ -13,26 +13,28 @@ export interface MacSnapPermissions {
   accessibility: boolean;
 }
 /** Geometry-only stage counts help distinguish native traversal from panel filtering. */
-interface MacSnapNativeDiagnostics {
+export interface MacSnapNativeDiagnostics {
   visibleWindows?: number;
   filteredWindows?: number;
   axTargets?: number;
   matchedWindows?: number;
   rawContainers?: number;
 }
+/** Query completion metadata; lack of AX permission is a degraded mode, not a capture failure. */
+export interface MacSnapDiagnostic {
+  durationMs: number;
+  windows: number;
+  containers: number;
+  accessibility?: boolean;
+  native?: MacSnapNativeDiagnostics;
+  error?: string;
+}
 /** Configure a prebuilt helper; permission prompts remain explicit host actions. */
 export interface MacSnapProviderOptions {
   executablePath?: string;
   granularity?: SnapGranularity;
   timeoutMs?: number;
-  onDiagnostic?: (event: {
-    durationMs: number;
-    windows: number;
-    containers: number;
-    accessibility?: boolean;
-    native?: MacSnapNativeDiagnostics;
-    error?: string;
-  }) => void;
+  onDiagnostic?: (event: MacSnapDiagnostic) => void;
 }
 
 /** CG/AX already use global DIP. Clip each candidate without applying Retina scale a second time. */
@@ -174,6 +176,7 @@ export function createMacSnapProvider(
     return regions;
   };
   provider.prepare = () => client.prepare();
+  // The host owns prompting/UI and its IPC bridge. Query the helper actually used by this provider.
   provider.getPermissions = async (prompt = false): Promise<MacSnapPermissions> => {
     const response = await client.request(
       { command: 'permissions', prompt },

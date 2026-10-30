@@ -23,7 +23,11 @@ export default defineConfig({
   external: ['electron'],
   async onSuccess() {
     await mkdir('dist/native', { recursive: true });
-    await cp('src/electron/native', 'dist/native', { recursive: true });
+    // Ship executable helpers only; all native sources are compiled on build machines.
+    await cp('src/electron/native', 'dist/native', {
+      recursive: true,
+      filter: (source) => !/\.(?:swift|cs|ps1)$/.test(source),
+    });
   },
   outExtension({ format }) {
     return {

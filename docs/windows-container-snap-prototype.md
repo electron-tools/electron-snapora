@@ -1,6 +1,6 @@
 # Windows 跨应用容器吸附原型
 
-此功能只在 electron-snapora 的 Windows demo 中主动启用，未修改 Ping 接入。
+此文记录 Windows 容器吸附原型；当前 demo 和 Ping 接入默认使用窗口级，demo 保留容器粒度对比。
 库默认仍然自由框选；macOS、Linux 不调用 Windows 探测器。
 
 Windows demo 现默认多屏实时选择、选后采集；下拉框可切回旧的当前屏幕冻结模式。
@@ -17,8 +17,8 @@ pnpm run demo
 将目标应用放在前台，鼠标移到目标显示器，按 **Ctrl + Alt + Shift + S**。
 该组合避开了 Lark/Ping 常用的 Ctrl + Shift + A；也可在 demo 里重新设置。
 
-demo 的“吸附粒度”下拉框提供以下选项，默认选择面板级。按钮和全局快捷键共用主进程设置，
-切换从下一次截图生效；截图进行中禁止切换，重启 demo 恢复面板级。不支持 Windows 探测的平台禁用此控件。
+demo 的“吸附粒度”下拉框提供以下选项，默认选择窗口级。按钮和全局快捷键共用主进程设置，
+切换从下一次截图生效；截图进行中禁止切换，重启 demo 恢复窗口级。不支持 Windows 或 macOS 探测的平台禁用此控件。
 
 | 配置值   | 显示名称 | 策略                                       |
 | -------- | -------- | ------------------------------------------ |
@@ -41,8 +41,8 @@ provider 的 `granularity` 为默认粒度；demo 复用同一个 provider，通
 
 ## 实现边界
 
-- `createWindowsSnapProvider()` 使用隐藏的 Windows PowerShell MTA 子进程加载本地 C# 代码。PowerShell 仅是原型的加载壳，实际 Win32 / UIA 查询由 C# 完成，不增加 npm 原生依赖。
-- 默认一次探测完成就结束 worker；`keepAlive: true` 可复用同一进程。`prepare()` 预加载/编译代码并初始化 UIA，不预读应用内容；`dispose()` 终止查询并永久释放 provider。demo 在应用 ready 时预热、退出时释放。
+- `createWindowsSnapProvider()` 直接启动预编译的 `snapora-windows-snap.exe`，入口通过 `[MTAThread]` 保持 UIA 的 MTA 行为。运行时不再调用 PowerShell 或编译 C#，不增加 npm 原生 addon。
+- 默认一次探测完成就结束 worker；`keepAlive: true` 可复用同一进程。`prepare()` 启动 exe 并初始化 UIA，不编译代码、不预读应用内容；`dispose()` 终止查询并永久释放 provider。demo 在应用 ready 时预热、退出时释放。
 - 先用 Win32 / DWM 枚举可见、非最小化、非 cloaked 窗口，按前后顺序立即输出边界，随后通过 `CacheRequest(TreeScope.Subtree, RawViewCondition, AutomationElementMode.None)` 批量读取各窗口子树，在本地遍历缓存，减少逐节点跨进程调用。每次截图都读取新子树，不跨截图复用旧候选。
 - UIA 候选仅包括 Pane、Group、Document、List、Tree、DataGrid、Table、Tab、Custom、ListItem 中尺寸至少 64 × 40 物理像素的区域；不会读取 Name、Value 或文档内容。
 - 本地遍历保留总预算 1800 ms、单窗口 650 ms、最多 1600 个处理节点、深度 24。批量子树获取本身不能被这些软预算打断，可能读取更多节点或阻塞，因此外层保留默认 5 秒硬超时并杀掉 worker；这不是原生读取节点数的硬上限。
@@ -52,7 +52,7 @@ provider 的 `granularity` 为默认粒度；demo 复用同一个 provider，通
 - provider 的第二参数 `onUpdate` 发布当前累计候选，首次回调解除截图准备等待，后续经 jobId 隔离的 IPC 更新悬停。旧式只返回数组/Promise 的 provider 仍等待其返回。鼠标按下锁定候选，后续更新不改变选区；取消后丢弃迟到输出。
 - 同一个 provider 不接受并发查询；超时/崩溃/取消会销毁工作进程，下次查询重新启动。未预热、预热尚未完成或 worker 重启后的首次截图仍有启动成本。
 - 一些应用不暴露全部布局容器；纯 Canvas、自绘控件、权限更高的窗口可能只有整窗候选。当前未实现父子层级手动切换、图像识别、透明/异形窗口的精细遮挡判断。
-- 这是源码 demo 原型，尚未验证安装包分发。PowerShell 需要访问真实的 `.ps1` / `.cs` 文件，生产接入前需处理 ASAR unpack、签名/策略兼容及性能优化；不能直接据此声称已支持打包部署。
+- npm 分发包含预编译的吸附和像素采集 exe，不包含 `.cs` / `.ps1`。宿主必须解包 `dist/native/**` 到 ASAR 外；路径解析会映射到 `app.asar.unpacked`。签名和企业执行策略仍需用最终宿主包验收。
 
 显式接入方式：
 
@@ -101,7 +101,7 @@ pnpm exec electron demo/windows-snap-smoke.cjs --pid=<进程ID> --display=primar
 
 `--granularity` 支持三档，默认 `panel`。面板级/精细级只检查内部候选，缺少合适容器会明确失败；窗口级检查整窗。
 目标被遮挡或不在指定显示器时也会失败，不会用整窗成功冒充内部容器成功。
-后续可评估独立原生 helper 分发和按悬停点查询父容器链；当前仍保留 PowerShell 加载壳。
+当前已改为预编译 helper 分发；按悬停点查询父容器链仍可后续评估。下节耗时为旧 PowerShell 原型的历史测量，不能当作新 exe 的基准结果。
 
 ## 2026-10-30 延迟优化验证
 
@@ -143,6 +143,34 @@ pnpm run demo:snap-stream-smoke
 
 UIA 缓存机制依据 [Microsoft 官方说明](https://learn.microsoft.com/en-us/dotnet/framework/ui-automation/caching-in-ui-automation-clients)。
 
+## Ping 宿主截图时的错误中间节点
+
+2026-10-30 在 Ping 截图保持打开时取得原始 UIA 数据：窗口内第 8 层 `Pane`
+返回 `(0,0,1985,1170)`，其父节点和下一级 `Document` 均返回正确的屏幕位置
+`(360,435,1985,1170)`。旧遍历逐层相交，将页面错误裁成 `(360,435,1625,735)`，
+表现为窗口移动后仍停在固定屏幕坐标的“透明区域”。这次取证确认是中间节点的坐标异常，
+不是 Ping DOM 中的隐藏弹层。
+
+原生遍历现在识别与父级尺寸近似、却明显越出父级的 `Pane / Document`：
+异常 `Pane` 不作为候选或裁剪边界，继续以有效父级边界访问其后代；异常 `Document`
+暂不接受其子树。正常面板、滚动内容、原生边框和 DPI 舍入仍按原规则处理。
+同一现场修复后读取到的页面边界恢复为 `(360,435,1985,1170)`，没有执行额外截图。
+
+`test/scripts/windows-snap-native.test.mjs` 在 Windows 编译实际 C# worker，
+覆盖上述原始坐标、窗口移动、正常面板、滚动、负坐标和边框容差；非 Windows 跳过该原生用例。
+修改 helper 后须重新构建包并重启宿主，常驻 worker 不会自动重新加载新的 exe。
+
+## 预编译 Windows helper
+
+Windows 执行 `pnpm build` 自动调用 `scripts/build-native-windows.mjs`，通过构建机器的 .NET Framework `csc.exe` 生成两个 AnyCPU 程序：
+
+- `snapora-windows-snap.exe`：UIA/Win32 查询，stdin/stdout JSON-lines 协议保持不变；`--server` 常驻，`--snapshot window|panel|fine` 一次性只读查询。
+- `snapora-windows-capture.exe`：原有 GDI 复制和 PNG 编码，串行采集、超时、取消后终止、无光标行为保持不变。
+
+两者使用系统 .NET Framework 运行时，不是自包含 .NET；使用者不需要编译器、SDK 或 PowerShell。源码仍在仓库维护，但 npm 只携带 exe 和 `windows-helpers.json`。构建可单独执行 `pnpm run build:native:windows`；`pnpm run verify:native:windows` 校验 exe 和当前源码哈希，防止带入过期二进制。
+
+跨平台发布先在相同源码版本的 Windows 构建，将两个 exe 和清单一并复制到发布机器的 `src/electron/native`。`prepack` 校验 Windows 产物，`release:check` 还要求 Mac universal helper。CI 的 `windows-native-helpers` artifact 可供跨平台构建消费。原生编译、协议复用/EOF 退出、错误请求、缺失/损坏/过期产物均有自动测试。
+
 ## 回归验证
 
 - 本轮性能变更：192 项 Vitest + 11 项 Node 测试通过；新增复用/预热、启动超时、重启隔离、并发拒绝、增量候选与取消后迟到输出测试。真实 demo 三档切换、native benchmark 和增量 Overlay smoke 通过。
@@ -151,7 +179,7 @@ UIA 缓存机制依据 [Microsoft 官方说明](https://learn.microsoft.com/en-u
 - `pnpm run lint`、`pnpm run typecheck`、`pnpm run build` 通过。
 - 所有 `*.test.ts` 及 Node 测试集中到根目录 `test/`，保持模块层级；Electron mock 也迁到 `test/electron/`。Vitest、TypeScript、ESLint 和 npm scripts 已同步修改。
 - `pnpm run test` 运行 Vitest 和 Node 测试；定向示例：`pnpm exec vitest run test/electron/main/windows-snap-policy.test.ts`。
-- `pnpm run demo:granularity-smoke` 验证真实 demo 的默认面板级、三档下拉切换、preload IPC、原生截图候选，以及非法值和截图中切换的拒绝行为。
+- `pnpm run demo:granularity-smoke` 验证真实 demo 的默认窗口级、三档下拉切换、preload IPC、原生截图候选，以及非法值和截图中切换的拒绝行为。
 - `pnpm exec electron demo/selection-smoke.cjs` 通过，验证默认自由框选未回退。
 - `pnpm exec electron demo/windows-snap-smoke.cjs --fixture --display=primary --drag` 通过，验证真实 Overlay 中悬停后拖动会生成手动选区。此项使用固定候选，是交互回归，不计入三组真实 UIA 识别结果。
 - 新单元测试覆盖探测进程超时与窗口回退、取消与清理、分段输出与去重、坐标转换、前后窗口优先级，以及 session 取消后不创建 Overlay。

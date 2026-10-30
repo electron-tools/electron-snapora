@@ -64,7 +64,7 @@ app
   .then(async () => {
     await hostReady;
     await waitForHost("!document.querySelector('#snap-granularity').disabled");
-    assert.deepEqual(await state(), { supported: true, granularity: 'panel' });
+    assert.deepEqual(await state(), { supported: true, granularity: 'window' });
     assert.equal(
       (await host.webContents.executeJavaScript('window.demoInteractionApi.get()'))
         .mode,
@@ -141,7 +141,7 @@ app
     }
     // Restore the demo default and retain a screenshot of the comparison control for inspection.
     await host.webContents.executeJavaScript(`(() => {
-    const select=document.querySelector('#snap-granularity');select.value='panel';select.dispatchEvent(new Event('change'));
+    const select=document.querySelector('#snap-granularity');select.value='window';select.dispatchEvent(new Event('change'));
   })()`);
     await waitForHost("!document.querySelector('#snap-granularity').disabled");
     stage = 'demo-live-selection';
@@ -200,7 +200,7 @@ app
     console.log(
       JSON.stringify(
         {
-          default: 'panel',
+          default: 'window',
           modes: evidence,
           invalidRejected: true,
           busyRejected: true,
