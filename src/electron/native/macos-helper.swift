@@ -79,23 +79,31 @@ private func visibleWindows(_ excluded: Set<UInt32>) -> [MacSnapWindow] {
     return list.enumerated().compactMap { z, row -> MacSnapWindow? in
         guard let id = row[kCGWindowNumber as String] as? UInt32,
               let pid = row[kCGWindowOwnerPID as String] as? Int32,
+              let layer = row[kCGWindowLayer as String] as? Int,
               let bounds = row[kCGWindowBounds as String] as? NSDictionary,
               let rect = CGRect(dictionaryRepresentation: bounds as CFDictionary),
               !excluded.contains(id), pid > 0, rect.width >= 16, rect.height >= 16,
               (row[kCGWindowAlpha as String] as? Double ?? 1) > 0,
-              (row[kCGWindowLayer as String] as? Int ?? 0) >= 0 else { return nil }
+              layer >= 0 else { return nil }
         return MacSnapWindow(id: id, pid: pid, z: z, rect: rect,
-            canOcclude: (row[kCGWindowAlpha as String] as? Double ?? 1) >= 1)
+            canOcclude: (row[kCGWindowAlpha as String] as? Double ?? 1) >= 1,
+            layer: layer, isWindowServer: (row[kCGWindowOwnerName as String] as? String) == "Window Server")
     }.prefix(256).map { $0 }
 }
 
 private func probe(_ request: [String: Any], _ id: Int) {
     let excluded = Set((request["excludedWindowIds"] as? [String] ?? []).compactMap(UInt32.init))
-    let windows = visibleWindows(excluded)
+    let visible = visibleWindows(excluded)
+    // Capture exclusion below still uses the full visible list, including high-level overlays.
+    let layers: Set<Int> = Set([CGWindowLevelKey.normalWindow, .floatingWindow, .modalPanelWindow, .utilityWindow]
+        .map { Int(CGWindowLevelForKey($0)) })
+    let windows = selectMacSnapWindows(visible, allowedLayers: layers)
     emit(["id": id, "type": "event", "regions": windows.map { $0.candidate($0.rect) }])
     let trusted = AXIsProcessTrusted()
+    var diagnostics: [String: Any] = ["visibleWindows": visible.count, "filteredWindows": visible.count - windows.count,
+        "axTargets": 0, "matchedWindows": 0, "rawContainers": 0]
     guard request["containers"] as? Bool == true, trusted else {
-        emit(["id": id, "type": "result", "accessibility": trusted]); return
+        emit(["id": id, "type": "result", "accessibility": trusted, "diagnostics": diagnostics]); return
     }
     // AX/CG bounds use top-left global points, already in Electron DIP (not Retina pixels).
     var cursor: CGPoint?
@@ -104,7 +112,11 @@ private func probe(_ request: [String: Any], _ id: Int) {
     }
     let started = ProcessInfo.processInfo.systemUptime
     var applicationWindows: [pid_t: [AXUIElement]] = [:]
-    for window in prioritizeMacSnapWindows(windows, cursor: cursor) {
+    let targets = prioritizeMacSnapWindows(windows, cursor: cursor)
+    diagnostics["axTargets"] = targets.count
+    var matchedWindows = 0
+    var rawContainers = 0
+    for window in targets {
         if ProcessInfo.processInfo.systemUptime - started > 1.8 { break }
         let windowStarted = ProcessInfo.processInfo.systemUptime
         if applicationWindows[window.pid] == nil {
@@ -125,12 +137,16 @@ private func probe(_ request: [String: Any], _ id: Int) {
         }
         // Public AX has no guaranteed CGWindowID attribute. Ambiguous bounds fall back to the window.
         guard matches.count == 1, let root = matches.first else { continue }
+        matchedWindows += 1
         let batch = collectMacSnapContainers(AXTreeSource(), root: root, window: window.rect,
             deadline: min(started + 1.8, windowStarted + 0.65))
             .map { window.candidate($0.rect, $0.controlType) }
+        rawContainers += batch.count
         if !batch.isEmpty { emit(["id": id, "type": "event", "regions": batch]) }
     }
-    emit(["id": id, "type": "result", "accessibility": true])
+    diagnostics["matchedWindows"] = matchedWindows
+    diagnostics["rawContainers"] = rawContainers
+    emit(["id": id, "type": "result", "accessibility": true, "diagnostics": diagnostics])
 }
 
 @available(macOS 14.0, *)

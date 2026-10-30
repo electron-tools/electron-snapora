@@ -12,6 +12,14 @@ export interface MacSnapPermissions {
   screenRecording: boolean;
   accessibility: boolean;
 }
+/** Geometry-only stage counts help distinguish native traversal from panel filtering. */
+interface MacSnapNativeDiagnostics {
+  visibleWindows?: number;
+  filteredWindows?: number;
+  axTargets?: number;
+  matchedWindows?: number;
+  rawContainers?: number;
+}
 /** Configure a prebuilt helper; permission prompts remain explicit host actions. */
 export interface MacSnapProviderOptions {
   executablePath?: string;
@@ -22,6 +30,7 @@ export interface MacSnapProviderOptions {
     windows: number;
     containers: number;
     accessibility?: boolean;
+    native?: MacSnapNativeDiagnostics;
     error?: string;
   }) => void;
 }
@@ -102,6 +111,7 @@ export function createMacSnapProvider(
     const candidates: SnapCandidate[] = [];
     const keys = new Set<string>();
     let accessibility: boolean | undefined;
+    let native: MacSnapNativeDiagnostics | undefined;
     let error: string | undefined;
     try {
       const response = await client.request(
@@ -127,6 +137,21 @@ export function createMacSnapProvider(
         }
       );
       accessibility = response.accessibility === true;
+      if (response.diagnostics && typeof response.diagnostics === 'object') {
+        const raw = response.diagnostics as Record<string, unknown>;
+        native = {};
+        for (const key of [
+          'visibleWindows',
+          'filteredWindows',
+          'axTargets',
+          'matchedWindows',
+          'rawContainers',
+        ] as const) {
+          const value = raw[key];
+          if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0)
+            native[key] = value;
+        }
+      }
     } catch (reason) {
       error = reason instanceof Error ? reason.message : String(reason);
     } finally {
@@ -140,6 +165,7 @@ export function createMacSnapProvider(
         windows: regions.filter((r) => r.kind === 'window').length,
         containers: regions.filter((r) => r.kind === 'container').length,
         ...(accessibility === undefined ? {} : { accessibility }),
+        ...(native ? { native } : {}),
         ...(error ? { error } : {}),
       });
     } catch {

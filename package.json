@@ -113,8 +113,8 @@
   "scripts": {
     "clean": "rimraf dist coverage",
     "dev": "vite --config vite.config.ts",
-    "demo": "pnpm run build && electron demo/main.cjs",
-    "demo:mac": "pnpm run build:native:mac && pnpm run demo",
+    "demo": "node scripts/prepare-demo.cjs && pnpm run build && electron demo/main.cjs",
+    "demo:mac": "pnpm run demo",
     "demo:mac-live-smoke": "pnpm run build:native:mac && pnpm run build && electron test/demo/live-selection-smoke.cjs",
     "build:native:mac": "node scripts/build-native-mac.mjs",
     "build:native:mac:universal": "node scripts/build-native-mac.mjs --universal",

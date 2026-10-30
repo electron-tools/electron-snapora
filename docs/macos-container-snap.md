@@ -31,9 +31,19 @@
 ## 本地运行
 
 1. 在 macOS 14+ 安装依赖和 Xcode Command Line Tools（`xcode-select --install`）。
-2. `pnpm run demo:mac`：使用系统 `xcrun swiftc` 构建 helper，进行开发用 ad-hoc 签名，再构建/启动 demo。
+2. `pnpm run demo`（或别名 `pnpm run demo:mac`）：macOS 14+ 自动使用系统 `xcrun swiftc` 构建 helper，进行开发用 ad-hoc 签名，再构建/启动 demo。编译失败直接停止，避免打开无法采集的 demo。Windows 与较旧 macOS 跳过原生编译。
 3. 点击 demo 的“授权屏幕录制与辅助功能”。系统允许后刷新状态，若仍为旧状态重启 demo。屏幕录制负责像素权限；辅助功能负责跨应用容器。
 4. 在实时/冻结模式及三档粒度间切换，比较下一次截图。macOS 全局快捷键沿用 demo 配置 `CommandOrControl+Shift+A`。
+
+### 启动与设置排查
+
+- 只有全屏预览而跨应用移动不切换时，先看 `[macOS container snap]`。`windows > 0` 且 `accessibility: true` 不能证明容器遍历成功：旧实现接受所有非负层级窗口，Window Server 状态层可能以全屏边界抢占命中，并使其他窗口被判为完全遮挡。当前在命中及 AX 遮挡判断前过滤 Window Server 与系统菜单/覆盖层，仅保留 normal、floating、modalPanel、utility 层；真正的全屏应用保留。自定义其他层级的置顶窗口暂不提供吸附候选，仍可手动框选。像素采集排除校验继续使用完整列表，避免漏掉截图层。参考 [WebRTC 的 Mac 窗口过滤](https://webrtc.googlesource.com/src.git/+/refs/heads/main/modules/desktop_capture/mac/window_list_utils.cc)。
+- 日志新增 `native` 阶段计数：`visibleWindows` 为排除本次截图层后的枚举数，`filteredWindows` 为系统/层级过滤数，`axTargets` 为遮挡筛选后目标数，`matchedWindows` 为成功匹配 AX 窗口数，`rawContainers` 为粒度过滤前的容器数。无文本内容。最终 `windows`/`containers` 是裁剪到显示器并过滤后的候选数，跨屏窗口可能计入多次。当前修复仍需 Mac 实机确认；计数用于继续区分窗口匹配失败、目标未暴露 AX 树及面板过滤。
+- 若界面仍显示“吸附粒度（Windows）”及“当前平台暂不支持 Windows 容器吸附”，正在运行旧 demo。先核对源码目录和提交，更新代码并退出旧进程再启动。当前标签应为“吸附粒度（Windows / macOS）”，Mac 上另有权限面板。
+- 在 Mac 终端运行 `sw_vers -productVersion` 查看系统版本；实时模式要求 14 或更新版本，旧系统只保留冻结截图。
+- `macOS helper unavailable` / `CAPTURE_FAILED` 表示原生进程无法启动或已退出，不能据此判断用户未授权。旧版本直接运行 `pnpm demo` 不会编译 helper，应运行 `pnpm run demo:mac`；当前入口已自动补上构建。也可依次执行 `pnpm run build:native:mac`、`pnpm run demo`。
+- 启动失败错误包含 helper 路径和系统错误码/退出信号。`ENOENT` 优先检查文件是否构建并复制到 `dist/native/snapora-macos`；`EACCES` 检查可执行权限；被系统终止需进一步检查签名或系统日志。权限拒绝使用单独的 `PERMISSION_DENIED`。
+- 截图进行中设置暂时禁用，按 Esc 取消或完成截图后恢复；初始化响应迟到不会解锁进行中的操作。交互模式与吸附粒度各自按支持状态恢复，一项设置读取失败不会错误禁用另一项。
 
 ```ts
 const provider = createMacSnapProvider({ granularity: 'panel' });
@@ -66,7 +76,7 @@ Windows 可运行的测试覆盖：进程启动、复用、增量分帧、过期
 
 同机模拟基准（Windows / Node，实际解析器，64 KiB 分片，无桌面采集）：32 MiB 响应修复前约 3394ms，修复后约 69ms；16 MiB 从约 932ms 降至约 23ms。这是样本的累计解析时间，不是 Mac 实机性能或端到端截图延迟承诺。
 
-`pnpm run test:native:mac` 会先编译实际 helper，再编译并运行 `test/electron/native/macos-snap-policy.test.swift` 的 6 组回归。测试直接调用生产 `macos-snap-policy.swift`，用内存树代替 AX：覆盖副屏目标优先/遮挡过滤/原 z-order 不变、滚到第 500 项后的可见行、可见列表为空不回退、父视口裁剪与结构节点、AXChildren 分页超过 256 项，以及节点/深度/时间上限。该命令不启动截图 helper、不申请权限、不读取桌面；当前 Windows 环境没有 Swift，原生测试已编写但尚未执行。
+`pnpm run test:native:mac` 会先编译实际 helper，再编译并运行 `test/electron/native/macos-snap-policy.test.swift` 的 7 组回归。测试直接调用生产 `macos-snap-policy.swift`，用内存窗口和树代替系统 API：覆盖系统全屏状态层过滤且保留真实全屏/浮动/模态窗口、副屏目标优先/遮挡过滤/原 z-order 不变、滚到第 500 项后的可见行、可见列表为空不回退、父视口裁剪与结构节点、AXChildren 分页超过 256 项，以及节点/深度/时间上限。该命令不启动截图 helper、不申请权限、不读取桌面；当前 Windows 环境没有 Swift，原生测试已编写但尚未执行。
 
 Mac 验收入口：授权后连接两块显示器，运行 `pnpm run demo:mac-live-smoke`。脚本按顺序选择两屏，并检查选前零像素采集、两屏面板、同进程测试窗口保留而截图层排除、选后颜色变化、PNG 导出、越界拖动、取消及迟到帧。只操作测试窗口，不写用户剪贴板，结果保存到 `.pack-preview/mac-live-selection-smoke.json`。
 

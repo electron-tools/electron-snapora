@@ -16,23 +16,42 @@ let selectedGranularity = 'panel';
 let snapSupported = false;
 const interactionSelect = document.getElementById('interaction-mode');
 let interactionMode = 'frozen';
+let interactionSupported = false;
+let interactionReady = !window.demoInteractionApi;
+let busy = false;
+
+// Keep capability checks independent, and never unlock controls during a pending action.
+function updateCaptureControls() {
+  captureButton.disabled = busy || !screenshotApi || !interactionReady;
+  if (interactionSelect) interactionSelect.disabled = busy || !interactionSupported;
+  if (snapSelect) snapSelect.disabled = busy || !snapSupported;
+}
+updateCaptureControls();
 if (interactionSelect && window.demoInteractionApi) {
-  void window.demoInteractionApi.get().then(({ supported, mode }) => {
-    interactionMode = mode;
-    interactionSelect.value = mode;
-    interactionSelect.disabled = !supported;
-  });
+  void window.demoInteractionApi
+    .get()
+    .then(({ supported, mode }) => {
+      interactionMode = mode;
+      interactionSupported = supported;
+      interactionReady = true;
+      interactionSelect.value = mode;
+    })
+    .catch((error) => {
+      resultOutput.textContent = `读取截图交互设置失败，请重启 demo：${String(error)}`;
+    })
+    .finally(updateCaptureControls);
   interactionSelect.addEventListener('change', async () => {
-    interactionSelect.disabled = true;
-    captureButton.disabled = true;
+    if (busy) return;
+    busy = true;
+    updateCaptureControls();
     try {
       interactionMode = await window.demoInteractionApi.set(interactionSelect.value);
     } catch (error) {
       resultOutput.textContent = String(error);
     } finally {
       interactionSelect.value = interactionMode;
-      interactionSelect.disabled = !snapSupported;
-      captureButton.disabled = false;
+      busy = false;
+      updateCaptureControls();
     }
   });
 }
@@ -49,17 +68,18 @@ if (snapApi && snapSelect && snapDescription) {
       snapSupported = supported;
       selectedGranularity = granularity;
       snapSelect.value = granularity;
-      snapSelect.disabled = !supported;
       snapDescription.textContent = supported
         ? `${snapDescriptions[granularity]} 按钮和全局快捷键均从下一次截图生效。`
         : '容器吸附需要 Windows 或 macOS 14+。';
     })
     .catch((error) => {
       snapDescription.textContent = String(error);
-    });
+    })
+    .finally(updateCaptureControls);
   snapSelect.addEventListener('change', async () => {
-    snapSelect.disabled = true;
-    captureButton.disabled = true;
+    if (busy) return;
+    busy = true;
+    updateCaptureControls();
     try {
       selectedGranularity = await snapApi.set(snapSelect.value);
       snapDescription.textContent = `${snapDescriptions[selectedGranularity]} 下一次截图生效。`;
@@ -68,8 +88,8 @@ if (snapApi && snapSelect && snapDescription) {
         error instanceof Error ? error.message : String(error);
     } finally {
       snapSelect.value = selectedGranularity;
-      snapSelect.disabled = !snapSupported;
-      captureButton.disabled = !screenshotApi;
+      busy = false;
+      updateCaptureControls();
     }
   });
 }
@@ -79,10 +99,11 @@ if (!screenshotApi) {
     'Screenshot API is unavailable. Build the bundled demo preload before starting Electron.';
 } else {
   captureButton.addEventListener('click', async () => {
-    captureButton.disabled = true;
-    if (snapSelect) snapSelect.disabled = true;
-    if (interactionSelect) interactionSelect.disabled = true;
-    resultOutput.textContent = 'Capturing…';
+    if (busy || !interactionReady) return;
+    busy = true;
+    updateCaptureControls();
+    resultOutput.textContent =
+      'Capturing… 截图期间设置暂时锁定，按 Esc 取消截图后可继续切换。';
 
     try {
       if (window.demoInteractionApi)
@@ -100,9 +121,8 @@ if (!screenshotApi) {
     } catch (error) {
       resultOutput.textContent = error instanceof Error ? error.message : String(error);
     } finally {
-      captureButton.disabled = false;
-      if (snapSelect) snapSelect.disabled = !snapSupported;
-      if (interactionSelect) interactionSelect.disabled = !snapSupported;
+      busy = false;
+      updateCaptureControls();
     }
   });
 }

@@ -37,6 +37,45 @@ afterEach(() => {
 });
 
 describe('macOS AX provider', () => {
+  it('reports native stage counts separately from retained panels, without passing through arbitrary metadata', async () => {
+    const diagnostic = vi.fn();
+    const client: MacNativeClient = {
+      prepare: vi.fn(async () => {}),
+      dispose: vi.fn(),
+      request: vi.fn(async (_command, options) => {
+        options?.onEvent?.({ regions: [window] });
+        return {
+          accessibility: true,
+          diagnostics: {
+            visibleWindows: 26,
+            filteredWindows: 10,
+            axTargets: 5,
+            matchedWindows: 4,
+            rawContainers: 18,
+            title: 'must not pass through',
+          },
+        };
+      }),
+    };
+    const provider = createMacSnapProvider({ onDiagnostic: diagnostic }, client);
+    await provider(new AbortController().signal);
+    expect(diagnostic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        windows: 2,
+        containers: 0,
+        accessibility: true,
+        native: {
+          visibleWindows: 26,
+          filteredWindows: 10,
+          axTargets: 5,
+          matchedWindows: 4,
+          rawContainers: 18,
+        },
+      })
+    );
+    provider.dispose();
+  });
+
   it('sends fresh global DIP pointer coordinates on every query without changing candidate z-order', async () => {
     const client: MacNativeClient = {
       prepare: vi.fn(async () => {}),

@@ -24,6 +24,7 @@ export default tseslint.config(
   {
     files: [
       'demo/**/*.cjs',
+      'scripts/**/*.cjs',
       'integration/**/*.cjs',
       'integration/**/*.cts',
       'test/**/*.cjs',

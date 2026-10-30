@@ -48,6 +48,33 @@ function fixture() {
 }
 
 describe('macOS native transport', () => {
+  it('reports the executable path and OS error when the helper cannot start', async () => {
+    const f = fixture();
+    const pending = f.worker.prepare();
+    const failed = expect(pending).rejects.toMatchObject({
+      code: 'CAPTURE_FAILED',
+      message: expect.stringMatching(/snapora-macos.*ENOENT/),
+    });
+    f.children[0]!.emit(
+      'error',
+      Object.assign(new Error('file not found'), { code: 'ENOENT' })
+    );
+    await failed;
+    f.worker.dispose();
+  });
+
+  it('reports the exit signal when the helper is terminated before readiness', async () => {
+    const f = fixture();
+    const pending = f.worker.prepare();
+    const failed = expect(pending).rejects.toMatchObject({
+      code: 'CAPTURE_FAILED',
+      message: expect.stringContaining('signal SIGKILL'),
+    });
+    f.children[0]!.emit('close', null, 'SIGKILL');
+    await failed;
+    f.worker.dispose();
+  });
+
   it('receives a large fragmented PNG with linear delimiter scanning and completes only at newline', async () => {
     const f = fixture();
     const c = await f.ready();

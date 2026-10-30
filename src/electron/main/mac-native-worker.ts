@@ -67,18 +67,25 @@ export class MacNativeWorker implements MacNativeClient {
         () => this.#stop(new Error('macOS helper startup timed out.')),
         5000
       );
-      const fail = () => {
+      const fail = (reason: string) => {
         if (this.#child !== child) return;
         this.#stop(
           new ScreenshotError(
             'CAPTURE_FAILED',
-            'macOS helper unavailable. Build it with pnpm run build:native:mac and include the signed executable in the app.'
+            `macOS helper unavailable at ${this.#path} (${reason}). Build it with pnpm run build:native:mac and include the signed executable in the app.`
           )
         );
       };
-      child.on('error', fail);
-      child.on('close', fail);
-      child.stdin.on('error', fail);
+      // Preserve launch/exit details so missing binaries are distinguishable from TCC denial.
+      child.on('error', (error: NodeJS.ErrnoException) =>
+        fail(`${error.code ?? 'spawn error'}: ${error.message}`)
+      );
+      child.on('close', (code, signal) =>
+        fail(`exit code ${code ?? 'none'}, signal ${signal ?? 'none'}`)
+      );
+      child.stdin.on('error', (error: NodeJS.ErrnoException) =>
+        fail(`${error.code ?? 'stdin error'}: ${error.message}`)
+      );
       child.stderr.resume();
       child.stdout.setEncoding('utf8');
       child.stdout.on('data', (chunk: string) => {

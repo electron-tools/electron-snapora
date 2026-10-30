@@ -574,7 +574,7 @@ See [the implementation plan and validation record](docs/multi-display-live-sele
 
 ### macOS native backend
 
-On macOS 14+ with Xcode Command Line Tools, run `pnpm run demo:mac` to build the Swift helper and launch the demo. Grant Screen Recording and Accessibility from the demo permission button, then refresh status or restart the demo if needed. Startup does not request permissions or read pixels.
+On macOS 14+ with Xcode Command Line Tools, run `pnpm run demo` (or its alias `pnpm run demo:mac`) to build the Swift helper and launch the demo. A failed native build stops startup; Windows and older Macs skip this step. Grant Screen Recording and Accessibility from the demo permission button, then refresh status or restart the demo if needed. Startup does not request permissions or read pixels.
 
 Use `createMacSnapProvider({ granularity: 'panel' })` with the same manager integration as the Windows provider. It supports `window`, `panel`, `fine`, streaming updates, `prepare()`, `dispose()` and `getPermissions(prompt = false)`. Without Accessibility permission, window snapping and manual selection remain available. Live capture requires Screen Recording permission.
 

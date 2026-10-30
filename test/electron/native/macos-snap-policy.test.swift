@@ -32,13 +32,28 @@ private let viewport = CGRect(x: 100, y: 100, width: 400, height: 300)
 @main
 private struct MacSnapPolicyTests {
     static func main() {
+        compositorWindows()
         pointerPriority()
         scrolledVisibleRows()
         emptyVisibleChildren()
         nestedClip()
         fallbackPagination()
         traversalLimits()
-        print("6 macOS native snap policy regressions passed (no capture or permissions).")
+        print("7 macOS native snap policy regressions passed (no capture or permissions).")
+    }
+
+    static func compositorWindows() {
+        let status = MacSnapWindow(id: 1, pid: 1, z: 0, rect: window, isWindowServer: true)
+        let overlay = MacSnapWindow(id: 2, pid: 2, z: 1, rect: window, layer: 1000)
+        let menu = MacSnapWindow(id: 3, pid: 3, z: 2, rect: window, layer: 24)
+        let floating = MacSnapWindow(id: 4, pid: 4, z: 3, rect: viewport, layer: 3)
+        let app = MacSnapWindow(id: 5, pid: 5, z: 4, rect: window)
+        let modal = MacSnapWindow(id: 6, pid: 6, z: 5, rect: CGRect(x: -800, y: 0, width: 800, height: 800), layer: 8)
+        let raw = [status, overlay, menu, floating, app, modal]
+        let selected = selectMacSnapWindows(raw, allowedLayers: [0, 3, 8, 19])
+        check(selected.map { $0.id } == [4, 5, 6], "System fullscreen surfaces must not become hover candidates; floating/modal/fullscreen apps stay")
+        check(prioritizeMacSnapWindows(selected, cursor: nil).map { $0.id } == [4, 5, 6], "System surfaces must not prune all applications from AX traversal")
+        check(selected[1].z == 4 && raw.count == 6, "Preserve original z-order and the complete list used for capture exclusion")
     }
 
     static func pointerPriority() {

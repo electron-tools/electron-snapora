@@ -7,6 +7,14 @@ struct MacSnapWindow {
     let z: Int
     let rect: CGRect
     var canOcclude = true
+    var layer = 0
+    var isWindowServer = false
+}
+
+// System compositor surfaces can have fullscreen bounds despite drawing only a status dot.
+// Filter them before BOTH hover hit testing and AX occlusion; keep actual fullscreen apps.
+func selectMacSnapWindows(_ windows: [MacSnapWindow], allowedLayers: Set<Int>) -> [MacSnapWindow] {
+    windows.filter { !$0.isWindowServer && allowedLayers.contains($0.layer) }
 }
 
 // Keep original z-order for hit testing; spend AX budgets on the visible pointer target first.

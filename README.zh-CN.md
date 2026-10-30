@@ -448,7 +448,7 @@ Windows 实时模式使用独立 GDI 屏幕拷贝进程：系统光标始终正�
 
 ### macOS 容器吸附与原生采集
 
-在 macOS 14+ 安装 Xcode Command Line Tools 后运行 `pnpm run demo:mac`：先编译固定路径的 Swift helper，再构建并启动 demo。正式分发应携带签名后的 helper，用户机器不需要编译器。demo 中点击“授权屏幕录制与辅助功能”，授权后刷新状态，必要时重启 demo。
+在 macOS 14+ 安装 Xcode Command Line Tools 后运行 `pnpm run demo`（`pnpm run demo:mac` 为同一入口）：自动先编译固定路径的 Swift helper，再构建并启动 demo；原生编译失败会停止启动。Windows 和较旧的 macOS 跳过该编译步骤。正式分发应携带签名后的 helper，用户机器不需要编译器。demo 中点击“授权屏幕录制与辅助功能”，授权后刷新状态，必要时重启 demo。
 
 `createMacSnapProvider({ granularity: 'panel' })` 的接法与 Windows provider 相同；支持 `window / panel / fine`、增量更新、`prepare()` 和 `dispose()`，额外提供 `getPermissions()` 与显式提示用的 `getPermissions(true)`。未授予辅助功能时保留窗口吸附和手动框选；实时采集需要屏幕录制权限。
 
