@@ -27,6 +27,10 @@ export function releaseMetadataErrors(packageJson, fileExists) {
   }
 
   const publishConfig = packageJson.publishConfig ?? {};
+  // pnpm strips execute bits unless non-bin executables are explicitly declared.
+  if (!publishConfig.executableFiles?.includes('dist/native/snapora-macos')) {
+    errors.push('publishConfig.executableFiles must include dist/native/snapora-macos');
+  }
   if (publishConfig.registry !== 'https://registry.npmjs.org/') {
     errors.push('publishConfig.registry must be https://registry.npmjs.org/');
   }

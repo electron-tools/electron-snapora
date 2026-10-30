@@ -27,6 +27,8 @@ Windows 运行 `pnpm build` 会先构建 `snapora-windows-snap.exe` 和 `snapora
 
 最终跨平台包同时需要 Windows 两个 exe、`windows-helpers.json` 和 Mac universal helper。在相同源码版本的 Windows 上构建后，将三个 Windows 产物复制到 Mac 发布机器的 `src/electron/native`（也可下载 CI 的 `windows-native-helpers` artifact），再编译 universal Mac helper 并执行 `pnpm run release:check`。源码哈希忽略 CRLF/LF 差异，其他源码变更必须重新编译。Windows 源码构建不会产生 Mac helper，Mac 构建也不会凭空产生 Windows exe。
 
+`publishConfig.executableFiles` 必须保留 `dist/native/snapora-macos`；pnpm 默认会移除非 `bin` 文件的执行权限，仅在构建时 `chmod` 不足以保证安装后可运行。发布元数据检查保护此配置，Mac 的真实 tarball 消费测试验证安装后 helper 能正常启动。
+
 宿主将 `node_modules/electron-snapora/dist/native/**` 解包到 ASAR 外，按应用要求给解包后的 exe 签名；包的源产物与清单应保持对应，签名改变二进制后不能继续使用旧产物哈希。ESM/CommonJS tgz 消费测试验证不含原生源码，并启动 UIA exe；ASAR 消费测试还预热采集 exe，全程不读取桌面像素。
 
 `exports` 只限制使用者可导入的入口，不决定文件是否进入 tarball；检查发布内容时应以 `files` 和 `pnpm pack --dry-run` 的结果为准。

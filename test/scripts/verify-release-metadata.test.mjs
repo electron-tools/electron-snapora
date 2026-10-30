@@ -14,6 +14,7 @@ const validPackage = {
     access: 'public',
     registry: 'https://registry.npmjs.org/',
     tag: 'next',
+    executableFiles: ['dist/native/snapora-macos'],
   },
 };
 
@@ -45,6 +46,7 @@ test('reports owner decisions and unsafe publish targets', () => {
       version: '0.0.0',
       license: undefined,
       publishConfig: {
+        ...validPackage.publishConfig,
         access: 'restricted',
         registry: 'https://registry.npmmirror.com/',
         tag: 'next',
@@ -58,4 +60,14 @@ test('reports owner decisions and unsafe publish targets', () => {
   assert.ok(errors.some((error) => error.includes('SPDX license')));
   assert.ok(errors.some((error) => error.includes('registry.npmjs.org')));
   assert.ok(errors.some((error) => error.includes('must be latest')));
+});
+
+test('rejects a package that would strip the Mac helper execute permission', () => {
+  assert.deepEqual(
+    releaseMetadataErrors(
+      { ...validPackage, publishConfig: { ...validPackage.publishConfig, executableFiles: [] } },
+      () => true
+    ),
+    ['publishConfig.executableFiles must include dist/native/snapora-macos']
+  );
 });

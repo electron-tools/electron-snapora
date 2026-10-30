@@ -40,7 +40,8 @@
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/",
-    "tag": "latest"
+    "tag": "latest",
+    "executableFiles": ["dist/native/snapora-macos"]
   },
   "type": "module",
   "main": "./dist/main/index.cjs",
