@@ -499,6 +499,49 @@ thrown by the application's logger are isolated and never change the screenshot 
 | `INVALID_RESULT`          | The Overlay returned an invalid result or lifecycle message.     |
 | `UNSUPPORTED_PLATFORM`    | The current OS/display protocol is explicitly unsupported.       |
 
+## Windows snap granularity (source prototype)
+
+This branch provides an opt-in `createWindowsSnapProvider`. A plain `ScreenshotManager`
+still uses free selection. The Windows demo defaults to **panel** and includes a selector:
+
+| `granularity`       | Candidates                                                                   |
+| ------------------- | ---------------------------------------------------------------------------- |
+| `'window'`          | Whole application windows; skips internal UI Automation traversal            |
+| `'panel'` (default) | Major panels and sidebars; filters small groups, list items and deep nesting |
+| `'fine'`            | Fine UIA containers, including smaller groups and list items                 |
+
+```ts
+import { app } from 'electron';
+import { ScreenshotManager, createWindowsSnapProvider } from 'electron-snapora/main';
+
+const snapProvider = createWindowsSnapProvider({
+  granularity: 'panel',
+  keepAlive: true,
+});
+const manager = new ScreenshotManager({ getWindowSnapRegions: snapProvider });
+app.whenReady().then(() => snapProvider.prepare());
+app.on('before-quit', () => {
+  manager.dispose();
+  snapProvider.dispose();
+});
+```
+
+The demo prewarms and reuses one isolated worker. Each capture reads fresh window bounds,
+then streams UIA containers while the overlay prepares; late results never replace a pressed
+or committed selection. `keepAlive` defaults to false; call `dispose()` when done with a
+prewarmed/reusable provider. `pnpm run demo:snap-benchmark` measures cold and warm discovery;
+`pnpm run demo:snap-stream-smoke` checks incremental hover and selection stability.
+
+Run `pnpm run demo`. On Windows, press **Ctrl + Alt + Shift + S** to capture another app.
+The selected mode applies to the next button or global-shortcut capture; restarting the
+demo resets it to panel. Panel filtering is heuristic and depends on each app's accessibility tree.
+This is a source-demo prototype, not yet validated for packaged distribution or mixed-DPI
+cross-monitor windows. See `docs/windows-container-snap-prototype.md` in the source checkout.
+
+Tests live under `test/`, grouped by `core/`, `electron/`, `overlay/`, `demo/`, and `scripts/`.
+Run `pnpm run test` for unit tests, and `pnpm run demo:granularity-smoke` on Windows to
+exercise the actual demo selector and capture pipeline.
+
 ## License and trademarks
 
 The source code is licensed under the [MIT License](https://github.com/electron-tools/electron-snapora/blob/main/LICENSE). The `electron-snapora` name and official project branding are governed separately by the [Trademark Policy](https://github.com/electron-tools/electron-snapora/blob/main/TRADEMARKS.md). Modified versions remain permitted under MIT, but they must not impersonate an official release or use project branding in a confusing way.

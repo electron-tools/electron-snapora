@@ -1,7 +1,7 @@
 import type { IpcMain, IpcMainEvent } from 'electron';
 
 import type {
-  ScreenshotBounds,
+  ScreenshotSnapRegion,
   ScreenshotOptions,
   ScreenshotResult,
 } from '../../types.js';
@@ -62,7 +62,12 @@ export interface ScreenshotSessionOptions {
   registerOutputHandler?: (senderWebContentsId: number, jobId: string) => () => void;
   resourceLimits?: ScreenshotResourceLimitOptions;
   onDiagnostic?: ScreenshotDiagnosticListener;
-  windowSnapRegions?: ScreenshotBounds[];
+  windowSnapRegions?: ScreenshotSnapRegion[];
+  /** First update unblocks capture; later updates refine hover candidates for this job only. */
+  getWindowSnapRegions?: (
+    signal: AbortSignal,
+    onUpdate?: (regions: ScreenshotSnapRegion[]) => void
+  ) => ScreenshotSnapRegion[] | Promise<ScreenshotSnapRegion[]>;
 }
 
 type SessionResolver = (result: ScreenshotResult) => void;
@@ -84,6 +89,9 @@ export class ScreenshotSession {
   #rendererReady = false;
   #resolve: SessionResolver | undefined;
   #settled = false;
+  readonly #snapAbort = new AbortController();
+  #snapRegions: ScreenshotSnapRegion[] = [];
+  #initialized = false;
   #readyTimer: ReturnType<typeof setTimeout> | undefined;
   #windowCleanups: Array<() => void> = [];
   readonly #diagnosticStageStarts = new Map<ScreenshotDiagnosticStage, number>();
@@ -132,6 +140,35 @@ export class ScreenshotSession {
       targetDisplay = this.#options.captureAdapter.resolveTargetDisplay?.(
         this.#options.captureOptions
       );
+      this.#snapRegions = this.#options.windowSnapRegions ?? [];
+      if (this.#options.getWindowSnapRegions) {
+        try {
+          await new Promise<void>((resolve) => {
+            const update = (regions: ScreenshotSnapRegion[]) => {
+              if (!this.#settled) {
+                this.#snapRegions = regions;
+                if (this.#initialized)
+                  this.#overlay?.sendSnapRegions?.({
+                    protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
+                    jobId: this.#options.jobId,
+                    regions,
+                  });
+              }
+              resolve();
+            };
+            this.#snapAbort.signal.addEventListener('abort', () => resolve(), {
+              once: true,
+            });
+            Promise.resolve(
+              this.#options.getWindowSnapRegions!(this.#snapAbort.signal, update)
+            ).then(update, () => resolve());
+          });
+        } catch {
+          // Optional native discovery must not prevent ordinary capture.
+          this.#snapRegions = [];
+        }
+      }
+      if (this.#settled) return;
       if (targetDisplay) {
         this.#openOverlay(targetDisplay);
       }
@@ -332,10 +369,9 @@ export class ScreenshotSession {
       jobId: this.#options.jobId,
       options: this.#options.captureOptions,
       frames: this.#frames,
-      ...(this.#options.windowSnapRegions?.length
-        ? { windowSnapRegions: this.#options.windowSnapRegions }
-        : {}),
+      ...(this.#snapRegions.length ? { windowSnapRegions: this.#snapRegions } : {}),
     });
+    this.#initialized = true;
     this.#frames = [];
     this.#startReadyTimeout(
       'The screenshot overlay did not prepare its captured frame in time.'
@@ -518,6 +554,7 @@ export class ScreenshotSession {
     }
 
     this.#settled = true;
+    this.#snapAbort.abort();
     const destroyPreparingDesktopSource =
       result.status === 'cancelled' && this.#preparingDesktopSource;
     const phase: ScreenshotDiagnosticPhase =

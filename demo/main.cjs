@@ -1,8 +1,27 @@
 const { join } = require('node:path');
 const { app, BrowserWindow, globalShortcut, ipcMain } = require('electron');
-const { ScreenshotManager, registerScreenshotIpc } = require('electron-snapora/main');
+const {
+  ScreenshotManager,
+  registerScreenshotIpc,
+  createWindowsSnapProvider,
+} = require('electron-snapora/main');
 
-const screenshotManager = new ScreenshotManager();
+let snapGranularity = 'panel';
+const snapProvider =
+  process.platform === 'win32'
+    ? createWindowsSnapProvider({
+        keepAlive: true,
+        onDiagnostic: (event) => console.log('[Windows container snap]', event),
+      })
+    : undefined;
+const screenshotManager = new ScreenshotManager({
+  ...(process.platform === 'win32'
+    ? {
+        getWindowSnapRegions: (signal, onUpdate) =>
+          snapProvider(signal, onUpdate, snapGranularity),
+      }
+    : {}),
+});
 let unregisterScreenshotIpc;
 const hostWindows = new Set();
 let isMacScreenshotInProgress = false;
@@ -56,8 +75,9 @@ async function triggerDemoScreenshot() {
   }
 }
 
-// Use Cmd+Shift+A on macOS and Ctrl+Shift+A on Windows and Linux.
-const DEFAULT_SHORTCUT = 'CommandOrControl+Shift+A';
+// Avoid Lark/Ping's Ctrl+Shift+A while testing cross-application capture.
+const DEFAULT_SHORTCUT =
+  process.platform === 'win32' ? 'Control+Alt+Shift+S' : 'CommandOrControl+Shift+A';
 let currentShortcut = DEFAULT_SHORTCUT;
 
 /** Register the global capture shortcut. */
@@ -136,6 +156,7 @@ function createHostWindow() {
 }
 
 app.whenReady().then(() => {
+  void snapProvider?.prepare();
   unregisterScreenshotIpc = registerScreenshotIpc({
     ipcMain,
     manager: screenshotManager,
@@ -143,6 +164,26 @@ app.whenReady().then(() => {
 
   // Register handlers to read and update the global shortcut.
   ipcMain.handle('demo:get-shortcut', () => currentShortcut);
+  const validateSnapSender = (event) => {
+    const host = BrowserWindow.fromWebContents(event.sender);
+    if (!hostWindows.has(host) || event.senderFrame !== event.sender.mainFrame) {
+      throw new Error('Only the demo main frame can change capture settings.');
+    }
+  };
+  ipcMain.handle('demo:get-snap-granularity', (event) => {
+    validateSnapSender(event);
+    return { supported: process.platform === 'win32', granularity: snapGranularity };
+  });
+  ipcMain.handle('demo:set-snap-granularity', (event, value) => {
+    validateSnapSender(event);
+    if (process.platform !== 'win32' || !['window', 'panel', 'fine'].includes(value)) {
+      throw new Error('Unsupported snap granularity.');
+    }
+    if (screenshotManager.activeJobId)
+      throw new Error('Wait for the current capture to finish.');
+    snapGranularity = value;
+    return snapGranularity;
+  });
   ipcMain.handle('demo:set-shortcut', (_event, accelerator) =>
     registerCurrentShortcut(accelerator)
   );
@@ -169,6 +210,8 @@ app.whenReady().then(() => {
 app.on('before-quit', () => {
   globalShortcut.unregisterAll();
   unregisterScreenshotIpc?.();
+  screenshotManager.dispose();
+  snapProvider?.dispose();
 });
 
 app.on('window-all-closed', () => {

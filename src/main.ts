@@ -12,6 +12,12 @@ export {
   type ElectronCaptureAdapterOptions,
 } from './electron/main/electron-capture-adapter.js';
 export { ScreenshotError } from './electron/main/errors.js';
+export type { WindowsSnapGranularity } from './electron/main/windows-snap-policy.js';
+export {
+  createWindowsSnapProvider,
+  type WindowsSnapProviderOptions,
+  type WindowsSnapDiagnostic,
+} from './electron/main/windows-snap-provider.js';
 export {
   type ScreenshotDiagnosticContextValue,
   type ScreenshotDiagnosticEvent,
@@ -80,6 +86,7 @@ export type {
 } from './electron/protocol/messages.js';
 export type {
   ScreenshotBounds,
+  ScreenshotSnapRegion,
   ScreenshotErrorCode,
   ScreenshotImageResult,
   ScreenshotLocale,

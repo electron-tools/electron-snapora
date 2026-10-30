@@ -7,12 +7,14 @@ import type {
   ScreenshotErrorPayload,
   ScreenshotFeedbackPayload,
   ScreenshotInitializePayload,
+  ScreenshotSnapRegionsPayload,
   ScreenshotOutputPayload,
   ScreenshotOutputResponse,
 } from '../protocol/messages.js';
 
 export interface ScreenshotOverlayApi {
   onInitialize(listener: (payload: ScreenshotInitializePayload) => void): () => void;
+  onSnapRegions(listener: (payload: ScreenshotSnapRegionsPayload) => void): () => void;
   onFeedback(listener: (payload: ScreenshotFeedbackPayload) => void): () => void;
   confirm(payload: Omit<ScreenshotCompletePayload, 'protocolVersion'>): void;
   cancel(jobId: string): void;
@@ -26,6 +28,14 @@ export interface ScreenshotOverlayApi {
 }
 
 const overlayApi: ScreenshotOverlayApi = {
+  onSnapRegions(listener) {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      payload: ScreenshotSnapRegionsPayload
+    ) => listener(payload);
+    ipcRenderer.on(OVERLAY_CHANNELS.snapRegions, handler);
+    return () => ipcRenderer.removeListener(OVERLAY_CHANNELS.snapRegions, handler);
+  },
   onInitialize(listener) {
     const handler = (
       _event: Electron.IpcRendererEvent,

@@ -1,4 +1,5 @@
 import { defineConfig } from 'tsup';
+import { cp, mkdir } from 'node:fs/promises';
 
 export default defineConfig({
   entry: {
@@ -20,6 +21,10 @@ export default defineConfig({
   clean: false,
   splitting: false,
   external: ['electron'],
+  async onSuccess() {
+    await mkdir('dist/native', { recursive: true });
+    await cp('src/electron/native', 'dist/native', { recursive: true });
+  },
   outExtension({ format }) {
     return {
       js: format === 'esm' ? '.mjs' : '.cjs',

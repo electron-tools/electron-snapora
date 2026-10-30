@@ -18,6 +18,7 @@ import type {
   ScreenshotTool,
 } from '../types.js';
 import { drawCapturedFrame } from './capture-frame.js';
+import { resolveSnapRegions } from './snap-regions.js';
 import {
   calculateTextBaselinePosition,
   calculateTextFillBounds,
@@ -183,6 +184,8 @@ let resetAnnotationsAfterSelection = true;
 let configuredDefaultTool: AnnotationTool = 'select';
 let windowSnapRegions: Rect[] = [];
 let hoveredWindowSnap: Rect | null = null;
+let snapSession: ScreenshotInitializePayload | undefined;
+let lastSnapPoint: Point | null = null;
 let pendingTextPoint: Point | null = null;
 let pendingTextViewportPoint: Point | null = null;
 let editingTextElement: TextElement | null = null;
@@ -228,6 +231,7 @@ async function initializeOverlay(payload: ScreenshotInitializePayload): Promise<
 
   configuredDefaultTool = payload.options.defaultTool ?? 'select';
   resetOverlaySession();
+  snapSession = payload;
   windowSnapRegions = resolveWindowSnapRegions(payload, frame.display.bounds);
   hoveredWindowSnap = null;
   applyTheme(payload.options);
@@ -308,6 +312,8 @@ function resetOverlaySession(): void {
   resetAnnotationsAfterSelection = true;
   hoveredWindowSnap = null;
   pendingTextPoint = null;
+  snapSession = undefined;
+  lastSnapPoint = null;
   pendingTextViewportPoint = null;
   outputFeedback = null;
   // 彻底抹掉可复用窗口缓存的上一帧图像和标注内容，避免下一次截图时出现“前一帧残留”。
@@ -344,6 +350,21 @@ function resetOverlaySession(): void {
 
 window.snaporaOverlay.onInitialize((payload) => {
   void initializeOverlay(payload);
+});
+window.snaporaOverlay.onSnapRegions((payload) => {
+  if (
+    !snapSession ||
+    payload.protocolVersion !== snapSession.protocolVersion ||
+    payload.jobId !== snapSession.jobId
+  )
+    return;
+  windowSnapRegions = resolveSnapRegions(
+    payload.regions,
+    snapSession.frames[0]!.display.bounds
+  );
+  // A pointer-down freezes its candidate. Late UIA updates only affect idle hover.
+  if (!pointerInteraction && selectionStore.getState().phase === 'ready')
+    updateWindowSnapPreview(lastSnapPoint);
 });
 window.addEventListener('pagehide', () => frameLoadController?.abort());
 for (const eventType of ['pointerover', 'focusin']) {
@@ -1835,6 +1856,7 @@ function waitForCompositeFrames(frameCount = 2, maximumWaitMs = 48): Promise<voi
 
 /** 只在未创建选区时按鼠标位置显示面积最小的窗口候选。 */
 function updateWindowSnapPreview(point: Point | null): void {
+  lastSnapPoint = point;
   const next =
     point && selectionStore.getState().phase === 'ready'
       ? (windowSnapRegions.find((region) => containsPoint(region, point)) ?? null)
@@ -1851,27 +1873,7 @@ function resolveWindowSnapRegions(
   payload: ScreenshotInitializePayload,
   displayBounds: Rect
 ): Rect[] {
-  return (payload.windowSnapRegions ?? [])
-    .map((region) => {
-      const left = Math.max(region.x, displayBounds.x);
-      const top = Math.max(region.y, displayBounds.y);
-      const right = Math.min(
-        region.x + region.width,
-        displayBounds.x + displayBounds.width
-      );
-      const bottom = Math.min(
-        region.y + region.height,
-        displayBounds.y + displayBounds.height
-      );
-      return {
-        x: left - displayBounds.x,
-        y: top - displayBounds.y,
-        width: right - left,
-        height: bottom - top,
-      };
-    })
-    .filter((region) => region.width >= 4 && region.height >= 4)
-    .sort((left, right) => left.width * left.height - right.width * right.height);
+  return resolveSnapRegions(payload.windowSnapRegions ?? [], displayBounds);
 }
 
 function containsPoint(rect: Rect, point: Point): boolean {

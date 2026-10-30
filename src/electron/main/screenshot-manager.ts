@@ -4,7 +4,7 @@ import { BrowserWindow, ipcMain as electronIpcMain, webContents } from 'electron
 import type { IpcMain } from 'electron';
 
 import type {
-  ScreenshotBounds,
+  ScreenshotSnapRegion,
   ScreenshotOptions,
   ScreenshotResult,
 } from '../../types.js';
@@ -70,8 +70,11 @@ export interface ScreenshotManagerOptions {
   busyPolicy?: ScreenshotBusyPolicy;
   maxQueuedCaptures?: number;
   onDiagnostic?: ScreenshotDiagnosticListener;
-  /** 默认返回当前 Electron 进程的可见窗口；宿主可注入平台原生窗口枚举。 */
-  getWindowSnapRegions?: () => ScreenshotBounds[];
+  /** Publish fresh window bounds first to unblock capture, then refine containers until aborted. */
+  getWindowSnapRegions?: (
+    signal: AbortSignal,
+    onUpdate?: (regions: ScreenshotSnapRegion[]) => void
+  ) => ScreenshotSnapRegion[] | Promise<ScreenshotSnapRegion[]>;
 }
 
 interface QueuedCapture {
@@ -165,9 +168,6 @@ function createDefaultRunner(
       // 在测试环境或无窗口环境安全降级
     }
 
-    const windowSnapRegions = resolveWindowSnapRegions(
-      managerOptions.getWindowSnapRegions ?? getVisibleBrowserWindowBounds
-    );
     const reportDiagnostic: ScreenshotDiagnosticListener = (event) => {
       emitScreenshotDiagnostic(managerOptions.onDiagnostic, {
         ...event,
@@ -181,7 +181,9 @@ function createDefaultRunner(
       captureOptions,
       captureAdapter,
       ipcMain,
-      windowSnapRegions,
+      ...(managerOptions.getWindowSnapRegions
+        ? { getWindowSnapRegions: managerOptions.getWindowSnapRegions }
+        : {}),
       createOverlay: (display) => {
         if (reusableOverlay?.matchesDisplay(display)) {
           previousOverlay = reusableOverlay;
@@ -289,23 +291,6 @@ function createDefaultRunner(
       disposeOverlays();
     },
   };
-}
-
-/** 窗口吸附功能已关闭，保持自由框选模式，不再尝试识别或吸附浏览器窗口。 */
-function resolveWindowSnapRegions(
-  provider?: () => ScreenshotBounds[]
-): ScreenshotBounds[] {
-  void provider;
-  return [];
-}
-
-/** Electron 默认只能可靠获取本进程 BrowserWindow 的屏幕边界。 */
-function getVisibleBrowserWindowBounds(): ScreenshotBounds[] {
-  return BrowserWindow.getAllWindows()
-    .filter(
-      (window) => !window.isDestroyed() && window.isVisible() && !window.isMinimized()
-    )
-    .map((window) => window.getBounds());
 }
 
 /**

@@ -379,6 +379,45 @@ const snapora = setupElectronSnapora({
 | `INVALID_RESULT`          | 覆盖层返回了非法数据或未预期的生命周期消息。 |
 | `UNSUPPORTED_PLATFORM`    | 当前操作系统或显示协议不受支持。             |
 
+## Windows 吸附粒度（源码原型）
+
+当前分支提供可选的 `createWindowsSnapProvider`；普通 `ScreenshotManager` 默认仍自由框选。
+Windows demo 默认面板级，可用“吸附粒度”下拉框比较三档，按钮和全局快捷键从下一次截图采用新选择。
+设置保存在本次 demo 进程内，重启恢复面板级。
+
+| `granularity`     | 范围                                         |
+| ----------------- | -------------------------------------------- |
+| `'window'`        | 仅整个应用窗口，跳过 UI Automation 内部遍历  |
+| `'panel'`（默认） | 主要面板、侧栏，过滤小容器、列表项和深层嵌套 |
+| `'fine'`          | 原型的精细容器范围，包括小分组、列表项等     |
+
+```ts
+import { app } from 'electron';
+import { ScreenshotManager, createWindowsSnapProvider } from 'electron-snapora/main';
+
+const snapProvider = createWindowsSnapProvider({
+  granularity: 'panel',
+  keepAlive: true,
+});
+const manager = new ScreenshotManager({ getWindowSnapRegions: snapProvider });
+app.whenReady().then(() => snapProvider.prepare());
+app.on('before-quit', () => {
+  manager.dispose();
+  snapProvider.dispose();
+});
+```
+
+demo 预热并复用一个隔离工作进程；每次截图读取新的窗口边界，随后在截图层准备期间逐窗补充 UIA 容器，
+迟到结果不会改变按下鼠标时锁定的候选或已选区域。`keepAlive` 默认关闭；预热/复用的 provider 用完应调用 `dispose()`。
+`pnpm run demo:snap-benchmark` 比较冷/热探测耗时，`pnpm run demo:snap-stream-smoke` 验证增量悬停与选区稳定性。
+
+运行 `pnpm run demo`，Windows 默认快捷键为 **Ctrl + Alt + Shift + S**。
+面板筛选是启发式策略，不能保证每个应用暴露相同的可访问性布局。
+目前仅验证源码 demo，安装包分发和混合 DPI 跨屏仍待验证；详见源码中的 `docs/windows-container-snap-prototype.md`。
+
+开发测试集中在 `test/`，按 `core/`、`electron/`、`overlay/`、`demo/`、`scripts/` 保留模块层级。
+`pnpm run test` 运行全部单元测试；`pnpm run demo:granularity-smoke` 在 Windows 验证实际 demo 的切换和截图链路。
+
 ## 开源协议与商标
 
 源代码遵循 [MIT 许可证](https://github.com/electron-tools/electron-snapora/blob/main/LICENSE)。`electron-snapora` 名称与官方品牌受 [商标政策](https://github.com/electron-tools/electron-snapora/blob/main/TRADEMARKS.md) 保护。

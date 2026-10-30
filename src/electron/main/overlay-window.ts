@@ -5,6 +5,7 @@ import type { ScreenshotOptions } from '../../types.js';
 import type {
   CaptureDisplay,
   ScreenshotInitializePayload,
+  ScreenshotSnapRegionsPayload,
 } from '../protocol/messages.js';
 import { OVERLAY_CHANNELS } from '../protocol/channels.js';
 import {
@@ -55,6 +56,7 @@ export interface ScreenshotOverlayWindow {
   readonly rendererReady?: boolean;
   load(): Promise<void>;
   sendInitialize(payload: ScreenshotInitializePayload): void;
+  sendSnapRegions?(payload: ScreenshotSnapRegionsPayload): void;
   prime(): void;
   reveal(): void;
   hide?(): void;
@@ -166,6 +168,10 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
       bounds.width === this.#bounds.width &&
       bounds.height === this.#bounds.height
     );
+  }
+
+  sendSnapRegions(payload: ScreenshotSnapRegionsPayload): void {
+    this.#window.webContents.send(OVERLAY_CHANNELS.snapRegions, payload);
   }
 
   sendInitialize(payload: ScreenshotInitializePayload): void {

@@ -1,5 +1,6 @@
 import type {
   ScreenshotBounds,
+  ScreenshotSnapRegion,
   ScreenshotErrorCode,
   ScreenshotImageResult,
   ScreenshotOptions,
@@ -70,13 +71,18 @@ export interface ScreenshotInitializePayload {
   options: ScreenshotOptions;
   frames: CapturedFrame[];
   /** 可单击吸附的可见窗口区域，使用全局 Screen DIP 坐标。 */
-  windowSnapRegions?: ScreenshotBounds[];
+  windowSnapRegions?: ScreenshotSnapRegion[];
 }
 
 export interface ScreenshotFeedbackPayload {
   kind: 'copy';
   durationMs: number;
   options: ScreenshotOptions;
+}
+
+/** Incremental, current-session candidates; never changes a committed selection. */
+export interface ScreenshotSnapRegionsPayload extends ScreenshotPreparedPayload {
+  regions: ScreenshotSnapRegion[];
 }
 
 export interface ScreenshotCompletePayload {
@@ -113,4 +119,3 @@ export type ScreenshotOutputResponse =
   | { status: 'completed'; action: 'pin' }
   | { status: 'cancelled' }
   | { status: 'failed'; code: ScreenshotErrorCode; message: string };
-

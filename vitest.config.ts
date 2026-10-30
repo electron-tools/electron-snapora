@@ -5,13 +5,13 @@ export default defineConfig({
   resolve: {
     alias: {
       electron: fileURLToPath(
-        new URL('./src/electron/electron-mock.ts', import.meta.url)
+        new URL('./test/electron/electron-mock.ts', import.meta.url)
       ),
     },
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['test/**/*.test.ts'],
     coverage: {
       reporter: ['text', 'html'],
     },

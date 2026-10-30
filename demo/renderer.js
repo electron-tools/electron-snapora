@@ -9,6 +9,48 @@ if (
 }
 
 const screenshotApi = window.electronSnapora;
+const snapSelect = document.getElementById('snap-granularity');
+const snapDescription = document.getElementById('snap-description');
+const snapApi = window.demoSnapApi;
+let selectedGranularity = 'panel';
+let snapSupported = false;
+const snapDescriptions = {
+  window: '仅识别整个应用窗口，不探测内部控件。',
+  panel: '保留主要内容区和侧栏，过滤小容器、列表行和深层嵌套。',
+  fine: '保留更细的可访问性容器，便于选择卡片和列表项。',
+};
+
+if (snapApi && snapSelect && snapDescription) {
+  void snapApi
+    .get()
+    .then(({ supported, granularity }) => {
+      snapSupported = supported;
+      selectedGranularity = granularity;
+      snapSelect.value = granularity;
+      snapSelect.disabled = !supported;
+      snapDescription.textContent = supported
+        ? `${snapDescriptions[granularity]} 按钮和全局快捷键均从下一次截图生效。`
+        : '当前平台暂不支持 Windows 容器吸附。';
+    })
+    .catch((error) => {
+      snapDescription.textContent = String(error);
+    });
+  snapSelect.addEventListener('change', async () => {
+    snapSelect.disabled = true;
+    captureButton.disabled = true;
+    try {
+      selectedGranularity = await snapApi.set(snapSelect.value);
+      snapDescription.textContent = `${snapDescriptions[selectedGranularity]} 下一次截图生效。`;
+    } catch (error) {
+      snapDescription.textContent =
+        error instanceof Error ? error.message : String(error);
+    } finally {
+      snapSelect.value = selectedGranularity;
+      snapSelect.disabled = !snapSupported;
+      captureButton.disabled = !screenshotApi;
+    }
+  });
+}
 if (!screenshotApi) {
   captureButton.disabled = true;
   resultOutput.textContent =
@@ -16,6 +58,7 @@ if (!screenshotApi) {
 } else {
   captureButton.addEventListener('click', async () => {
     captureButton.disabled = true;
+    if (snapSelect) snapSelect.disabled = true;
     resultOutput.textContent = 'Capturing…';
 
     try {
@@ -32,6 +75,7 @@ if (!screenshotApi) {
       resultOutput.textContent = error instanceof Error ? error.message : String(error);
     } finally {
       captureButton.disabled = false;
+      if (snapSelect) snapSelect.disabled = !snapSupported;
     }
   });
 }

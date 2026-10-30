@@ -175,7 +175,7 @@ input {
   left: 0;
   z-index: 3;
   border: 1px solid var(--snapora-accent);
-  background: rgb(10 132 255 / 8%);
+  background: transparent;
   box-shadow:
     0 0 0 100vmax var(--snapora-mask),
     inset 0 0 0 1px rgb(255 255 255 / 30%);

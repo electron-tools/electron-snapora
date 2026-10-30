@@ -19,9 +19,23 @@
         preload and overlay pipeline.
       </p>
       <button class="capture-button" type="button">Take screenshot</button>
+      <div class="snap-setting">
+        <label for="snap-granularity">吸附粒度（Windows）</label>
+        <select id="snap-granularity" aria-describedby="snap-description" disabled>
+          <option value="window">窗口级 · 仅整窗</option>
+          <option value="panel" selected>面板级 · 主要布局区域（默认）</option>
+          <option value="fine">精细级 · 小容器与列表项</option>
+        </select>
+        <p id="snap-description" role="status">正在读取设置…</p>
+      </div>
       <p class="hint">
         Select a region, annotate it, then copy and finish or save locally. Press Escape
         to cancel.
+      </p>
+      <p class="hint">
+        Windows prototype: hover to snap to an accessible container, click to select, or
+        drag to select freely. Global shortcut: Ctrl + Alt + Shift + S. UI Automation
+        discovery can take a few seconds.
       </p>
 
       <div class="shortcut-setting-card">

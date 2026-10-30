@@ -4,6 +4,12 @@ const { contextBridge, ipcRenderer } = require('electron');
 const DEFAULT_HOST_CAPTURE_CHANNEL = 'electron-snapora:host:capture';
 const DEFAULT_HOST_CANCEL_CHANNEL = 'electron-snapora:host:cancel';
 
+// Demo-only preference bridge; production screenshot IPC remains unchanged.
+contextBridge.exposeInMainWorld('demoSnapApi', {
+  get: () => ipcRenderer.invoke('demo:get-snap-granularity'),
+  set: (value) => ipcRenderer.invoke('demo:set-snap-granularity', value),
+});
+
 // Expose the capture API through the sandboxed preload.
 contextBridge.exposeInMainWorld('electronSnapora', {
   capture: (options) => ipcRenderer.invoke(DEFAULT_HOST_CAPTURE_CHANNEL, options),

@@ -75,6 +75,37 @@ h1 {
   font-size: 13px;
 }
 
+/* Native select keeps the comparison control keyboard accessible. */
+.snap-setting {
+  display: grid;
+  gap: 8px;
+  margin: 20px 0;
+}
+
+.snap-setting select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #4a5568;
+  border-radius: 8px;
+  background: #111820;
+  color: #edf2f7;
+  font: inherit;
+}
+
+.snap-setting select:focus-visible {
+  outline: 2px solid #63b3ed;
+  outline-offset: 2px;
+}
+
+.snap-setting select:disabled {
+  opacity: 0.6;
+}
+.snap-setting p {
+  margin: 0;
+  color: #a0aec0;
+  font-size: 13px;
+}
+
 .result {
   min-height: 96px;
   margin: 0;

@@ -8,6 +8,14 @@ export interface ScreenshotBounds {
   height: number;
 }
 
+/** Screen DIP candidate; lower z-order wins before comparing container sizes. */
+export interface ScreenshotSnapRegion extends ScreenshotBounds {
+  windowZOrder?: number;
+  kind?: 'window' | 'container';
+  /** Native provenance for diagnostics; no application content is included. */
+  sourceProcessId?: number;
+}
+
 export type ScreenshotLocale = 'en-US' | 'zh-CN' | 'ja-JP' | 'ko-KR' | 'es-ES';
 
 export interface ScreenshotMessages {

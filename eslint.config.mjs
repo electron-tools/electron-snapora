@@ -22,7 +22,12 @@ export default tseslint.config(
     },
   },
   {
-    files: ['demo/**/*.cjs', 'integration/**/*.cjs', 'integration/**/*.cts'],
+    files: [
+      'demo/**/*.cjs',
+      'integration/**/*.cjs',
+      'integration/**/*.cts',
+      'test/**/*.cjs',
+    ],
     languageOptions: {
       globals: {
         ...globals.node,
@@ -34,7 +39,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['scripts/**/*.mjs', 'integration/**/*.mjs'],
+    files: ['scripts/**/*.mjs', 'integration/**/*.mjs', 'test/**/*.mjs'],
     languageOptions: {
       globals: globals.node,
     },
