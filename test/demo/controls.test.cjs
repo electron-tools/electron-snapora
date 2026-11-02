@@ -25,6 +25,9 @@ function fixture({ supported = true, snapGet, interactionGet, capture } = {}) {
     }
   }
   const button = new Element();
+  const recordButton = new Element();
+  const recordingLimit = new Element();
+  recordingLimit.value = '3600';
   const output = new Element();
   const interaction = new Element();
   const snap = new Element();
@@ -35,10 +38,16 @@ function fixture({ supported = true, snapGet, interactionGet, capture } = {}) {
     HTMLElement: Element,
     navigator: { platform: 'MacIntel' },
     document: {
-      querySelector: (name) => (name === '.capture-button' ? button : output),
+      querySelector: (name) =>
+        name === '.capture-button'
+          ? button
+          : name === '.record-button'
+            ? recordButton
+            : output,
       getElementById: (name) =>
         ({
           'interaction-mode': interaction,
+          'recording-limit': recordingLimit,
           'snap-granularity': snap,
           'snap-description': description,
         })[name] || null,

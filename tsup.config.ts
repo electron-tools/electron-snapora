@@ -8,6 +8,7 @@ export default defineConfig({
     'preload/auto': 'src/electron/preload/auto-preload.ts',
     'overlay/preload': 'src/electron/preload/overlay-preload.ts',
     'pinned/preload': 'src/electron/preload/pinned-preload.ts',
+    'recording/preload': 'src/electron/preload/recording-preload.ts',
     'core/index': 'src/core.ts',
     'types/index': 'src/types.ts',
   },

@@ -1,4 +1,9 @@
+import { createCaptureMenu } from './capture-menu.js';
+import { recordingMessages } from '../i18n/recording.js';
 import './styles.css';
+import './tooltip.css';
+import { positionTooltipHorizontally } from './tooltip.js';
+import './capture-toolbar.css';
 
 import {
   viewportPointToImagePoint,
@@ -181,6 +186,7 @@ const colorButtons = Array.from(
 );
 
 const selectionStore = createOverlayStore();
+const captureMenu = createCaptureMenu(() => render());
 const annotationStore = createAnnotationStore();
 let pointerInteraction: PointerInteraction | null = null;
 let resetAnnotationsAfterSelection = true;
@@ -333,6 +339,7 @@ function formatCaptureError(error: unknown): string {
 
 /** 复用 renderer 时恢复到新建窗口的初始状态，避免上一次选区和控件值残留。 */
 function resetOverlaySession(): void {
+  captureMenu.hide();
   frameLoadController?.abort();
   frameLoadController = undefined;
   closeTextEditor(false);
@@ -391,6 +398,7 @@ window.snaporaOverlay.onSelectInitialize((payload) => {
   if (payload.jobId === cancelledJobId) return;
   resetOverlaySession();
   liveSelection = payload;
+  captureMenu.initialize(payload.jobId, payload.options);
   surface.dataset.live = 'true';
   configuredDefaultTool = payload.options.defaultTool ?? 'select';
   annotationStore.setTool(configuredDefaultTool);
@@ -1298,6 +1306,7 @@ function finishSelection(pointerId: number): void {
   selectionStore.dispatch({ type: 'end-interaction', pointerId });
   const selection = selectionStore.getState().selection;
   if (liveSelection && selection) {
+    captureMenu.hide();
     selectionStore.dispatch({ type: 'capture-selection' });
     const payload = {
       jobId: liveSelection.jobId,
@@ -1738,14 +1747,18 @@ function render(): void {
   const capturingSelection =
     Boolean(liveSelection) && selectionState.phase === 'capturing';
   toolbar.hidden =
-    selectionState.phase !== 'selected' && !capturingSelection && !exporting;
+    (Boolean(liveSelection) && captureMenu.isRecording()) ||
+    (selectionState.phase !== 'selected' && !capturingSelection && !exporting);
   toolbar.inert = exporting;
   toolbar.setAttribute('aria-busy', String(capturingSelection || exporting));
 
   const showPhaseStatus = selectionState.phase === 'ready';
   status.hidden = !showPhaseStatus && !outputFeedback;
   if (selectionState.phase === 'ready') {
-    status.textContent = localize('instruction');
+    status.textContent =
+      liveSelection && captureMenu.isRecording()
+        ? recordingMessages(liveSelection.options.locale).select
+        : localize('instruction');
   } else if (outputFeedback) {
     status.textContent = outputFeedback;
   }
@@ -1890,16 +1903,6 @@ function positionTooltip(toolbarPlacement: 'above' | 'below' | 'inside'): void {
   )) {
     positionTooltipHorizontally(button);
   }
-}
-
-/** 只平移气泡，箭头仍指向按钮；使用实际宽度兼容快捷键和本地化文案。 */
-function positionTooltipHorizontally(button: HTMLElement): void {
-  const bounds = button.getBoundingClientRect();
-  const width = Number.parseFloat(getComputedStyle(button, '::after').width);
-  if (!Number.isFinite(width)) return;
-  const center = bounds.left + bounds.width / 2;
-  const left = Math.max(8, Math.min(center - width / 2, window.innerWidth - 8 - width));
-  button.style.setProperty('--tooltip-offset-x', `${left + width / 2 - center}px`);
 }
 
 /** 将预设面板限制在屏幕内，并让箭头始终指向当前点击的工具按钮。 */

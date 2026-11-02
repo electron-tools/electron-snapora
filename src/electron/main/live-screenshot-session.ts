@@ -20,6 +20,7 @@ import {
 } from './screenshot-session.js';
 import type { ScreenshotOverlayWindow } from './overlay-window.js';
 import { toScreenshotFailure } from './errors.js';
+import { RecordingSession } from './recording-session.js';
 
 interface Entry {
   display: CaptureDisplay;
@@ -35,7 +36,8 @@ export class LiveScreenshotSession {
   readonly #options: ScreenshotSessionOptions;
   readonly #entries = new Map<number, Entry>();
   readonly #abort = new AbortController();
-  #inner: ScreenshotSession | undefined;
+  #inner: ScreenshotSession | RecordingSession | undefined;
+  #mode: 'screenshot' | 'record';
   #selected: Entry | undefined;
   #settled = false;
   #started = false;
@@ -48,6 +50,7 @@ export class LiveScreenshotSession {
 
   constructor(options: ScreenshotSessionOptions) {
     this.#options = options;
+    this.#mode = options.captureOptions.mode ?? 'screenshot';
   }
 
   run(): Promise<ScreenshotResult> {
@@ -99,6 +102,7 @@ export class LiveScreenshotSession {
       }
       const ipc = this.#options.ipcMain;
       for (const [channel, handler] of [
+        [OVERLAY_CHANNELS.mode, this.#changeMode],
         [OVERLAY_CHANNELS.ready, this.#ready],
         [OVERLAY_CHANNELS.selectionReady, this.#selectionReady],
         [OVERLAY_CHANNELS.selected, this.#commit],
@@ -153,15 +157,16 @@ export class LiveScreenshotSession {
         this.#entries.set(overlay.webContentsId, entry);
         this.#cleanups.push(
           overlay.onClosed(() => {
-            this.cancel();
+            if (!(this.#inner instanceof RecordingSession)) this.cancel();
           }),
-          overlay.onRendererGone(() =>
+          overlay.onRendererGone(() => {
+            if (this.#inner instanceof RecordingSession) return;
             this.#finish({
               status: 'failed',
               code: 'OVERLAY_LOAD_FAILED',
               message: 'Selection renderer exited.',
-            })
-          )
+            });
+          })
         );
       }
       // Native requests know the exact handles before any selection window appears.
@@ -205,7 +210,7 @@ export class LiveScreenshotSession {
         protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
         jobId: this.#options.jobId,
         display: entry.display,
-        options: this.#options.captureOptions,
+        options: { ...this.#options.captureOptions, mode: this.#mode },
         windowSnapRegions: this.#regions,
       },
       entry.display.id === this.#cursorDisplayId || this.#entries.size === 1
@@ -282,6 +287,16 @@ export class LiveScreenshotSession {
     this.#abort.abort();
     for (const other of this.#entries.values())
       if (other !== entry) other.overlay.hide?.();
+    if (this.#mode === 'record') {
+      this.#inner = new RecordingSession(
+        entry.display,
+        { ...payload.selection },
+        this.#options.captureOptions,
+        () => entry.overlay.hide?.()
+      );
+      void this.#inner.run().then((result) => this.#finish(result));
+      return;
+    }
     // The existing editor performs capture only now; no full-screen pixels were read while selecting.
     const editorOptions = { ...this.#options };
     delete editorOptions.getWindowSnapRegions;
@@ -337,7 +352,23 @@ export class LiveScreenshotSession {
       this.cancel();
   };
 
+  #changeMode = (event: IpcMainEvent, raw: unknown): void => {
+    if (
+      !this.#entry(event) ||
+      this.#selected ||
+      !isPreparedPayload(raw, this.#options.jobId)
+    )
+      return;
+    const mode = (raw as { mode?: unknown }).mode;
+    if (mode !== 'screenshot' && mode !== 'record') return;
+    this.#mode = mode;
+    for (const entry of this.#entries.values())
+      entry.overlay.sendMode?.(this.#options.jobId, mode);
+  };
+
   #topologyChanged = (): void => {
+    // Recording owns display-loss shutdown and recovery; do not settle before it returns its spool path.
+    if (this.#inner instanceof RecordingSession) return;
     this.#finish({
       status: 'failed',
       code: 'DISPLAY_NOT_FOUND',

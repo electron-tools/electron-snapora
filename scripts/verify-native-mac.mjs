@@ -42,23 +42,25 @@ export function verifyUniversalMacHelper(data) {
 
 function main() {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-  const source = join(root, 'src/electron/native/snapora-macos');
-  const bundled = join(root, 'dist/native/snapora-macos');
   try {
-    const data = readFileSync(bundled);
-    verifyUniversalMacHelper(data);
-    if (!data.equals(readFileSync(source)))
-      throw new Error('Bundled helper differs from the build output.');
-    if (process.platform === 'darwin') {
-      if (!(statSync(bundled).mode & 0o111))
-        throw new Error('Helper is not executable.');
-      execFileSync(
-        '/usr/bin/codesign',
-        ['--verify', '--strict', '--all-architectures', bundled],
-        { stdio: 'inherit' }
-      );
+    for (const name of ['snapora-macos', 'snapora-macos-recording']) {
+      const source = join(root, 'src/electron/native', name);
+      const bundled = join(root, 'dist/native', name);
+      const data = readFileSync(bundled);
+      verifyUniversalMacHelper(data);
+      if (!data.equals(readFileSync(source)))
+        throw new Error('Bundled helper differs from the build output.');
+      if (process.platform === 'darwin') {
+        if (!(statSync(bundled).mode & 0o111))
+          throw new Error('Helper is not executable.');
+        execFileSync(
+          '/usr/bin/codesign',
+          ['--verify', '--strict', '--all-architectures', bundled],
+          { stdio: 'inherit' }
+        );
+      }
+      console.log(`Universal macOS helper ${name} is present in dist/native.`);
     }
-    console.log('Universal macOS helper is present in dist/native.');
   } catch (error) {
     throw new Error(
       'Mac release artifact check failed. On macOS run pnpm run build:native:mac:universal, then pnpm run build. ' +

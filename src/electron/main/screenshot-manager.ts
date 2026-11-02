@@ -14,7 +14,9 @@ import type {
   ScreenshotSnapContext,
   ScreenshotOptions,
   ScreenshotResult,
+  RecordingOptions,
 } from '../../types.js';
+import { parseRecordingOptions } from '../../recording/policy.js';
 import {
   emitScreenshotDiagnostic,
   type ScreenshotDiagnosticContextValue,
@@ -69,6 +71,8 @@ export type ScreenshotManagerIpcMain = Pick<
 >;
 
 export interface ScreenshotManagerOptions {
+  /** Host defaults, overridable per capture except the fixed GIF ceiling. */
+  recording?: RecordingOptions;
   /** 完全接管会话执行；设置后其余高层注入项不会参与默认 runner。 */
   runner?: ScreenshotRunner;
   ipcMain?: ScreenshotManagerIpcMain;
@@ -109,6 +113,7 @@ interface DefaultScreenshotRunner {
 function createDefaultRunner(
   managerOptions: ScreenshotManagerOptions
 ): DefaultScreenshotRunner {
+  const recordingDefaults = parseRecordingOptions(managerOptions.recording);
   const ipcMain = managerOptions.ipcMain ?? electronIpcMain;
   const resourceLimits = resolveScreenshotResourceLimits(managerOptions.resourceLimits);
   const ownedCaptureAdapter = managerOptions.captureAdapter
@@ -184,6 +189,29 @@ function createDefaultRunner(
   };
 
   const run: ScreenshotRunner = (jobId, captureOptions, context) => {
+    const liveAvailable =
+      (process.platform === 'win32' && Number(release().split('.')[2]) >= 19041) ||
+      (process.platform === 'darwin' && Number(release().split('.')[0]) >= 23);
+    const interactionMode =
+      captureOptions.mode === 'record'
+        ? 'live'
+        : (captureOptions.interactionMode ??
+          (liveAvailable && !createCustomOverlay ? 'live' : 'frozen'));
+    if (
+      interactionMode === 'live' ||
+      captureOptions.recording ||
+      managerOptions.recording
+    )
+      captureOptions = {
+        ...captureOptions,
+        interactionMode,
+        display:
+          captureOptions.display ?? (interactionMode === 'live' ? 'all' : 'cursor'),
+        recording: {
+          ...recordingDefaults,
+          ...parseRecordingOptions(captureOptions.recording),
+        },
+      };
     if (disposed) return Promise.resolve({ status: 'cancelled' });
     if (
       (captureOptions.interactionMode === 'live' || captureOptions.display === 'all') &&
@@ -507,6 +535,17 @@ export class ScreenshotManager {
     }
 
     return this.#executeCapture(options, context);
+  }
+
+  /** Open the shared selector with recording preselected; no capture starts before confirmation. */
+  record(
+    options: ScreenshotOptions = {},
+    context: ScreenshotJobContext = {}
+  ): Promise<ScreenshotResult> {
+    return this.capture(
+      { ...options, mode: 'record', interactionMode: 'live' },
+      context
+    );
   }
 
   #handleBusyCapture(

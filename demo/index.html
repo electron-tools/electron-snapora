@@ -18,6 +18,15 @@
         Select across displays, then capture and annotate your chosen region.
       </p>
       <button class="capture-button" type="button">Take screenshot</button>
+      <button class="record-button" type="button">录制 / Record</button>
+      <label
+        >MP4 时长上限（秒）<input
+          id="recording-limit"
+          type="number"
+          min="1"
+          max="86400"
+          value="3600"
+      /></label>
       <div class="snap-setting">
         <label for="interaction-mode">截图交互</label>
         <select id="interaction-mode" disabled>

@@ -88,6 +88,9 @@ export interface ScreenshotTheme {
 }
 
 export interface ScreenshotOptions {
+  /** Initial preparation mode. record() sets this to record automatically. */
+  mode?: 'screenshot' | 'record';
+  recording?: RecordingOptions;
   display?: 'cursor' | 'primary' | string;
   /** Windows/macOS live selection captures only after selection; frozen preserves the original flow. */
   interactionMode?: 'frozen' | 'live';
@@ -132,6 +135,7 @@ export type ScreenshotOutputMetadata =
 
 export type ScreenshotResult =
   | (ScreenshotImageResult & { output: ScreenshotOutputMetadata })
+  | RecordingFileResult
   | {
       status: 'cancelled';
     }
@@ -139,9 +143,35 @@ export type ScreenshotResult =
       status: 'failed';
       code: ScreenshotErrorCode;
       message: string;
+      /** Owned partial recording retained after an encoder/write failure. */
+      recoveryPath?: string;
     };
 
 export interface ScreenshotRendererApi {
   capture(options?: ScreenshotOptions): Promise<ScreenshotResult>;
+  record(options?: ScreenshotOptions): Promise<ScreenshotResult>;
   cancel(): Promise<boolean>;
+}
+
+/** Recording preferences; GIF is always silent and capped at 60 seconds. */
+export interface RecordingOptions {
+  format?: 'mp4' | 'gif';
+  maxMp4DurationSeconds?: number;
+  audio?: 'none' | 'microphone' | 'system' | 'both';
+  /** Device IDs come from this recording session's media-device picker. */
+  microphoneDeviceId?: string;
+  camera?: boolean;
+  cameraDeviceId?: string;
+}
+
+/** Large recordings are returned as files, never as an IPC-sized byte array. */
+export interface RecordingFileResult {
+  status: 'recorded';
+  filePath: string;
+  format: 'mp4' | 'gif';
+  mimeType: 'video/mp4' | 'image/gif';
+  durationSeconds: number;
+  bytes: number;
+  displayId: string;
+  bounds: ScreenshotBounds;
 }

@@ -30,6 +30,12 @@ export function exposeScreenshotApi(
     options.cancelChannel ??
     (options.channel ? `${options.channel}:cancel` : DEFAULT_HOST_CANCEL_CHANNEL);
   const api: ScreenshotRendererApi = {
+    record: (captureOptions?: ScreenshotOptions) =>
+      options.ipcRenderer.invoke(channel, {
+        ...captureOptions,
+        mode: 'record',
+        interactionMode: 'live',
+      }) as Promise<ScreenshotResult>,
     capture: (captureOptions?: ScreenshotOptions) =>
       options.ipcRenderer.invoke(channel, captureOptions) as Promise<ScreenshotResult>,
     cancel: () => options.ipcRenderer.invoke(cancelChannel) as Promise<boolean>,

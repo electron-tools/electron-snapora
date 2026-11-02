@@ -6,6 +6,7 @@ const {
   registerScreenshotIpc,
   createWindowsSnapProvider,
   createMacSnapProvider,
+  prepareRecordingPermissions,
 } = require('electron-snapora/main');
 
 let snapGranularity = 'window';
@@ -174,7 +175,24 @@ function createHostWindow() {
   void hostWindow.loadFile(join(__dirname, 'index.html'));
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  try {
+    const { listenForRestart } = require('./lifecycle.cjs');
+    const restartServer = await listenForRestart({
+      isBusy: () => Boolean(screenshotManager.activeJobId),
+      quit: () => app.quit(),
+    });
+    app.once('will-quit', () => restartServer.close());
+  } catch (error) {
+    console.error('[Demo restart]', error);
+    app.quit();
+    return;
+  }
+  void prepareRecordingPermissions({
+    screen: true,
+    microphone: true,
+    camera: true,
+  }).catch((error) => console.warn('[Recording permissions]', error));
   void snapProvider?.prepare().catch((error) => console.warn('[Snap warmup]', error));
   if (liveSupported)
     void screenshotManager

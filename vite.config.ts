@@ -15,6 +15,16 @@ export default defineConfig({
       input: {
         overlay: fileURLToPath(new URL('./src/overlay/index.html', import.meta.url)),
         pinned: fileURLToPath(new URL('./src/overlay/pinned.html', import.meta.url)),
+        recording: fileURLToPath(
+          new URL('./src/overlay/recording.html', import.meta.url)
+        ),
+        recordingPreview: fileURLToPath(
+          new URL('./src/overlay/recording-preview.html', import.meta.url)
+        ),
+        camera: fileURLToPath(new URL('./src/overlay/camera.html', import.meta.url)),
+        cameraControls: fileURLToPath(
+          new URL('./src/overlay/camera-controls.html', import.meta.url)
+        ),
       },
     },
   },

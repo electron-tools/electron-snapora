@@ -21,6 +21,20 @@ function createHarness() {
 }
 
 describe('exposeScreenshotApi', () => {
+  it('routes standalone recording through the authorized capture channel and forces live preparation', async () => {
+    const harness = createHarness();
+    const api = exposeScreenshotApi({ ...harness.options, channel: 'app:media' });
+    await api.record({
+      mode: 'screenshot',
+      interactionMode: 'frozen',
+      recording: { maxMp4DurationSeconds: 30 },
+    });
+    expect(harness.invoke).toHaveBeenCalledWith('app:media', {
+      mode: 'record',
+      interactionMode: 'live',
+      recording: { maxMp4DurationSeconds: 30 },
+    });
+  });
   it('exposes capture and cancel through the default host channels', async () => {
     const harness = createHarness();
     const api = exposeScreenshotApi(harness.options);

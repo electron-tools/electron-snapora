@@ -36,6 +36,8 @@ provider 只在主进程创建一次并复用，退出时调用 `dispose()`；`p
 
 ## 功能特性
 
+开发分支新增截图/录制准备菜单、独立 `record()`、MP4（默认 60 分钟，可配置）与 GIF（60 秒）。参见 [录制接入与平台要求](docs/recording.md)。尚未发布；Windows 已做实录验证，macOS 仍需真机验收。
+
 - Windows 10 2004+ / macOS 14+ 多屏实时选择：移动鼠标跨屏选择，确定选区后再采集画面。
 - 跨应用窗口与容器吸附：Windows UI Automation、macOS AX，支持 `window / panel / fine` 三档粒度。
 - 面向宿主的 macOS 权限查询、显式授权请求和结构化截图失败结果。
@@ -383,7 +385,7 @@ const snapora = setupElectronSnapora({
 
 ## 多屏实时选择、容器吸附与宿主权限接入
 
-这些能力属于 npm 包公开 API，不是 demo 专属功能。`demo/` 只是源码仓库的测试应用，不随 npm 发布。默认接入仍是冻结画面的单屏截图；安装依赖不会自动注册吸附 provider，也不会自动带上权限界面。
+这些能力属于 npm 包公开 API，不是 demo 专属功能。`demo/` 只是源码仓库的测试应用，不随 npm 发布。当前开发分支的内置覆盖层在支持的平台默认进入实时多屏准备界面；显式 `frozen` 和旧自定义覆盖层保留原流程。安装依赖不会自动注册吸附 provider，也不会自动带上权限界面。
 
 `interactionMode: 'live'` 支持跨屏移动鼠标、悬停吸附、单击选区和自由拖框；一次拖动限制在起始显示器内。选区确定后才采集该屏幕并进入原有标注编辑器。`display: 'all'` 只能配合 live 使用，不表示将多个屏幕拼成一张图片。旧模式使用 `interactionMode: 'frozen', display: 'cursor'`。
 
@@ -528,6 +530,8 @@ if (result.status === 'failed' && result.code === 'PERMISSION_DENIED') {
 Windows 随包提供两个预编译程序：`dist/native/snapora-windows-snap.exe`（UI Automation）和 `dist/native/snapora-windows-capture.exe`（像素采集）。Electron 直接启动它们，运行时不调用 PowerShell、不编译 C#、不下载或生成临时可执行文件。它们使用 Windows 的 .NET Framework 运行时，不要求用户安装编译器或 SDK；属于 AnyCPU 托管程序，并非自包含 .NET 包。两个 exe 均须按上例解包到 ASAR 外；HTML/CSS/JS 可留在 ASAR 内。
 
 Windows 源码开发执行 `pnpm run build`（包括 `pnpm demo`）会先编译辅助程序。可用 `pnpm run build:native:windows` 单独编译、`pnpm run verify:native:windows` 校验构建产物和源码哈希。npm 使用者不需要构建工具；接入 API、预热复用、取消、三档吸附和截图编辑功能保持一致。
+
+`pnpm demo` 构建前会通过当前仓库专用的本地通信通道，请求旧的空闲 Demo 正常退出，并等待它释放 helper 文件，避免 Windows 删除运行中的 `.exe` 报 `EPERM`。正在截图、录制或预览时会提示先完成或取消，不丢弃当前任务。此机制只用于 Demo，不扫描或结束 Ping 等宿主进程。直接运行 `pnpm run build` 前仍需自行退出 Demo；首次更新这套启动逻辑时，也需先退出未支持该通道的旧 Demo。
 
 在 macOS/Linux 制作跨平台发布包前，先在相同源码版本的 Windows 上构建，将 `snapora-windows-snap.exe`、`snapora-windows-capture.exe`、`windows-helpers.json` 一并复制到发布机器的 `src/electron/native`。CI 提供 `windows-native-helpers` 产物。`release:check` 同时要求 Windows 两个 exe 和 Mac universal helper，并拒绝 Windows 文件缺失、损坏或源码过期。Windows 可执行文件的生产签名可在宿主打包阶段应用到解包后的 helper。
 

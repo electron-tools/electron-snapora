@@ -41,7 +41,10 @@
     "access": "public",
     "registry": "https://registry.npmjs.org/",
     "tag": "latest",
-    "executableFiles": ["dist/native/snapora-macos"]
+    "executableFiles": [
+      "dist/native/snapora-macos",
+      "dist/native/snapora-macos-recording"
+    ]
   },
   "type": "module",
   "main": "./dist/main/index.cjs",
@@ -52,6 +55,9 @@
     "CHANGELOG.md",
     "LICENSE",
     "TRADEMARKS.md",
+    "THIRD_PARTY_NOTICES.md",
+    "licenses",
+    "docs/recording.md",
     "README*.md"
   ],
   "exports": {
@@ -114,7 +120,11 @@
   "scripts": {
     "clean": "rimraf dist coverage",
     "dev": "vite --config vite.config.ts",
-    "demo": "node scripts/prepare-demo.cjs && pnpm run build && electron demo/main.cjs",
+    "demo": "node scripts/stop-demo.cjs && node scripts/prepare-demo.cjs && pnpm run build && electron demo/main.cjs",
+    "demo:recording-media-smoke": "pnpm run build && electron test/demo/recording-media-smoke.cjs",
+    "demo:recording-smoke": "pnpm run build && electron test/demo/recording-smoke.cjs",
+    "demo:recording-fault-smoke": "pnpm run build && electron test/demo/recording-fault-smoke.cjs",
+    "demo:recording-menu-smoke": "pnpm run build && electron test/demo/recording-menu-smoke.cjs",
     "demo:mac": "pnpm run demo",
     "demo:mac-live-smoke": "pnpm run build:native:mac && pnpm run build && electron test/demo/live-selection-smoke.cjs",
     "build:native:mac": "node scripts/build-native-mac.mjs",
@@ -177,8 +187,10 @@
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "eslint": "^10.0.2",
+    "gifenc": "^1.0.3",
     "globals": "^17.3.0",
     "koffi": "3.1.6",
+    "mediabunny": "^1.64.0",
     "prettier": "^3.8.1",
     "rimraf": "^6.1.2",
     "tsup": "^8.5.1",

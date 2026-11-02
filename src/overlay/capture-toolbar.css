@@ -1,0 +1,95 @@
+/* Shared chrome for capture preparation and active recording controls. */
+.capture-mode-menu,
+body[data-view='active'] main {
+  background: #fff;
+  border: 1px solid #dce0e7;
+  border-radius: 8px;
+  box-shadow: 0 3px 7px #19233414;
+  color: #202632;
+}
+.capture-mode-menu {
+  gap: 2px;
+  padding: 2px;
+}
+.capture-mode-menu button[data-mode] {
+  min-width: 80px;
+}
+.capture-mode-menu button,
+body[data-view='active'] #active button {
+  height: 30px;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #596270;
+  font:
+    500 13px/1 system-ui,
+    'Microsoft YaHei',
+    sans-serif;
+  cursor: pointer;
+}
+.capture-mode-menu button:hover,
+body[data-view='active'] #active button:hover {
+  background: #edf0f5;
+  color: #202632;
+}
+.capture-mode-menu button[aria-pressed='true'],
+body[data-view='active'][data-paused='true'] #active #pause {
+  background: #2459f5;
+  color: #fff;
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px #1748d5;
+}
+.capture-mode-menu button[aria-pressed='true']:hover,
+body[data-view='active'][data-paused='true'] #active #pause:hover {
+  background: #1849df;
+}
+body[data-view='active'] #active #stop {
+  background: #fff0ed;
+  color: #b63126;
+}
+body[data-view='active'] #active #stop:hover {
+  background: #ffded8;
+}
+.capture-mode-menu button:focus-visible,
+body[data-view='active'] #active button:focus-visible {
+  outline: 2px solid #2459f5;
+  outline-offset: -2px;
+}
+.capture-mode-menu .capture-menu-grip,
+body[data-view='active'] #active #bar-grip {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  margin: 0;
+  padding: 0;
+  color: #8b939f;
+  touch-action: none;
+}
+.capture-mode-menu .capture-menu-grip:hover,
+body[data-view='active'] #active #bar-grip:hover {
+  background: #e4e9f2;
+  color: #475569;
+}
+.capture-mode-menu .capture-menu-grip:active,
+body[data-view='active'] #active #bar-grip:active {
+  background: #dbe5fa;
+  color: #2459f5;
+}
+.capture-mode-menu .capture-menu-grip {
+  cursor: grab;
+}
+.capture-mode-menu .capture-menu-grip:active {
+  cursor: grabbing;
+}
+body[data-view='active'] #active #bar-grip {
+  cursor: move;
+}
+.capture-menu-grip svg,
+#bar-grip svg {
+  width: 14px;
+  height: 20px;
+  fill: currentColor;
+}

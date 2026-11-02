@@ -1,0 +1,94 @@
+/* Shared screenshot and camera tooltip presentation. */
+[data-tooltip]::before,
+[data-tooltip]::after {
+  position: absolute;
+  left: 50%;
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition:
+    opacity 100ms ease,
+    transform 100ms ease;
+  transition-delay: 0ms;
+}
+
+[data-tooltip]::before {
+  bottom: calc(100% - 1px);
+  width: 0;
+  height: 0;
+  border: 6px solid transparent;
+  border-top-color: var(--snapora-tooltip);
+  content: '';
+}
+
+[data-tooltip]::after {
+  box-sizing: border-box;
+  left: calc(50% + var(--tooltip-offset-x, 0px));
+  bottom: calc(100% + 11px);
+  width: max-content;
+  max-width: calc(100vw - 16px);
+  padding: 7px 9px;
+  border: 1px solid var(--snapora-color-tooltip-border);
+  border-bottom-color: transparent;
+  border-radius: 7px;
+  color: var(--snapora-tooltip-foreground);
+  background: var(--snapora-tooltip);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 34%);
+  content: attr(data-tooltip);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+[data-tooltip][data-shortcut]::after {
+  content: attr(data-tooltip) '  ·  ' attr(data-shortcut);
+}
+
+[data-tooltip]:hover::before,
+[data-tooltip]:hover::after,
+[data-tooltip]:focus-visible::before,
+[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition-delay: 350ms;
+}
+
+:root[data-tooltip-pointer='down'] [data-tooltip]::before,
+:root[data-tooltip-pointer='down'] [data-tooltip]::after {
+  opacity: 0;
+  transition: none;
+  transition-delay: 0ms;
+}
+
+[data-tooltip]:disabled:hover::before,
+[data-tooltip]:disabled:hover::after {
+  opacity: 0;
+}
+
+.selection-toolbar[data-tooltip-placement='below'] [data-tooltip]::before,
+.selection-toolbar[data-tooltip-placement='below'] [data-tooltip]::after {
+  top: auto;
+  bottom: auto;
+  transform: translate(-50%, -4px);
+}
+
+.selection-toolbar[data-tooltip-placement='below'] [data-tooltip]::before {
+  top: calc(100% + 3px);
+  border-top-color: transparent;
+  border-bottom-color: var(--snapora-tooltip);
+}
+
+.selection-toolbar[data-tooltip-placement='below'] [data-tooltip]::after {
+  top: calc(100% + 15px);
+  border-top-color: transparent;
+}
+
+.selection-toolbar[data-tooltip-placement='below'] [data-tooltip]:hover::before,
+.selection-toolbar[data-tooltip-placement='below'] [data-tooltip]:hover::after,
+.selection-toolbar[data-tooltip-placement='below'] [data-tooltip]:focus-visible::before,
+.selection-toolbar[data-tooltip-placement='below'] [data-tooltip]:focus-visible::after {
+  transform: translate(-50%, 0);
+}

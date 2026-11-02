@@ -15,6 +15,10 @@ import type {
 } from '../protocol/messages.js';
 
 export interface ScreenshotOverlayApi {
+  setMode(jobId: string, mode: 'screenshot' | 'record'): void;
+  onMode(
+    listener: (payload: { jobId: string; mode: 'screenshot' | 'record' }) => void
+  ): void;
   onSelectInitialize(
     listener: (payload: ScreenshotSelectionPayload) => void
   ): () => void;
@@ -36,6 +40,20 @@ export interface ScreenshotOverlayApi {
 }
 
 const overlayApi: ScreenshotOverlayApi = {
+  setMode(jobId, mode) {
+    ipcRenderer.send(OVERLAY_CHANNELS.mode, {
+      jobId,
+      mode,
+      protocolVersion: SCREENSHOT_PROTOCOL_VERSION,
+    });
+  },
+  onMode(listener) {
+    ipcRenderer.on(
+      OVERLAY_CHANNELS.mode,
+      (_event, payload: { jobId: string; mode: 'screenshot' | 'record' }) =>
+        listener(payload)
+    );
+  },
   onSelectInitialize(listener) {
     const handler = (
       _event: Electron.IpcRendererEvent,

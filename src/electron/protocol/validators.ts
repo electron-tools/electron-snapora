@@ -21,6 +21,7 @@ import {
 } from './messages.js';
 import { HARD_SCREENSHOT_RESOURCE_LIMITS } from './limits.js';
 import { isScreenshotLocale } from '../../i18n/index.js';
+import { parseRecordingOptions } from '../../recording/policy.js';
 
 const SCREENSHOT_ERROR_CODES = new Set<ScreenshotErrorCode>([
   'CAPTURE_BUSY',
@@ -46,6 +47,8 @@ const SCREENSHOT_TOOLS = new Set<ScreenshotTool>([
 ]);
 
 const SCREENSHOT_OPTION_KEYS = new Set([
+  'mode',
+  'recording',
   'display',
   'interactionMode',
   'tools',
@@ -157,6 +160,18 @@ export function parseScreenshotOptions(value: unknown): ScreenshotOptionsParseRe
   }
 
   const parsed: ScreenshotOptions = {};
+  if (value.mode !== undefined) {
+    if (value.mode !== 'screenshot' && value.mode !== 'record')
+      return { success: false, message: 'Invalid capture mode.' };
+    parsed.mode = value.mode;
+  }
+  if (value.recording !== undefined) {
+    try {
+      parsed.recording = parseRecordingOptions(value.recording);
+    } catch (error) {
+      return { success: false, message: String(error) };
+    }
+  }
   if (value.interactionMode !== undefined) {
     if (value.interactionMode !== 'live' && value.interactionMode !== 'frozen')
       return { success: false, message: 'Unsupported screenshot interactionMode.' };

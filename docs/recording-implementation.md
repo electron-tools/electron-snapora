@@ -1,0 +1,129 @@
+# 截图准备菜单与录制实施方案
+
+日期：2026-10-31。范围：electron-snapora 与 demo；不修改 Ping 接入，不发布 npm。本次不包含滚动截图、OCR 或剪辑。
+
+## 产品合同
+
+- `capture()` 默认进入实时准备界面，顶部为横向拖动手柄、截图、录制，默认截图。旧 `interactionMode: 'frozen'` 显式保留旧截图流程。
+- `record()` 单独入口直接预选录制，仍需用户确认录制范围，不自动开始采集。
+- 鼠标跨屏沿用现有多屏嗅探；一次录制限定在一块屏幕内，使用固定屏幕区域，不跟随被选窗口移动。
+- 截图确定范围后隐藏模式菜单，进入原有标注、复制、保存流程。
+- 录制确定范围后进入准备面板：MP4/GIF、声音、范围尺寸、开始、取消。开始后倒计时三秒；录制中支持暂停/继续、停止，结束后预览与另存为。
+- MP4 默认最长 3600 秒，由宿主配置 `recording.maxMp4DurationSeconds`；GIF 硬上限 60 秒。按实际录制时间计时，暂停不计入上限。到时自动停止并进入预览。
+- 默认 MP4 30fps、最长边 1920px；GIF 10fps、最长边 1280px、无音频。MP4 可选麦克风、系统音或两者，默认无音频。
+- 录制结果返回文件路径及元信息，使用 `status: 'recorded'`，不把大型视频塞入原截图 PNG 数据结构。
+
+## 状态与所有权
+
+`准备选择 → 截图编辑 | 录制准备 → 倒计时 → 录制 ⇄ 暂停 → 收尾 → 预览 → 保存/取消`。
+
+ScreenshotManager 共用忙碌锁和调用者隔离；LiveScreenshotSession 负责嗅探和选区，确定录制范围后停止嗅探，将生命周期交给 RecordingSession。独立录制 renderer 负责编码，不在宿主页面运行；主进程负责专属 Electron session、权限、文件、停止快捷键和异常清理。仅接受对应主框架 IPC。
+
+主进程写盘采用有上限的小块 IPC，每块等待写入确认，校验顺序和累计大小。临时文件由库生成，renderer 不传任意路径。异常保留临时文件并返回恢复路径；正常取消删除临时文件。保存用流式文件复制，不读完整视频。
+
+## 编码路线
+
+MP4：Windows 使用 Electron 桌面采集 → 固定区域裁剪 → WebCodecs H.264/AAC → Mediabunny fragmented MP4 → 流式文件。macOS 视频改为 ScreenCaptureKit 按窗口 ID 排除摄像头设置窗 → VideoToolbox H.264 → 压缩包 IPC → Mediabunny 封装，音频仍走 Electron/AAC。所有 add/write 均等待背压；画面在写盘/编码繁忙时跳过调度，不无限排队。音轨结束或异常时停止录制并保存已写片段，禁止封装器无限等待已死亡音轨。
+
+GIF：相同采集/裁剪 → 独立 Worker 中 gifenc 量化和编码 → 每帧输出后清空编码字节缓存 → 流式文件；最多一帧在途。直接生成 GIF，无 FFmpeg 转码。
+
+停止时关闭数据源、完成编码和文件封装；有超时兜底。不会在结束时重新编码整段视频。fragmented MP4 的恢复以已落盘的初始化头与完整片段为边界，不承诺最后一帧或任何崩溃时刻都可恢复。
+
+## Windows / macOS
+
+- 延续实时选区基线：Windows 10 2004+、macOS 14+；Electron >=42。保留旧截图兼容路径。
+- 录制使用独立 session 的 `setDisplayMediaRequestHandler`，不覆盖宿主的 handler。根据选定 display ID 绑定源，拒绝其他 renderer 请求。
+- macOS 屏幕录制授权属于宿主 app；麦克风需 `NSMicrophoneUsageDescription`，系统音需符合 Electron/macOS 条件及 `NSAudioCaptureUsageDescription`。拒绝授权明确报错，不假装录到声音。辅助功能权限只影响容器吸附，不作为手动录制的前置条件。
+- Windows 使用 content protection 辅助排除控制窗；macOS 不依赖该 API 能排除 ScreenCaptureKit 画面。两端控制窗均优先放选区外；没有空间时录制中隐藏控制窗，通过已注册停止快捷键操作。快捷键注册失败且无安全控制位置时拒绝开始，避免无法停止。
+- 显示器拔出、旋转、缩放变化或休眠时结束当前录制，保留已写内容，不让坐标悄悄变化。
+
+## 证据与实现边界
+
+- [飞书官方操作说明](https://www.feishu.cn/hc/zh-CN/articles/145659580677-%E5%BD%95%E5%B1%8F%E5%92%8C%E6%BB%9A%E5%8A%A8%E6%88%AA%E5%9B%BE)：参考选范围、选格式、开始、停止及保存流程；不声称逐像素复刻或知道闭源录制实现。
+- [Mediabunny 背压与数据源](https://mediabunny.dev/guide/media-sources)：必须等待 add promise，及早关闭数据源。
+- [OBS MP4 可靠性](https://obsproject.com/kb/hybrid-mp4)：借鉴分片文件可恢复设计，本期不实现 OBS soft-remux。
+- [Electron desktopCapturer](https://www.electronjs.org/docs/latest/api/desktop-capturer)：平台权限和系统音限制。
+- [Cap 内存泄漏修复](https://github.com/CapSoftware/Cap/pull/2064)：避免录制期间反复枚举窗口/重型权限检查。
+
+## 实施顺序与验收
+
+1. 公共类型、参数验证、单独 record 入口、统一互斥和选区菜单。
+2. 录制会话、权限和源隔离、流式文件、MP4/GIF 编码、准备/录制/预览 UI。
+3. demo 独立按钮、时长配置、截图转录制路径；使用文档及依赖许可说明。
+4. test/ 下增加参数边界、坐标、暂停时长、分块写盘及故障测试；lint/typecheck/build/原有回归。
+5. Windows 真实 Electron 测试两种入口、两种格式、自动停止、暂停、输出解码与资源释放；长时测试单独记录时长和内存。当前机器不能代替 macOS 真机验收，不把源码兼容写成实测通过。
+
+## 实施状态
+
+已完成两个入口、跨屏同步的可横向拖动菜单、录制准备/倒计时/暂停/停止/预览/保存、流式 MP4 和 GIF、独立 session 权限与文件隔离、demo 和文档。显式 frozen 与旧自定义覆盖层保留旧行为。准备 UI 采用用户提供的 Lark 参考图：选区中央的浅色圆角面板、顶部开始按钮、格式单选、静音斜杠／正常声音图标；不显示准备标题、switch 和时长限制。开始录制后，计时／时长上限与暂停、停止出现在选区外右下角的紧凑操作栏，边缘空间不足时安全避让。录制准备阶段保留红色选区，开始后保留选区外侧鼠标穿透的灰色遮罩与红色边框；不在屏幕边缘内侧补线，避免把边框录入文件。
+
+### Windows 已执行验证（2026-10-31）
+
+- lint、TypeScript、构建、254 项 Vitest 与 25 项 Node 测试通过；真实 tgz 安装后的 ESM/CommonJS 消费验证通过，录制 assets、preload 和第三方许可均包含在包中。
+
+- Electron 43.3.0、Windows 双显示器（150% 与 100% 缩放）。两种入口都完成真实画面采集、编码、保存和临时文件清理。
+- 120 秒系统音 MP4：H.264 900×480、30fps、AAC，文件 6,268,114 字节；FFprobe 视频时长 119.867 秒、音轨 119.936 秒。此项验证有音轨和时间戳，不等于完整音画同步感知测试。
+- GIF 自动停止完整 60 秒回归：558 帧，文件 23,076,574 字节，FFprobe 时长 59.98 秒；帧延迟按累计时间取整并限制到 6000 个百分之一秒。没有保留全部原始帧。
+- 暂停约 1.4 秒期间计时保持不变；MP4 到达配置值自动停止。
+- 强制录制 renderer 崩溃：返回 `recoveryPath`，已落盘的 3 秒 H.264 MP4 片段经 FFprobe 解码信息检查可读；全局停止快捷键和忙碌锁释放。
+- 非录制 renderer 使用同一 preload 请求录制 IPC 被拒绝；宿主 defaultSession 媒体 handler 未被覆盖。
+- 浅色准备面板的中英文实际截图与溢出检查通过；系统音/麦克风独立切换、GIF 禁音和切回 MP4 恢复选择通过。录制中的外侧红线可见且不抢焦点，renderer 崩溃后边框销毁；MP4/GIF 保存、暂停、自动停止回归通过，MP4 边缘无红色线条或黑色排除块。
+- 顶部菜单在两屏同步切换、仅横向拖动、拖菜单不框选、截图选区确定后菜单隐藏，真实输入测试通过。
+- 原有双屏截图回归通过：两屏容器嗅探、选后采集、覆盖层排除和 PNG 导出。
+- 120 秒测试采集了 121 组全应用进程 working set；头/尾 10 秒平均约 1546/1564 MiB。此值包含测试窗口、选择覆盖层、GPU 等进程且可能重复计算共享内存，不是库的增量占用，不可外推一小时稳定性。
+
+### 发布前仍须完成
+
+- Windows 完整 60 分钟持续录制及 1080p 动态内容性能曲线；目前最长实录 120 秒。
+- macOS Intel/Apple Silicon 真机上的系统音、麦克风、权限拒绝/撤销、打包签名、全屏控制栏避让及长录制。
+- Windows 麦克风/混音、音画同步感知、多屏拔插/休眠、磁盘写满与慢盘故障实测。写入顺序、大小上限、重放、并发及清理已有自动测试。
+- fragmented MP4 在宿主最终播放器/上传链路上的兼容性。本分支未发布 npm，也未修改 Ping。
+
+### 设备与交互补充（2026-10-31）
+
+- 准备页去掉关闭图标，Esc 取消；增加麦克风/摄像头 SVG 设备选择箭头，默认关闭摄像头。设备 ID 经主进程验证后用于精确采集。
+- 摄像头小窗在选区内拖动并进入输出；Windows 非整数 DPI 下通过关闭 thick frame、固定最小/最大尺寸、移动时携带完整 bounds，避免按下或拖动时尺寸增长。
+- 新增主进程 `prepareRecordingPermissions()` 接入入口，demo 调用；采集与编码器初始化移至准备阶段。点击开始隐藏准备页，独立灰色圆形倒计时完成后启动编码；记录时不再重切遮罩。
+- 顶部菜单与底部录制栏共用白底、8px 圆角、2px 内边距及 SVG 拖动手柄样式；选中模式使用实心蓝底白字，暂停后突出继续按钮。结束后的预览改为系统原生标题栏窗口。
+- Windows 真实麦克风阵列及 Integrated Camera 可枚举、选择并采集；真实系统回环录制中检测到 440Hz 测试信号。模拟设备输出检测到 660Hz 麦克风成分，摄像头拖动前后的位置在输出 MP4 中符合预期，宽高保持不变。FFmpeg 仅用来独立解码/测量测试文件，不是运行依赖。
+- macOS 的设备授权、摄像头小窗和系统音仍需要真机验证；上述 Windows 证据不可替代 macOS 验收。
+
+### 录制交互修正（2026-10-31）
+
+- 顶部手柄使用 grab/grabbing 光标，模式按钮最小宽度 80px。
+- 准备阶段显式显示“准备中…”并保持按钮颜色，流与编码器就绪后再允许开始。
+- 录制与暂停期间保持选区外灰色遮罩，留出 1 DIP 空隙以保护录制边缘像素；退出统一销毁。
+- Windows 操作栏允许拖入选区并提升层级，保留窗口捕获排除；macOS 仍限制在选区外，避免 ScreenCaptureKit 捕获操作栏。
+
+- 摄像头小窗改为正方形、12px 透明圆角、居中裁切，继续固定尺寸拖动。
+
+### 摄像头呈现设置
+
+- 小窗内部底部的悬停设置栏支持长方形（16:9）、正方形、圆形；小／中／大标称宽度 128／160／224 DIP，选区不足时同比缩小并保持靠边位置。
+- 摄像头视频使用独立透明窗口及外层 clip-path 裁切；设置使用与摄像头重合的透明受保护窗口，限制 IPC 到呈现设置、悬停和拖动；复用截图工具栏的 tooltip 与水平避让。两端均允许录制中悬停操作；macOS 在原生采集过滤器中排除设置窗口，不再禁用录制中的设置功能。
+- 录制红点与时间居中对齐，使用 1.8 秒呼吸动画；暂停与减少动态效果设置下停止动画。
+
+### 悬停与 macOS 捕获排除修正
+
+- 根因：设置窗口覆盖摄像头后，摄像头 renderer 会收到 pointerleave；若直接隐藏设置窗，就会重新触发摄像头 pointerenter，形成闪烁循环。改为系统鼠标坐标判断联合区域，已显示时不重复 show/moveTop。
+- 参考 [Cap 实际源码](https://github.com/CapSoftware/Cap/blob/main/apps/desktop/src-tauri/src/window_exclusion.rs)：独立控制窗按原生窗口 ID 排除，摄像头窗口保留在采集源内。不是推断 Lark 的私有实现。
+- 新增 `macos-recording.swift` 与有界压缩包桥。准备阶段验证权限、屏幕和编码器，开始时先解析全部排除 ID，再创建已过滤的 SCStream。设置窗从未悬停过时短暂以近透明状态排序，供系统枚举；编码前完成该过滤。未找到窗口、子进程退出或协议超限时明确失败。
+- 原生端最多三个在途编码帧、一个最新 CVPixelBuffer；ACK 在 MP4 封装或 GIF 解码消费后发送。停止先冲刷编码器，再排空队列；取消和失败回收 helper。GIF 使用低延迟 H.264 解码，设置窗和 tooltip 与 MP4 共用过滤源。
+- 当前在 Windows 完成 TypeScript/协议验证；macOS 新 helper 的编译、签名与真实成片排除验收仍待 Mac 环境，不能宣称已通过。发布门禁会拒绝缺失新增 universal helper 的包。
+- 本次 lint、typecheck、构建、263 项 Vitest 和 25 项 Node 测试通过。新增 `test/demo/native-recording-engine-smoke.cjs` 在 Electron 中生成 H.264 AVCC 包，经过正式原生视频消费路径输出 MP4/GIF，再独立解码核对像素，两种格式均通过；这项不替代 ScreenCaptureKit 真机测试。
+- 连续六次模拟原生窗口交接的 enter/leave 回归通过：鼠标仍在联合区域时没有 hide，实际移出后隐藏。2026-10-31 的桌面成片复验曾被锁屏阻挡；以下解锁后的验证已补齐 Windows 结果。
+
+### Windows 悬停与成片复验（2026-11-02）
+
+- 解锁后分别以 `zh-CN`、`en` 运行 `test/demo/recording-media-smoke.cjs`，两次均返回 `MEDIA_SMOKE_OK`。使用 Chromium 合成摄像头／麦克风和真实桌面采集、MP4 编码；FFmpeg 仅用于独立解码验证。
+- 两种语言均通过连续六次窗口交接无隐藏、移出后隐藏、三种形状和三档大小、拖动尺寸保持、tooltip 文案及无原生 title 检查。
+- 录制中显示设置栏及 tooltip，确认 tooltip 实际可见后采样导出视频：控件覆盖位置仍为摄像头测试色，未录入设置栏或 tooltip；拖动前后位置及透明圆角通过成片像素断言。模拟麦克风信号也通过；本轮不作为真实系统回环音频验收。
+- 本机测试产物：中文 `%TEMP%/snapora-media-UXjRMz`，英文 `%TEMP%/snapora-media-OFyQlY`，包含 `result.mp4` 和 `camera-hover-tooltip.png` 等截图。
+- 此次只补齐 Windows 实录证据；macOS helper 编译、签名及真实采集排除验收仍待 Mac 环境。
+
+### Demo 重启与 macOS 交付状态检查（2026-11-02）
+
+- `pnpm demo` 的 `EPERM unlink dist/native/snapora-windows-snap.exe` 已定位为旧 Demo 及其 keepAlive helper 占用，不是 Ping 进程占用。退出旧实例后重新构建成功。
+- Demo 新增按仓库路径隔离的本地重启通道；构建前请求空闲实例正常退出，等待进程结束后再执行 clean。任务或预览未完成时拒绝重启并保留现场。没有按进程名批量结束 Electron/helper，也没有更改 npm 库或 Ping 的生命周期。
+- 新增真实本地通信测试：首次启动、跨仓库隔离、等待进程退出、忙碌拒绝；结合既有 Demo 测试共 13 项定向测试和 lint 通过。实际 `pnpm demo` 验证了忙碌保护，以及用户完成任务后旧实例退出 → clean → 构建 → 新实例启动的完整路径。
+- 再次执行 `verify:native:mac`：原截图 helper 存在，新增 `dist/native/snapora-macos-recording` 缺失，发布产物检查按预期失败。macOS 仍未交付完成；需在 Mac 上构建 universal helper、验证签名及实际录制中控件排除，不能将 Windows 测试计作 macOS 通过。

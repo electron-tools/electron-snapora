@@ -224,7 +224,9 @@ Si la superposición es visible pero las teclas no responden, compruebe `app.isA
 
 ## Selección en varias pantallas, ajuste a contenedores y permisos del host
 
-Estas funciones pertenecen a la API pública del paquete. `demo/` es una aplicación de prueba del repositorio y no se publica en npm. La integración predeterminada conserva la captura congelada de una pantalla; instalar el paquete no registra automáticamente un proveedor de ajuste ni una interfaz de permisos.
+Estas funciones pertenecen a la API pública del paquete. `demo/` es una aplicación de prueba del repositorio y no se publica en npm. En la rama de desarrollo, las ventanas integradas usan selección en vivo por defecto en sistemas compatibles; `frozen` explícito y las ventanas personalizadas anteriores conservan su comportamiento. Los proveedores y la interfaz de permisos no se registran automáticamente.
+
+Grabación todavía no publicada: `record()`, menú Captura/Grabación con arrastre horizontal, MP4 (3600 segundos por defecto, configurable) y GIF (60 segundos). No requiere FFmpeg externo. Se realizaron pruebas reales en Windows; la validación en macOS sigue pendiente. Consulta la [guía de grabación](docs/recording.md).
 
 `interactionMode: 'live'` permite mover el puntero entre pantallas, ajustar el área al pasar sobre una ventana, seleccionar con un clic y arrastrar libremente. El arrastre queda limitado a la pantalla donde comienza. La imagen se obtiene después de confirmar el área y se abre el editor existente. `display: 'all'` requiere live y no une varias pantallas en una imagen. El modo anterior usa `interactionMode: 'frozen', display: 'cursor'`.
 

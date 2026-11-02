@@ -491,7 +491,11 @@ thrown by the application's logger are isolated and never change the screenshot 
 
 ## Live selection, container snapping, and host permissions
 
-These are package APIs, not demo-only features. `demo/` is a source-repository test application and is not shipped in npm. The default integration remains frozen single-display capture; installing the package does not automatically enable a snap provider or permission UI.
+These are package APIs, not demo-only features. `demo/` is a source-repository test application and is not shipped in npm. The development branch now defaults built-in overlays to live multi-display preparation on supported systems. Explicit `frozen` mode and older custom overlays retain the previous flow. Installing the package does not automatically enable a snap provider or permission UI.
+
+### Recording (development branch, not yet published)
+
+`window.electronSnapora.record()` or `manager.record()` opens recording preparation directly. `capture()` displays a horizontally draggable Screenshot / Record menu before selection. MP4 defaults to 3600 seconds (`recording.maxMp4DurationSeconds`); GIF is capped at 60 seconds. Outputs use `status: 'recorded'` with `filePath`, not an in-memory video buffer. No external FFmpeg is required. Windows has real recording coverage; macOS hardware acceptance is still pending. See the [recording guide](docs/recording.md) and [third-party notices](THIRD_PARTY_NOTICES.md).
 
 `interactionMode: 'live'` supports moving the pointer between displays, hovering to snap, clicking to select, and dragging a free rectangle. A drag stays on its starting display; capture starts after selection, then the existing annotation editor opens. `display: 'all'` requires live mode and does not produce a stitched multi-display image. Use `interactionMode: 'frozen', display: 'cursor'` for the earlier mode.
 
@@ -636,6 +640,8 @@ For **electron-builder 26** (the repository's version), unpack the helper:
 Windows ships two precompiled executables: `dist/native/snapora-windows-snap.exe` (UI Automation) and `dist/native/snapora-windows-capture.exe` (pixel capture). Electron launches them directly; there is no runtime PowerShell, C# compilation, download, or temporary executable. Both require the Windows .NET Framework runtime, not a compiler or SDK. They are AnyCPU managed executables, not self-contained .NET bundles. Keep both outside ASAR using the configuration above; HTML/CSS/JS may remain inside.
 
 On Windows, `pnpm run build` (and therefore `pnpm demo`) compiles the helpers before bundling. `pnpm run build:native:windows` builds them separately; `pnpm run verify:native:windows` verifies the bundled binaries and source hashes. The npm consumer needs no build tools. Public APIs, warmup, worker reuse, cancellation, three snapping levels, and screenshot editing are unchanged.
+
+Before building, `pnpm demo` asks this checkout's idle demo to quit through a local control channel and waits for it to release native helper files. This prevents Windows `EPERM` errors when cleaning running executables. Active capture, recording, or preview work blocks the restart until completed or cancelled. This development-only mechanism never scans or terminates host applications. Close the demo yourself before running `pnpm run build` directly, or when upgrading from an older demo without the restart channel.
 
 For a cross-platform release built on macOS/Linux, first build on Windows at the same source revision, then copy `snapora-windows-snap.exe`, `snapora-windows-capture.exe`, and `windows-helpers.json` together into `src/electron/native` on the release machine. CI publishes these as `windows-native-helpers`. `release:check` requires both Windows helpers and the universal Mac helper and rejects missing, corrupt, or stale Windows artifacts. Apply Windows executable signing during host packaging to the unpacked helpers as appropriate.
 

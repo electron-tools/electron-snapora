@@ -58,6 +58,7 @@ export interface OverlayWindowOptions {
 }
 
 export interface ScreenshotOverlayWindow {
+  sendMode?(jobId: string, mode: 'screenshot' | 'record'): void;
   readonly webContentsId: number;
   readonly rendererReady?: boolean;
   load(): Promise<void>;
@@ -224,6 +225,10 @@ export class OverlayWindow implements ScreenshotOverlayWindow {
 
   sendSnapRegions(payload: ScreenshotSnapRegionsPayload): void {
     this.#window.webContents.send(OVERLAY_CHANNELS.snapRegions, payload);
+  }
+
+  sendMode(jobId: string, mode: 'screenshot' | 'record'): void {
+    this.#window.webContents.send(OVERLAY_CHANNELS.mode, { jobId, mode });
   }
 
   sendInitialize(payload: ScreenshotInitializePayload): void {

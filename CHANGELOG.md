@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Added
+
+- Microphone/camera device pickers, a fixed-size draggable camera window captured at its desktop position, and a host recording-permission preflight API.
+
+- Standalone `record()` and a horizontally draggable Screenshot / Record preparation menu shared across live selection displays.
+- MP4/H.264/AAC recording (default 3600 seconds, configurable) and GIF recording (60 seconds), pause/resume, preview and file save without external FFmpeg.
+- Isolated recording session, bounded file writes, crash recovery paths, permission handling, and demo recording controls.
+
+### Changed
+
+- Prepare capture before Start; use a separate circular countdown, a compact draggable recording bar and a native-framed preview window.
+
+- Recording preparation uses a light floating panel, format radios and independent audio toggles; coral recording outlines are distinct from screenshot selection and remain outside recorded pixels.
+- Built-in overlays now default to live multi-display preparation on supported Windows/macOS systems. Explicit frozen mode and legacy custom overlays remain compatible.
+- `ScreenshotResult` includes `status: 'recorded'`; hosts with exhaustive result handling must handle the new variant.
+- Bundle Mediabunny (MPL-2.0) and gifenc (MIT), with third-party notices. macOS runtime acceptance and a full-hour soak remain release gates.
+
 ## [1.0.27] - 2026-10-30
 
 ### Documentation

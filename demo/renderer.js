@@ -9,6 +9,26 @@ if (
 }
 
 const screenshotApi = window.electronSnapora;
+const recordButton = document.querySelector('.record-button');
+const recordingLimit = document.getElementById('recording-limit');
+recordButton.addEventListener('click', async () => {
+  if (busy) return;
+  busy = true;
+  updateCaptureControls();
+  try {
+    const result = await screenshotApi.record({
+      display: 'all',
+      locale: 'zh-CN',
+      recording: { maxMp4DurationSeconds: Number(recordingLimit.value) },
+    });
+    resultOutput.textContent = JSON.stringify(result, null, 2);
+  } catch (error) {
+    resultOutput.textContent = String(error);
+  } finally {
+    busy = false;
+    updateCaptureControls();
+  }
+});
 const snapSelect = document.getElementById('snap-granularity');
 const snapDescription = document.getElementById('snap-description');
 const snapApi = window.demoSnapApi;
@@ -22,6 +42,8 @@ let busy = false;
 
 // Keep capability checks independent, and never unlock controls during a pending action.
 function updateCaptureControls() {
+  recordButton.disabled = busy || !screenshotApi || !interactionReady;
+  recordingLimit.disabled = busy;
   captureButton.disabled = busy || !screenshotApi || !interactionReady;
   if (interactionSelect) interactionSelect.disabled = busy || !interactionSupported;
   if (snapSelect) snapSelect.disabled = busy || !snapSupported;
@@ -109,6 +131,8 @@ if (!screenshotApi) {
       if (window.demoInteractionApi)
         interactionMode = (await window.demoInteractionApi.get()).mode;
       const result = await screenshotApi.capture({
+        locale: 'zh-CN',
+        recording: { maxMp4DurationSeconds: Number(recordingLimit.value) },
         display: interactionMode === 'live' ? 'all' : 'cursor',
         interactionMode,
         showCopyFeedback: true,

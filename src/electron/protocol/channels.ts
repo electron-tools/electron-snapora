@@ -2,6 +2,7 @@ export const DEFAULT_HOST_CAPTURE_CHANNEL = 'electron-snapora:host:capture';
 export const DEFAULT_HOST_CANCEL_CHANNEL = 'electron-snapora:host:cancel';
 
 export const OVERLAY_CHANNELS = {
+  mode: 'electron-snapora:overlay:mode',
   ready: 'electron-snapora:overlay:ready',
   prepared: 'electron-snapora:overlay:prepared',
   initialize: 'electron-snapora:overlay:initialize',

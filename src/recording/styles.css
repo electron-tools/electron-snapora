@@ -1,0 +1,413 @@
+:root {
+  color-scheme: light;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  background: transparent;
+  color: #202632;
+  --blue: #2459f5;
+  --muted: #77808f;
+  --line: #e7eaf0;
+  --red: #f06454;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  padding: 8px;
+  user-select: none;
+}
+[hidden] {
+  display: none !important;
+}
+main {
+  position: relative;
+  background: #fff;
+  border: 1px solid #dce0e7;
+  border-radius: 11px;
+  overflow: hidden;
+  box-shadow: 0 3px 7px #19233414;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 0 18px;
+  height: 38px;
+}
+header strong {
+  font-size: 12px;
+  font-weight: 500;
+  color: #626c7b;
+}
+.region-icon {
+  width: 13px;
+  height: 10px;
+  border: 1.5px solid var(--red);
+  border-radius: 2px;
+}
+#dimensions {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+button {
+  font: inherit;
+  border: 0;
+  border-radius: 8px;
+  background: #edf0f5;
+  color: inherit;
+  cursor: pointer;
+  transition: background 120ms;
+}
+button:hover {
+  background: #e2e7f0;
+}
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 3px;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.icon-button {
+  width: 28px;
+  height: 28px;
+  font-size: 22px;
+  line-height: 24px;
+  background: transparent;
+  color: var(--muted);
+}
+#cancel {
+  position: absolute;
+  top: 14px;
+  right: 10px;
+}
+.start-area {
+  padding: 10px 12px;
+}
+.primary {
+  background: var(--blue);
+  color: white;
+  min-height: 44px;
+  font-size: 16px;
+  font-weight: 500;
+}
+.primary:hover {
+  background: #1849df;
+}
+#start,
+#save {
+  width: 100%;
+}
+#start {
+  min-height: 36px;
+  font-size: 14px;
+}
+#start[aria-busy='true'] {
+  opacity: 1;
+  background: var(--blue);
+  color: white;
+  cursor: progress;
+}
+.settings {
+  background: #f6f7f9;
+  border-top: 1px solid #f0f1f4;
+  padding: 8px 12px;
+}
+fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 24px;
+}
+legend {
+  float: left;
+  padding: 0;
+  margin-right: 0;
+  color: #626c7b;
+  font-size: 12px;
+}
+fieldset label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+  cursor: pointer;
+}
+input[type='radio'] {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: var(--blue);
+  cursor: pointer;
+}
+#limit {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.audio-controls {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.audio-toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px;
+  background: transparent;
+  color: var(--muted);
+  text-align: center;
+}
+.audio-icon {
+  display: flex;
+  color: #ef4444;
+}
+.audio-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.muted-slash {
+  stroke: currentColor;
+  stroke-width: 2;
+}
+.audio-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+}
+.audio-state {
+  display: none;
+}
+/* Muted devices use the same slash/normal icon convention as meeting controls. */
+.audio-toggle[aria-pressed='true'] .audio-icon,
+.audio-toggle[aria-pressed='true'] .audio-copy {
+  color: #4b5563;
+}
+.audio-toggle[aria-pressed='true'] .muted-slash {
+  display: none;
+}
+#status {
+  margin: 0;
+  padding: 4px 12px 6px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 15px;
+  overflow-wrap: anywhere;
+}
+#active {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px;
+}
+.timer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  height: 30px;
+  line-height: 24px;
+}
+.record-dot {
+  flex: none;
+  align-self: center;
+  /* Optical centering against digit glyphs, which sit below the line-box center. */
+  transform: translateY(1px);
+  width: 9px;
+  height: 9px;
+  background: var(--red);
+  border-radius: 50%;
+  animation: recording-breathe 1.8s ease-in-out infinite;
+}
+#timer {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  line-height: 24px;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  font-variant-numeric: tabular-nums;
+}
+#record-state {
+  color: var(--muted);
+  font-size: 12px;
+}
+body[data-paused='true'] .record-dot {
+  background: #dca42e;
+  animation: none;
+}
+@keyframes recording-breathe {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 #f0645430;
+  }
+  50% {
+    opacity: 0.55;
+    box-shadow: 0 0 0 4px #f0645400;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .record-dot {
+    animation: none;
+  }
+}
+.actions {
+  display: flex;
+  gap: 2px;
+}
+.actions button {
+  flex: 1;
+  min-height: 30px;
+  padding: 0 12px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.danger {
+  background: #fff0ed;
+  color: #cb4034;
+}
+.danger:hover {
+  background: #ffded8;
+}
+#preview {
+  padding: 18px;
+}
+#preview video,
+#preview img {
+  display: block;
+  width: 100%;
+  height: min(320px, calc(100vh - 180px));
+  object-fit: contain;
+  background: #15171c;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+@media (prefers-reduced-motion: reduce) {
+  button {
+    transition: none;
+  }
+}
+
+.sr-only,
+body[data-view='active'] #status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+#status:empty {
+  display: none;
+}
+
+.audio-controls {
+  gap: 5px;
+}
+.audio-toggle {
+  min-width: 0;
+  gap: 4px;
+  padding: 6px 3px;
+}
+.audio-copy {
+  min-width: 0;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.audio-copy > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.audio-icon {
+  flex: none;
+}
+.device-control {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+.device-arrow {
+  background: transparent;
+  color: #697384;
+  padding: 0 3px;
+  min-width: 18px;
+  font-size: 15px;
+}
+#device-panel {
+  margin-top: 8px;
+  border-top: 1px solid #e2e6ed;
+  padding-top: 8px;
+}
+.device-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+#device-close {
+  background: transparent;
+  font-size: 18px;
+}
+#device-list {
+  width: 100%;
+  border: 1px solid #e2e6ed;
+  border-radius: 5px;
+  background: white;
+  font: 12px system-ui;
+  padding: 4px;
+}
+#device-list option {
+  padding: 5px;
+}
+
+/* Device settings use the host meeting controls' rounded chevron stroke, not a font glyph. */
+.device-control,
+.audio-toggle,
+.device-arrow {
+  height: 32px;
+  align-items: center;
+}
+.device-arrow {
+  display: flex;
+  justify-content: center;
+  flex: 0 0 18px;
+  padding: 0;
+}
+.device-arrow svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.audio-copy {
+  line-height: 20px;
+}

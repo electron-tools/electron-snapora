@@ -95,6 +95,8 @@ export type {
 } from './electron/protocol/messages.js';
 export type {
   ScreenshotBounds,
+  RecordingOptions,
+  RecordingFileResult,
   ScreenshotSnapRegion,
   ScreenshotErrorCode,
   ScreenshotImageResult,
@@ -107,3 +109,4 @@ export type {
   ScreenshotTheme,
   ScreenshotTool,
 } from './types.js';
+export { prepareRecordingPermissions } from './electron/main/recording-permissions.js';
