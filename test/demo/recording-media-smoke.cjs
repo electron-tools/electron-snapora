@@ -4,7 +4,19 @@ const { mkdtempSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { tmpdir } = require('node:os');
 const { execFileSync } = require('node:child_process');
-const { app, BrowserWindow, screen, ipcMain, dialog } = require('electron');
+const {
+  app,
+  BrowserWindow,
+  screen,
+  ipcMain,
+  dialog,
+  nativeTheme,
+} = require('electron');
+let deviceMenu;
+const findDeviceMenu = () =>
+  BrowserWindow.getAllWindows().find(
+    (w) => w.webContents.getURL().includes('recording-devices.html') && w.isVisible()
+  );
 const { ScreenshotManager, OVERLAY_CHANNELS } = require('../../dist/main/index.cjs');
 const dir = mkdtempSync(join(tmpdir(), 'snapora-media-'));
 const real = process.env.SNAPORA_MEDIA_REAL === '1';
@@ -114,13 +126,166 @@ app.whenReady().then(async () => {
       )
     );
     assert.equal(await js(recorder, '!document.getElementById("cancel")'), true);
-    await js(recorder, 'document.getElementById("microphone-menu").click()');
-    await wait(() =>
-      js(recorder, '!document.getElementById("microphone-menu").disabled')
-    );
-    const microphones = await js(
+    nativeTheme.themeSource = 'dark';
+    const preparationBounds = recorder.getBounds();
+    const preparationHeight = await js(
       recorder,
-      'Array.from(document.getElementById("device-list").options).map(o=>({id:o.value,label:o.text}))'
+      'document.querySelector("main").getBoundingClientRect().height'
+    );
+    if (!real) {
+      // Exercise recoverable failures with long native messages, not only the happy path.
+      for (const name of ['NotAllowedError', 'NotFoundError', 'Error']) {
+        await js(
+          recorder,
+          `(() => {
+          const original = navigator.mediaDevices.enumerateDevices;
+          navigator.mediaDevices.enumerateDevices = async () => {
+            navigator.mediaDevices.enumerateDevices = original;
+            throw new DOMException('diagnostic-detail-'.repeat(100), ${JSON.stringify(name)});
+          };
+          document.getElementById('microphone-menu').click();
+        })()`
+        );
+        await wait(() =>
+          js(recorder, '!document.getElementById("prepare-error").hidden')
+        );
+        const errorState = await js(
+          recorder,
+          `({
+          message: document.getElementById('prepare-error-text').textContent,
+          status: document.getElementById('status').textContent,
+          height: document.querySelector('main').getBoundingClientRect().height,
+          fits: document.documentElement.scrollHeight <= innerHeight && document.documentElement.scrollWidth <= innerWidth,
+          textFits: document.getElementById('prepare-error-text').getBoundingClientRect().height <= 28
+        })`
+        );
+        assert.ok(!errorState.message.includes('diagnostic-detail'));
+        assert.equal(
+          /denied|被拒绝/.test(errorState.message),
+          name === 'NotAllowedError'
+        );
+        assert.equal(errorState.status, '');
+        assert.equal(errorState.height, preparationHeight);
+        assert.ok(errorState.fits && errorState.textFits);
+        assert.deepEqual(recorder.getBounds(), preparationBounds);
+        writeFileSync(
+          join(dir, `device-error-${name}.png`),
+          (await recorder.webContents.capturePage()).toPNG()
+        );
+        // Retrying device enumeration clears its previous error without resizing.
+        await js(recorder, 'document.getElementById("microphone-menu").click()');
+        await wait(findDeviceMenu);
+        assert.equal(
+          await js(recorder, 'document.getElementById("prepare-error").hidden'),
+          true
+        );
+        await js(recorder, 'window.snaporaRecording.request("device-menu-close")');
+        await wait(() =>
+          js(
+            recorder,
+            'document.getElementById("microphone-menu").getAttribute("aria-expanded")==="false"'
+          )
+        );
+      }
+      if (process.platform === 'win32') {
+        await js(
+          recorder,
+          `(() => {
+          const original = navigator.mediaDevices.getDisplayMedia;
+          navigator.mediaDevices.getDisplayMedia = async () => {
+            navigator.mediaDevices.getDisplayMedia = original;
+            throw new Error('Screen capture initialization failed');
+          };
+          document.querySelector('input[value="gif"]').click();
+        })()`
+        );
+        await wait(() =>
+          js(recorder, '!document.getElementById("prepare-error").hidden')
+        );
+        assert.equal(
+          await js(
+            recorder,
+            '/denied|被拒绝/.test(document.getElementById("prepare-error-text").textContent)'
+          ),
+          false
+        );
+        await js(recorder, 'document.getElementById("prepare-error-action").click()');
+        await wait(() =>
+          js(
+            recorder,
+            'document.getElementById("prepare-error").hidden && document.getElementById("start").getAttribute("aria-busy")==="false"'
+          )
+        );
+        await js(recorder, 'document.querySelector(\'input[value="mp4"]\').click()');
+        await wait(() =>
+          js(
+            recorder,
+            'document.getElementById("prepare-error").hidden && document.getElementById("start").getAttribute("aria-busy")==="false"'
+          )
+        );
+        assert.deepEqual(recorder.getBounds(), preparationBounds);
+      }
+    }
+    let preparationResizes = 0;
+    const resized = () => preparationResizes++;
+    recorder.on('resize', resized);
+    const initialStartText = await js(
+      recorder,
+      'document.getElementById("start").textContent'
+    );
+    for (let i = 0; i < 3; i++) {
+      deviceMenu = undefined;
+      await js(recorder, 'document.getElementById("microphone-menu").click()');
+      deviceMenu = await wait(findDeviceMenu);
+      await sleep(120);
+      assert.equal(
+        await js(
+          deviceMenu,
+          'getComputedStyle(document.querySelector("main")).backgroundColor'
+        ),
+        'rgb(255, 255, 255)'
+      );
+      assert.equal(
+        nativeTheme.themeSource,
+        'dark',
+        'menu must not override the host theme'
+      );
+      if (i === 0)
+        writeFileSync(
+          join(dir, 'device-dropdown.png'),
+          (await deviceMenu.webContents.capturePage()).toPNG()
+        );
+      assert.deepEqual(
+        recorder.getBounds(),
+        preparationBounds,
+        'opening menu must not resize or recenter preparation'
+      );
+      assert.equal(
+        await js(
+          recorder,
+          'document.querySelector("main").getBoundingClientRect().height'
+        ),
+        preparationHeight
+      );
+      assert.equal(
+        await js(recorder, 'document.getElementById("start").textContent'),
+        initialStartText,
+        'menu opening must not restart preparation'
+      );
+      await js(recorder, 'window.snaporaRecording.request("device-menu-close")');
+      await wait(() =>
+        js(
+          recorder,
+          'document.getElementById("microphone-menu").getAttribute("aria-expanded")==="false"'
+        )
+      );
+    }
+    deviceMenu = undefined;
+    await js(recorder, 'document.getElementById("microphone-menu").click()');
+    deviceMenu = await wait(findDeviceMenu);
+    const microphones = await js(
+      deviceMenu,
+      '[...document.querySelectorAll("button")].map(b=>({id:b.dataset.deviceId,label:b.textContent}))'
     );
     console.log(
       'MICROPHONES',
@@ -134,16 +299,19 @@ app.whenReady().then(async () => {
       return;
     }
     assert.ok(microphones.length > 1, 'microphone picker must list a concrete device');
-    await js(
-      recorder,
-      `{ const list=document.getElementById('device-list'); list.value=${JSON.stringify(microphones[1].id)}; list.dispatchEvent(new Event('change')); }`
+    await js(deviceMenu, 'document.querySelectorAll("button")[1].click()');
+    await wait(() =>
+      js(
+        recorder,
+        'document.getElementById("microphone-menu").getAttribute("aria-expanded")==="false"'
+      )
     );
-    await wait(() => js(recorder, 'document.getElementById("device-panel").hidden'));
+    deviceMenu = undefined;
     await js(recorder, 'document.getElementById("camera-menu").click()');
-    await wait(() => js(recorder, '!document.getElementById("camera-menu").disabled'));
+    deviceMenu = await wait(findDeviceMenu);
     const cameras = await js(
-      recorder,
-      'Array.from(document.getElementById("device-list").options).map(o=>({id:o.value,label:o.text}))'
+      deviceMenu,
+      '[...document.querySelectorAll("button")].map(b=>({id:b.dataset.deviceId,label:b.textContent}))'
     );
     console.log(
       'CAMERAS',
@@ -157,11 +325,35 @@ app.whenReady().then(async () => {
       return;
     }
     assert.ok(cameras.length > 1, 'camera picker must list a concrete device');
-    await js(
-      recorder,
-      `{ const list=document.getElementById('device-list'); list.value=${JSON.stringify(cameras[1].id)}; list.dispatchEvent(new Event('change')); }`
+    await js(deviceMenu, 'document.querySelectorAll("button")[1].click()');
+    await wait(() =>
+      js(
+        recorder,
+        'document.getElementById("camera-menu").getAttribute("aria-expanded")==="false"'
+      )
     );
-    await wait(() => js(recorder, 'document.getElementById("device-panel").hidden'));
+    assert.deepEqual(recorder.getBounds(), preparationBounds);
+    assert.equal(preparationResizes, 0, 'device selection must not resize preparation');
+    deviceMenu = undefined;
+    await js(recorder, 'document.getElementById("microphone-menu").click()');
+    deviceMenu = await wait(findDeviceMenu);
+    assert.equal(
+      await js(
+        deviceMenu,
+        'document.querySelectorAll("button")[1].getAttribute("aria-checked")==="true"'
+      ),
+      true,
+      'chosen input must be marked when reopening'
+    );
+    await js(recorder, 'window.snaporaRecording.request("device-menu-close")');
+    await wait(() =>
+      js(
+        recorder,
+        'document.getElementById("microphone-menu").getAttribute("aria-expanded")==="false"'
+      )
+    );
+    assert.equal(preparationResizes, 0);
+    recorder.removeListener('resize', resized);
     await js(recorder, 'document.getElementById("camera").click()');
     await wait(() =>
       js(
@@ -270,7 +462,16 @@ app.whenReady().then(async () => {
       'window.snaporaRecording.request("camera-style", {shape:"square",size:"medium"})'
     );
     await js(camera, 'window.snaporaRecording.request("camera-hover",true)');
+    cameraControls.focus();
     const dragOrigin = camera.getBounds();
+    // Establish the pointer inside this window after native menu focus/capture was released.
+    cameraControls.webContents.sendInputEvent({
+      type: 'mouseMove',
+      x: 30,
+      y: 30,
+      globalX: dragOrigin.x + 30,
+      globalY: dragOrigin.y + 30,
+    });
     cameraControls.webContents.sendInputEvent({
       type: 'mouseDown',
       x: 30,
@@ -297,7 +498,15 @@ app.whenReady().then(async () => {
       globalX: dragOrigin.x + 14,
       globalY: dragOrigin.y + 18,
     });
-    await wait(() => camera.getBounds().x < dragOrigin.x);
+    await wait(() => camera.getBounds().x < dragOrigin.x).catch(async (error) => {
+      console.error('CAMERA_DRAG_DIAGNOSTIC', {
+        dragOrigin,
+        current: camera.getBounds(),
+        focused: BrowserWindow.getFocusedWindow()?.getTitle(),
+        dragging: await js(cameraControls, 'document.body.dataset.dragging'),
+      });
+      throw error;
+    });
     assert.equal(
       camera.getBounds().width,
       dragOrigin.width,

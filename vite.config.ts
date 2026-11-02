@@ -21,6 +21,9 @@ export default defineConfig({
         recordingPreview: fileURLToPath(
           new URL('./src/overlay/recording-preview.html', import.meta.url)
         ),
+        recordingDevices: fileURLToPath(
+          new URL('./src/overlay/recording-devices.html', import.meta.url)
+        ),
         camera: fileURLToPath(new URL('./src/overlay/camera.html', import.meta.url)),
         cameraControls: fileURLToPath(
           new URL('./src/overlay/camera-controls.html', import.meta.url)

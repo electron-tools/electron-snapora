@@ -33,9 +33,43 @@ let warming = false;
 let requestedRevision = 0;
 let preparedRevision = -1;
 let deviceKind: 'camera' | 'microphone' | undefined;
+let deviceMenuRevision = 0;
 let paused = false;
 let heartbeat: ReturnType<typeof setInterval> | undefined;
 let messages = recordingMessages();
+let errorSource: 'prepare' | 'camera' | 'devices' | undefined;
+/** Keep recoverable errors inside the existing start area; never append raw exceptions to the panel. */
+function clearPreparationError(source = errorSource) {
+  if (source !== errorSource) return;
+  errorSource = undefined;
+  el('prepare-error').hidden = true;
+}
+function preparationError(source: NonNullable<typeof errorSource>, error: unknown) {
+  console.error(`[Snapora recording: ${source}] ${String(error)}`, error);
+  if (phase !== 'prepare') return;
+  errorSource = source;
+  const detail = String(error);
+  el('prepare-error-text').textContent =
+    source === 'prepare'
+      ? messages.preparationError
+      : /NotAllowedError|Permission denied|permission.*denied/i.test(detail)
+        ? messages.devicePermissionDenied
+        : /NotFoundError|DevicesNotFoundError/.test(detail)
+          ? messages.deviceUnavailable
+          : /NotReadableError|TrackStartError/.test(detail)
+            ? messages.deviceInUse
+            : source === 'devices'
+              ? messages.deviceListError
+              : messages.deviceUnavailable;
+  el('prepare-error-action').textContent =
+    source === 'prepare' ? messages.retry : messages.dismiss;
+  el('prepare-error').hidden = false;
+}
+el('prepare-error-action').onclick = () => {
+  const retry = errorSource === 'prepare';
+  clearPreparationError();
+  if (retry) void warmEngine();
+};
 const status = (text: string) => {
   el('status').textContent = text;
 };
@@ -77,10 +111,14 @@ function updateFormat() {
     deviceBusy || silent || phase !== 'prepare';
   el('camera').setAttribute('aria-pressed', String(cameraEnabled));
   el<HTMLButtonElement>('start').disabled =
-    deviceBusy || warming || !engine || phase !== 'prepare';
+    deviceBusy || warming || phase !== 'prepare';
   const preparing = phase === 'prepare' && (warming || deviceBusy);
   el('start').setAttribute('aria-busy', String(preparing));
-  el('start').textContent = preparing ? messages.preparing : messages.start;
+  el('start').textContent = preparing
+    ? messages.preparing
+    : !engine && phase === 'prepare'
+      ? messages.retry
+      : messages.start;
   const limit =
     selectedFormat() === 'gif'
       ? MAX_GIF_SECONDS
@@ -108,6 +146,7 @@ async function warmEngine() {
   requestedRevision++;
   if (warming || phase !== 'prepare') return;
   warming = true;
+  clearPreparationError('prepare');
   updateFormat();
   try {
     while (phase === 'prepare' && preparedRevision !== requestedRevision) {
@@ -141,6 +180,8 @@ async function warmEngine() {
         ]);
       } catch (error) {
         next.dispose();
+        // A superseded device/format attempt must not block the latest settings.
+        if (revision !== requestedRevision) continue;
         throw error;
       } finally {
         clearTimeout(timeout!);
@@ -151,10 +192,10 @@ async function warmEngine() {
       }
       engine = next;
       preparedRevision = revision;
+      clearPreparationError('prepare');
     }
   } catch (error) {
-    status(`${messages.deviceError} ${String(error)}`);
-    await api.request('device-panel', true);
+    preparationError('prepare', error);
   } finally {
     warming = false;
     updateFormat();
@@ -165,6 +206,7 @@ async function warmEngine() {
 async function start() {
   if (phase !== 'prepare' || deviceBusy || warming || !engine) return;
   await closeDevices();
+  clearPreparationError();
   phase = 'arming';
   format.disabled = true;
   updateFormat();
@@ -234,7 +276,8 @@ async function pause() {
   await api.request('paused', paused);
 }
 el('start').onclick = () => {
-  void start();
+  if (!engine && phase === 'prepare') void warmEngine();
+  else void start();
 };
 el('stop').onclick = () => {
   void stop();
@@ -266,39 +309,36 @@ for (const button of audioButtons) {
 }
 /** Permission and enumeration are triggered only by a device-control gesture. */
 async function closeDevices() {
-  if (el('device-panel').hidden) return;
-  el('device-panel').hidden = true;
+  if (!deviceKind) return;
+  deviceMenuRevision++;
   deviceKind = undefined;
   for (const id of ['camera-menu', 'microphone-menu'])
     el(id).setAttribute('aria-expanded', 'false');
-  await api.request('device-panel', false);
+  await api.request('device-menu-close');
 }
 async function setCamera(enabled: boolean) {
   if (deviceBusy || phase !== 'prepare') return;
   deviceBusy = true;
+  clearPreparationError('camera');
   updateFormat();
   try {
     await api.request('camera', { camera: enabled, cameraDeviceId });
     cameraEnabled = enabled;
-    status('');
+    clearPreparationError('camera');
   } catch (error) {
     cameraEnabled = false;
-    status(`${messages.deviceError} ${String(error)}`);
-    await api.request('device-panel', true);
+    preparationError('camera', error);
   } finally {
     deviceBusy = false;
     updateFormat();
   }
 }
-async function populateDevices(
-  kind: 'camera' | 'microphone',
-  requestPermission: boolean
-) {
+async function availableDevices(kind: 'camera' | 'microphone') {
   let temporary: MediaStream | undefined;
   try {
     let devices = await navigator.mediaDevices.enumerateDevices();
     const mediaKind = kind === 'camera' ? 'videoinput' : 'audioinput';
-    if (requestPermission && !devices.some((d) => d.kind === mediaKind && d.label)) {
+    if (!devices.some((d) => d.kind === mediaKind && d.label)) {
       await api.request('device-permission', kind);
       temporary = await navigator.mediaDevices.getUserMedia(
         kind === 'camera'
@@ -308,22 +348,16 @@ async function populateDevices(
       devices = await navigator.mediaDevices.enumerateDevices();
     }
     if (deviceKind !== kind || phase !== 'prepare') return;
-    const list = el<HTMLSelectElement>('device-list');
     const inputs = devices.filter(
       (d) =>
         d.kind === mediaKind &&
         d.deviceId &&
         !['default', 'communications'].includes(d.deviceId)
     );
-    list.replaceChildren(
-      new Option(inputs.length ? messages.defaultDevice : messages.noDevices, '')
-    );
-    for (const [i, device] of inputs.entries())
-      list.add(
-        new Option(device.label || `${messages[kind]} ${i + 1}`, device.deviceId)
-      );
-    list.disabled = !inputs.length;
-    list.value = kind === 'camera' ? cameraDeviceId : microphoneDeviceId;
+    return inputs.map((device, i) => ({
+      id: device.deviceId,
+      label: device.label || `${messages[kind]} ${i + 1}`,
+    }));
   } finally {
     temporary?.getTracks().forEach((track) => track.stop());
   }
@@ -331,47 +365,55 @@ async function populateDevices(
 for (const kind of ['camera', 'microphone'] as const) {
   el(`${kind}-menu`).onclick = async () => {
     if (deviceBusy || phase !== 'prepare') return;
-    if (deviceKind === kind) {
+    if (deviceKind) {
       await closeDevices();
       return;
     }
-    deviceBusy = true;
-    updateFormat();
     deviceKind = kind;
-    el('device-title').textContent = `${messages.chooseDevice} · ${messages[kind]}`;
-    el('device-panel').hidden = false;
+    clearPreparationError('devices');
+    const revision = ++deviceMenuRevision;
     el(`${kind}-menu`).setAttribute('aria-expanded', 'true');
-    await api.request('device-panel', true);
     try {
-      await populateDevices(kind, true);
-      status('');
+      const devices = await availableDevices(kind);
+      if (!devices || revision !== deviceMenuRevision || phase !== 'prepare') return;
+      const anchor = el(`${kind}-menu`).getBoundingClientRect();
+      const selected = kind === 'camera' ? cameraDeviceId : microphoneDeviceId;
+      const id = await api.request('device-menu', {
+        kind,
+        devices,
+        selected,
+        x: anchor.left,
+        y: anchor.bottom + 4,
+      });
+      if (
+        typeof id !== 'string' ||
+        revision !== deviceMenuRevision ||
+        phase !== 'prepare' ||
+        id === selected
+      )
+        return;
+      if (kind === 'microphone') {
+        microphoneDeviceId = id;
+        void warmEngine();
+      } else {
+        cameraDeviceId = id;
+        if (cameraEnabled) await setCamera(true);
+      }
     } catch (error) {
-      status(`${messages.deviceError} ${String(error)}`);
+      if (revision === deviceMenuRevision) preparationError('devices', error);
     } finally {
-      deviceBusy = false;
-      updateFormat();
+      if (revision === deviceMenuRevision) {
+        deviceKind = undefined;
+        el(`${kind}-menu`).setAttribute('aria-expanded', 'false');
+      }
     }
   };
 }
-el('device-close').onclick = () => {
-  void closeDevices();
-};
 el('camera').onclick = () => {
   void setCamera(!cameraEnabled);
 };
-el<HTMLSelectElement>('device-list').onchange = async () => {
-  const id = el<HTMLSelectElement>('device-list').value;
-  if (deviceKind === 'microphone') {
-    microphoneDeviceId = id;
-    void warmEngine();
-  } else if (deviceKind === 'camera') {
-    cameraDeviceId = id;
-    if (cameraEnabled) await setCamera(true);
-  }
-  await closeDevices();
-};
 navigator.mediaDevices.addEventListener('devicechange', () => {
-  if (deviceKind) void populateDevices(deviceKind, false).catch(() => {});
+  if (deviceKind) void closeDevices();
 });
 api.onCommand((command) => {
   if (command === 'stop') void stop();
@@ -379,7 +421,7 @@ api.onCommand((command) => {
 });
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
-  if (!el('device-panel').hidden) {
+  if (deviceKind) {
     void closeDevices();
     return;
   }
@@ -406,8 +448,6 @@ void api
       'aria-label',
       `${messages.chooseDevice}: ${messages.camera}`
     );
-    el('device-close').setAttribute('aria-label', messages.cancel);
-    el('device-list').setAttribute('aria-label', messages.chooseDevice);
     cameraDeviceId = init.options.cameraDeviceId ?? '';
     microphoneDeviceId = init.options.microphoneDeviceId ?? '';
     el('dimensions').textContent =

@@ -89,6 +89,10 @@ Windows 使用系统窗口捕获排除。macOS 改用包内 ScreenCaptureKit 录
 
 系统声音录制电脑播放的声音（扬声器或耳机），不是音量/输出设备开关；Electron 当前系统回环 API 不提供输出设备选择参数。麦克风通过 `microphoneDeviceId` 选择输入。`camera: true` 和 `cameraDeviceId` 可默认启用指定摄像头；默认摄像头关闭。
 
+准备界面的麦克风、摄像头箭头直接弹出设备下拉菜单，包含系统默认、可用设备及当前选择标记；选择后收起，点击外部或 Esc 取消选择。菜单固定白底、深色文字、浅灰悬停和蓝色勾选，6px 圆角；由独立轻量弹出窗口承载，不修改宿主主题，系统深色模式下仍保持白色。准备面板不会新增内嵌列表，也不调整窗口高度或重新居中。展开、取消和重复选择同一设备不会重新初始化录制流；切换到其他设备时才按既有逻辑更新采集。设备热插拔会关闭旧菜单，下次展开重新枚举。
+
+准备失败时，在开始按钮区域显示可重试的简短提示；设备相关提示可关闭，重试对应操作会清除旧提示。提示不增加面板高度，也不会产生页面滚动条。设备缺失、访问被拒绝、设备启动失败和列表加载失败分别提示，底层错误仅保留在控制台，不直接铺在界面上。
+
 摄像头显示为选区内的固定尺寸小窗，只能在选区内拖动；画面直接进入屏幕采集，因此输出位置与小窗位置一致。停止、取消和失败均释放设备；录制中暂不切换设备。GIF 可录入摄像头画面，但没有声音。媒体设备 ID 属于会话，不应作为跨安装稳定标识。
 
 ## macOS 宿主能力
@@ -100,7 +104,7 @@ Windows 使用系统窗口捕获排除。macOS 改用包内 ScreenCaptureKit 录
 - 录制使用库自己的内存 session，不覆盖宿主 `defaultSession` 的媒体处理器。
 - 辅助功能权限只服务于 AX 容器嗅探，手动框选录制不依赖它。
 - 在 Mac 上运行 `pnpm run build:native:mac:universal`，构建两个 helper（原截图 helper 和新增 `snapora-macos-recording`），再运行 `pnpm run build`。发布检查要求两个二进制均包含 arm64/x86_64；当前 Windows 开发环境不能生成新 macOS 二进制。运行时不要求宿主安装 Swift 或 FFmpeg。
-- 两个 helper 均需 ASAR 解包，宿主发布时使用自己的 Developer ID 签名并完成公证；开发用 ad-hoc 签名不替代发布签名。屏幕授权需在最终签名宿主及 helper 身份下验证。打包还需包含 `dist/recording/preload.cjs`、`dist/overlay/recording.html`、`camera.html`、`camera-controls.html`、`recording-preview.html` 及整个 assets 目录。
+- 两个 helper 均需 ASAR 解包，宿主发布时使用自己的 Developer ID 签名并完成公证；开发用 ad-hoc 签名不替代发布签名。屏幕授权需在最终签名宿主及 helper 身份下验证。打包还需包含 `dist/recording/preload.cjs`、`dist/overlay/recording.html`、`recording-devices.html`、`camera.html`、`camera-controls.html`、`recording-preview.html` 及整个 assets 目录。
 - macOS 视频路径为 ScreenCaptureKit → VideoToolbox H.264 → 压缩包 IPC → MP4 封装；GIF 解码同一条已排除控件的画面，再量化输出。音频继续使用 Electron 采集及 AAC 编码。原生端最多三个未确认压缩包，消费慢时在编码前跳过采样，不丢弃已编码参考帧；静态桌面仅保留一帧最新画面。没有逐帧传输全屏原始图像，也不缓存整段视频。
 
 ## 验证

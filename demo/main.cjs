@@ -37,6 +37,14 @@ let unregisterScreenshotIpc;
 const hostWindows = new Set();
 let isMacScreenshotInProgress = false;
 
+// Keep recorder initialization failures visible in the demo terminal, including sandboxed renderers.
+app.on('web-contents-created', (_event, contents) => {
+  contents.on('console-message', (_consoleEvent, details) => {
+    if (details.message?.startsWith('[Snapora recording:'))
+      console.error(details.message);
+  });
+});
+
 async function triggerDemoScreenshot() {
   if (process.platform !== 'darwin') {
     return screenshotManager.capture({

@@ -41,6 +41,8 @@ import { createRecordingOutline } from './recording-outline.js';
 import { RecordingCamera } from './recording-camera.js';
 import { showRecordingCountdown } from './recording-countdown.js';
 import { MacRecordingSource } from './mac-recording-source.js';
+import { recordingMessages } from '../../i18n/recording.js';
+import { RecordingDeviceMenu } from './recording-device-menu.js';
 
 let recordingOwner = false;
 const STOP_SHORTCUT = 'CommandOrControl+Alt+Shift+R';
@@ -51,6 +53,7 @@ export class RecordingSession {
   #nativeVideo: MacRecordingSource | undefined;
   #nativeId = 0;
   #window: BrowserWindow | undefined;
+  #deviceMenu: RecordingDeviceMenu | undefined;
   #outline: BrowserWindow | undefined;
   #camera: RecordingCamera | undefined;
   #changingCamera = false;
@@ -215,6 +218,8 @@ export class RecordingSession {
     ipcMain.handle(
       RECORDING_CHANNEL,
       async (event, action: unknown, payload: unknown) => {
+        if (!this.#finishing && this.#deviceMenu?.owns(event))
+          return this.#deviceMenu.request(action, payload);
         if (
           !this.#finishing &&
           typeof action === 'string' &&
@@ -405,20 +410,53 @@ export class RecordingSession {
         throw new Error(`${raw} permission denied.`);
       return true;
     }
-    if (
-      action === 'device-panel' &&
-      this.#phase === 'prepare' &&
-      typeof raw === 'boolean'
-    ) {
-      this.#window!.setBounds(
-        preparationPosition(
-          this.display.bounds,
-          this.selection,
-          340,
-          raw ? 320 : this.#hideControls ? 200 : 156
-        )
-      );
+    if (action === 'device-menu-close') {
+      this.#deviceMenu?.close();
       return true;
+    }
+    if (action === 'device-menu' && this.#phase === 'prepare' && !this.#starting) {
+      const p = raw as {
+        kind: string;
+        devices: Array<{ id: string; label: string }>;
+        selected: string;
+        x: number;
+        y: number;
+      };
+      if (
+        !p ||
+        !['camera', 'microphone'].includes(p.kind) ||
+        !Array.isArray(p.devices) ||
+        p.devices.length > 128 ||
+        typeof p.selected !== 'string' ||
+        !Number.isFinite(p.x) ||
+        !Number.isFinite(p.y) ||
+        p.devices.some(
+          (d) =>
+            !d ||
+            typeof d.id !== 'string' ||
+            d.id.length > 1024 ||
+            typeof d.label !== 'string' ||
+            d.label.length > 512
+        )
+      )
+        throw new Error('Invalid device menu.');
+      this.#deviceMenu?.close();
+      const messages = recordingMessages(this.captureOptions.locale);
+      const items = [{ id: '', label: messages.defaultDevice }, ...p.devices];
+      const selected = items.some((d) => d.id === p.selected) ? p.selected : '';
+      const menu = new RecordingDeviceMenu(this.#window!, this.display.bounds, p, {
+        items: p.devices.length ? items : [],
+        selected,
+        label: `${messages.chooseDevice}: ${p.kind === 'camera' ? messages.camera : messages.microphone}`,
+        empty: messages.noDevices,
+        locale: this.captureOptions.locale ?? 'en',
+      });
+      this.#deviceMenu = menu;
+      try {
+        return await menu.open();
+      } finally {
+        if (this.#deviceMenu === menu) this.#deviceMenu = undefined;
+      }
     }
     if (
       action === 'camera' &&
@@ -477,6 +515,7 @@ export class RecordingSession {
       if (this.#phase !== 'prepare' || this.#starting || this.#changingCamera)
         throw new Error('Recording already started.');
       this.#starting = true;
+      this.#deviceMenu?.close();
       this.#window!.hide();
       const settings = parseRecordingOptions(raw);
       if (settings.camera && !this.#camera?.window)
@@ -718,6 +757,7 @@ export class RecordingSession {
   async #finish(result: ScreenshotResult, discard: boolean): Promise<void> {
     if (this.#finishing) return;
     this.#finishing = true;
+    this.#deviceMenu?.close();
     this.#nativeVideo?.dispose();
     this.#nativeVideo = undefined;
     this.#phase = 'closed';

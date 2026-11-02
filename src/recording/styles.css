@@ -17,6 +17,10 @@ body {
   padding: 8px;
   user-select: none;
 }
+html,
+body {
+  overflow: hidden;
+}
 [hidden] {
   display: none !important;
 }
@@ -86,7 +90,35 @@ button:disabled {
   right: 10px;
 }
 .start-area {
+  position: relative;
   padding: 10px 12px;
+}
+#prepare-error {
+  position: absolute;
+  inset: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px 3px 8px;
+  border: 1px solid #f1d4c9;
+  border-radius: 6px;
+  background: #fff5f0;
+  color: #9b4527;
+  font-size: 11px;
+  line-height: 14px;
+}
+#prepare-error-text {
+  flex: 1;
+}
+#prepare-error-action {
+  flex: none;
+  padding: 3px 5px;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 11px;
+}
+#prepare-error-action:hover {
+  background: #fbe2d6;
 }
 .primary {
   background: var(--blue);
@@ -358,32 +390,10 @@ body[data-view='active'] #status {
   min-width: 18px;
   font-size: 15px;
 }
-#device-panel {
-  margin-top: 8px;
-  border-top: 1px solid #e2e6ed;
-  padding-top: 8px;
-}
-.device-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-  margin-bottom: 6px;
-}
-#device-close {
-  background: transparent;
-  font-size: 18px;
-}
-#device-list {
-  width: 100%;
-  border: 1px solid #e2e6ed;
-  border-radius: 5px;
-  background: white;
-  font: 12px system-ui;
-  padding: 4px;
-}
-#device-list option {
-  padding: 5px;
+/* Device choices use an independent popup, outside the fixed preparation layout. */
+.device-arrow[aria-expanded='true'] {
+  background: #e6edff;
+  color: var(--blue);
 }
 
 /* Device settings use the host meeting controls' rounded chevron stroke, not a font glyph. */

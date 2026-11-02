@@ -15,6 +15,10 @@
       <section id="prepare">
         <div class="start-area">
           <button id="start" class="primary" disabled aria-busy="true">准备中…</button>
+          <div id="prepare-error" role="alert" hidden>
+            <span id="prepare-error-text"></span>
+            <button id="prepare-error-action" type="button"></button>
+          </div>
         </div>
         <div class="settings">
           <fieldset id="format">
@@ -49,7 +53,7 @@
                 id="microphone-menu"
                 class="device-arrow"
                 aria-expanded="false"
-                aria-controls="device-panel"
+                aria-haspopup="menu"
               >
                 <svg viewBox="0 0 16 16" aria-hidden="true">
                   <path d="m4 6 4 4 4-4" />
@@ -69,7 +73,7 @@
                 id="camera-menu"
                 class="device-arrow"
                 aria-expanded="false"
-                aria-controls="device-panel"
+                aria-haspopup="menu"
               >
                 <svg viewBox="0 0 16 16" aria-hidden="true">
                   <path d="m4 6 4 4 4-4" />
@@ -77,12 +81,6 @@
               </button>
             </div>
           </div>
-          <section id="device-panel" hidden>
-            <div class="device-heading">
-              <span id="device-title"></span><button id="device-close">×</button>
-            </div>
-            <select id="device-list" size="4"></select>
-          </section>
         </div>
       </section>
       <section id="active" hidden>
