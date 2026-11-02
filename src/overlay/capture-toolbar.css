@@ -16,6 +16,7 @@ body[data-view='active'] main {
 }
 .capture-mode-menu button,
 body[data-view='active'] #active button {
+  appearance: none;
   height: 30px;
   min-height: 30px;
   padding: 0 12px;
@@ -52,8 +53,8 @@ body[data-view='active'] #active #stop {
 body[data-view='active'] #active #stop:hover {
   background: #ffded8;
 }
-.capture-mode-menu button:focus-visible,
-body[data-view='active'] #active button:focus-visible {
+.capture-mode-menu button:not(.capture-menu-grip):focus-visible,
+body[data-view='active'] #active button:not(#bar-grip):focus-visible {
   outline: 2px solid #2459f5;
   outline-offset: -2px;
 }
@@ -67,9 +68,13 @@ body[data-view='active'] #active #bar-grip {
   padding: 0;
   color: #8b939f;
   touch-action: none;
+  outline: none;
+  cursor: grab;
 }
 .capture-mode-menu .capture-menu-grip:hover,
-body[data-view='active'] #active #bar-grip:hover {
+body[data-view='active'] #active #bar-grip:hover,
+.capture-mode-menu .capture-menu-grip:focus-visible,
+body[data-view='active'] #active #bar-grip:focus-visible {
   background: #e4e9f2;
   color: #475569;
 }
@@ -77,15 +82,7 @@ body[data-view='active'] #active #bar-grip:hover {
 body[data-view='active'] #active #bar-grip:active {
   background: #dbe5fa;
   color: #2459f5;
-}
-.capture-mode-menu .capture-menu-grip {
-  cursor: grab;
-}
-.capture-mode-menu .capture-menu-grip:active {
   cursor: grabbing;
-}
-body[data-view='active'] #active #bar-grip {
-  cursor: move;
 }
 .capture-menu-grip svg,
 #bar-grip svg {

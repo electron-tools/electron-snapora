@@ -192,6 +192,8 @@ export class RecordingSession {
         nodeIntegration: false,
         sandbox: true,
         backgroundThrottling: false,
+        // Match capture overlays: toolbar dimensions are CSS/DIP units, not display pixels.
+        zoomFactor: 1,
       },
     });
     this.#window = win;

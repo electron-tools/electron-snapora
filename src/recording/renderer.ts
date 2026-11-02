@@ -468,6 +468,7 @@ void api
 const grip = el('bar-grip');
 let barDrag: { x: number; y: number } | undefined;
 grip.onpointerdown = (event) => {
+  event.preventDefault();
   grip.setPointerCapture(event.pointerId);
   barDrag = { x: event.screenX, y: event.screenY };
   void api.request('bar-drag');
