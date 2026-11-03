@@ -39,7 +39,7 @@ let isMacScreenshotInProgress = false;
 
 // Keep recorder initialization failures visible in the demo terminal, including sandboxed renderers.
 app.on('web-contents-created', (_event, contents) => {
-  contents.on('console-message', (_consoleEvent, details) => {
+  contents.on('console-message', (details) => {
     if (details.message?.startsWith('[Snapora recording:'))
       console.error(details.message);
   });

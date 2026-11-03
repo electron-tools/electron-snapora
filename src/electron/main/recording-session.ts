@@ -185,6 +185,8 @@ export class RecordingSession {
       movable: false,
       show: false,
       alwaysOnTop: true,
+      // macOS must deliver the returning click to controls, not only activate the window.
+      acceptFirstMouse: true,
       webPreferences: {
         preload: resolve(__dirname, '../recording/preload.cjs'),
         session: ses,
@@ -275,7 +277,14 @@ export class RecordingSession {
       powerMonitor.removeListener('lock-screen', displayChanged);
     });
     await win.loadFile(resolve(__dirname, '../overlay/recording.html'));
-    if (!this.#finishing) win.show();
+    if (!this.#finishing) {
+      // The committed full-screen selector can otherwise steal focus and cover this panel.
+      // Hand off its visual state to the non-focusable, click-through recording outline.
+      this.hideSelection();
+      this.#outline?.showInactive();
+      win.show();
+      win.moveTop();
+    }
   }
 
   async #request(action: string, raw: unknown): Promise<unknown> {
@@ -555,9 +564,7 @@ export class RecordingSession {
       this.#file = file;
       this.#phase = 'arming';
       this.#window!.hide();
-      this.hideSelection();
       this.#camera?.beginRecording();
-      this.#outline?.showInactive();
       return this.#options;
     }
     if (action === 'countdown' && this.#phase === 'arming') {

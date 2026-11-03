@@ -49,6 +49,8 @@ export class RecordingDeviceMenu {
       maximizable: false,
       show: false,
       skipTaskbar: true,
+      // Keep device choices clickable on the first click after another app was active (macOS).
+      acceptFirstMouse: true,
       webPreferences: {
         session: parent.webContents.session,
         preload: resolve(__dirname, '../recording/preload.cjs'),

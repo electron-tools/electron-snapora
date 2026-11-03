@@ -49,6 +49,14 @@ app.whenReady().then(async () => {
       height: 400,
     });
     await fixture.loadFile(fixturePath);
+    // A second ordinary window covers the target, matching preparation over an occluded app.
+    const coveringWindow = new BrowserWindow({
+      x: display.bounds.x + 90,
+      y: display.bounds.y + 120,
+      width: 600,
+      height: 360,
+    });
+    await coveringWindow.loadFile(fixturePath);
     manager = new ScreenshotManager();
     const select = async () => {
       let ready;
@@ -78,9 +86,55 @@ app.whenReady().then(async () => {
           'document.getElementById("dimensions").textContent && !document.getElementById("start").disabled'
         )
       );
-      return { recorder, result };
+      return { recorder, result, selectionWindow: ready.win };
     };
     const first = await select();
+    assert.equal(
+      first.selectionWindow.isVisible(),
+      false,
+      'committed selection overlay must not intercept clicks behind preparation'
+    );
+    const preparationOutline = BrowserWindow.getAllWindows().find(
+      (w) => w.getTitle() === 'Snapora recording outline'
+    );
+    assert.ok(
+      preparationOutline?.isVisible(),
+      'preparation retains its selection shade'
+    );
+    assert.equal(preparationOutline.isFocusable(), false);
+    for (const background of [fixture, coveringWindow, fixture]) {
+      background.focus();
+      await wait(() => BrowserWindow.getFocusedWindow() === background);
+      assert.equal(first.selectionWindow.isVisible(), false);
+      first.recorder.focus();
+      await wait(() => BrowserWindow.getFocusedWindow() === first.recorder);
+      // Send pointer input after the focus handoff, rather than calling the button handler.
+      for (const value of ['gif', 'mp4']) {
+        const point = await first.recorder.webContents.executeJavaScript(`(() => {
+          const r = document.querySelector('input[value="${value}"]').getBoundingClientRect();
+          return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+        })()`);
+        first.recorder.webContents.sendInputEvent({
+          type: 'mouseDown',
+          ...point,
+          button: 'left',
+          clickCount: 1,
+        });
+        first.recorder.webContents.sendInputEvent({
+          type: 'mouseUp',
+          ...point,
+          button: 'left',
+          clickCount: 1,
+        });
+        await wait(() =>
+          first.recorder.webContents.executeJavaScript(`
+          document.querySelector('input[value="${value}"]').checked &&
+          document.getElementById('start').getAttribute('aria-busy') === 'false' &&
+          document.getElementById('prepare-error').hidden
+        `)
+        );
+      }
+    }
     const preparedBounds = first.recorder.getBounds();
     assert.equal(
       preparedBounds.x,
